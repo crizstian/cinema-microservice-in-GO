@@ -1,0 +1,6 @@
+export DB_USER=cristian
+export DB_PASS=cristianPassword2017
+export DB_SERVERS="192.168.99.100:27017,192.168.99.101:27017,192.168.99.102:27017"
+export DB_NAME=movies
+export DB_REPLICA=rs1
+export SERVICE_PORT=8000
