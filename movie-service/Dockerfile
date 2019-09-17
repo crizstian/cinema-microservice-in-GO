@@ -1,7 +1,10 @@
 FROM golang:1.10
 
 # Install go dependencies
-RUN go get -u github.com/labstack/echo && go get github.com/dgrijalva/jwt-go
+RUN go get -u github.com/labstack/echo && \
+    go get github.com/dgrijalva/jwt-go && \
+    go get github.com/sirupsen/logrus && \
+    go get gopkg.in/mgo.v2
 
 WORKDIR /go/src/cinemas-microservices/movie-service/src
 

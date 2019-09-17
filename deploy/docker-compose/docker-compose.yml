@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+  movie:
+    image: crizstian/movies-service-go:v0.1
+    ports:
+      - "8000:8000"
+    environment:
+      DB_USER: "cristian"
+      DB_PASS: "cristianPassword2017"
+      DB_SERVERS: "192.168.99.100:27017,192.168.99.101:27017,192.168.99.102:27017"
+      DB_NAME: "movies"
+      DB_REPLICA: "rs1"
+      SERVICE_PORT: "8000"

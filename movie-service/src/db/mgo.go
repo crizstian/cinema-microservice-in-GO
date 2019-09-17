@@ -54,8 +54,9 @@ func init() {
 
 // MongoConnection ...
 type MongoConnection struct {
-	DB  *mgo.Database
-	Err error
+	DB      *mgo.Database
+	Session *mgo.Session
+	Err     error
 }
 
 // MongoDB ...
@@ -63,8 +64,10 @@ func MongoDB(c chan *MongoConnection) {
 	log.Info("connecting to db ....")
 
 	session, err := mgo.Dial("mongodb://" + conn.User + ":" + conn.Pass + "@" + conn.Servers + "/" + conn.Db + "?replicaSet=" + conn.ReplicaSet + "&" + conn.AuthSource)
+
 	c <- &MongoConnection{
-		DB:  session.DB(conn.Db),
-		Err: err,
+		Session: session,
+		DB:      session.DB(conn.Db),
+		Err:     err,
 	}
 }
