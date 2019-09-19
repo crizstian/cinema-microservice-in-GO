@@ -1,4 +1,4 @@
-## Movie Service
+## Cinema Catalog Service
 
 In order to run this microservice, is manadatory to have a mongodb database in replicaSet mode, to spin up a db cluster see [mongo replica set](https://github.com/Crizstian/mongo-replica-with-docker)
 

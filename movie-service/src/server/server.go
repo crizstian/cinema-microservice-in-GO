@@ -1,10 +1,14 @@
 package server
 
 import (
-	"os"
-	"strconv"
 	"cinemas-microservices/movie-service/src/api"
 	"cinemas-microservices/movie-service/src/routes"
+	"context"
+	"os"
+	"strconv"
+	"time"
+
+	"gopkg.in/mgo.v2"
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -23,10 +27,12 @@ func init() {
 	log.SetLevel(log.InfoLevel)
 }
 
-// Start ...
-func Start(r map[string]interface{}) {
+var e *echo.Echo
 
-	e := echo.New()
+// Start ...
+func Start(r map[string]interface{}, se chan error) {
+
+	e = echo.New()
 
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Format: "method=${method}, uri=${uri}, status=${status}\n",
@@ -38,6 +44,28 @@ func Start(r map[string]interface{}) {
 	routes.API(app, r["repo"].(api.Repository))
 	routes.HealthyAPI(e)
 
-	// start server
-	e.Logger.Fatal(e.Start(":" + strconv.Itoa(r["port"].(int))))
+	// Start server
+	go func() {
+		if err := e.Start(":" + strconv.Itoa(r["port"].(int))); err != nil {
+			log.Info("shutting down the server")
+			se <- err
+		}
+	}()
+}
+
+// Shutdown ...
+func Shutdown(s *mgo.Session) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := e.Shutdown(ctx); err != nil {
+		e.Logger.Fatal(err)
+	}
+	s.Close()
+	log.Warn("Server shutdown")
+	os.Exit(1)
+}
+
+// GetServer ...
+func GetServer() *echo.Echo {
+	return e
 }
