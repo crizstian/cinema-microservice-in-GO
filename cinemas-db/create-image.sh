@@ -19,4 +19,4 @@ docker build -t cinemas-db:v0.1 .
 
 docker tag cinemas-db:v0.1 crizstian/cinemas-db:v0.1
 
-# docker push crizstian/cinemas-db:v0.1
+docker push crizstian/cinemas-db:v0.1

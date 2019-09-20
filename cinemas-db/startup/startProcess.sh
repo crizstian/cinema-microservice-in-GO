@@ -7,7 +7,7 @@ echo "IS_PRIMARY = " $IS_PRIMARY
 if [ $IS_PRIMARY == "true" ]; then
   /var/tmp/start/startWithConfig.sh & 
   /var/tmp/start/initMongo.sh &
-  wait!
+  wait
 else 
   /var/tmp/start/startWithConfig.sh
 fi
