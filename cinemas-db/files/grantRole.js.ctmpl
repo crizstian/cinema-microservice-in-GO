@@ -1,0 +1,3 @@
+admin = db.getSiblingDB("admin")
+
+admin.grantRolesToUser( "{{ env "DB_ADMIN_USER" }}", [ "root" , { role: "root", db: "admin" } ] )

@@ -1,14 +1,100 @@
 version: '3'
 
 services:
+  consul-dc1:
+    image: consul:1.6.0
+    command: ["consul","agent","-config-dir=/config"]
+    volumes:
+      - "../consul_config_dc1:/config"
+    ports:
+      - 8500:8500
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.10
+      # wan:
+      #   ipv4_address: 192.169.7.2
+
+  mongo1:
+    image: crizstian/cinemas-db:v0.1
+    ports:
+      - "27017:27017"
+    environment:
+      DB_ADMIN_USER: "cristian"
+      DB_ADMIN_PASS: "cristianPassword2017"
+      DB_REPLICA_ADMIN: "replicaAdmin"
+      DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
+      DB_REPLSET_NAME: "rs1"
+      DB_PORT: "27017"
+      DB1: "10.7.0.2"
+      DB2: "10.7.0.3"
+      DB3: "10.7.0.4"
+      IS_PRIMARY: "false"
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.2
+
+  mongo2:
+    image: crizstian/cinemas-db:v0.1
+    ports:
+      - "27017"
+    environment:
+      DB_ADMIN_USER: "cristian"
+      DB_ADMIN_PASS: "cristianPassword2017"
+      DB_REPLICA_ADMIN: "replicaAdmin"
+      DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
+      DB_REPLSET_NAME: "rs1"
+      DB_PORT: "27017"
+      DB1: "10.7.0.2"
+      DB2: "10.7.0.3"
+      DB3: "10.7.0.4"
+      IS_PRIMARY: "false"
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.3
+
+  mongo3:
+    image: crizstian/cinemas-db:v0.1
+    ports:
+      - "27017"
+    environment:
+      DB_ADMIN_USER: "cristian"
+      DB_ADMIN_PASS: "cristianPassword2017"
+      DB_REPLICA_ADMIN: "replicaAdmin"
+      DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
+      DB_REPLSET_NAME: "rs1"
+      DB_PORT: "27017"
+      DB3: "10.7.0.2"
+      DB2: "10.7.0.3"
+      DB1: "10.7.0.4"
+      IS_PRIMARY: "true"
+    depends_on:
+      - mongo1
+      - mongo2
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.4
+
   movie:
     image: crizstian/movies-service-go:v0.1
+    restart: on-failure
     ports:
       - "8000:8000"
     environment:
       DB_USER: "cristian"
       DB_PASS: "cristianPassword2017"
-      DB_SERVERS: "192.168.99.100:27017,192.168.99.101:27017,192.168.99.102:27017"
+      DB_SERVERS: "10.7.0.2:27017,10.7.0.3:27017,10.7.0.4:27017"
       DB_NAME: "movies"
       DB_REPLICA: "rs1"
       SERVICE_PORT: "8000"
+    depends_on:
+      - mongo3
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.5
+
+networks:
+  dc1:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 10.7.0.0/16

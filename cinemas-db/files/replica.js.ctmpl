@@ -1,0 +1,7 @@
+rs.initiate({
+  _id: "{{ env "DB_REPLSET_NAME" }}",
+  members: [{
+   _id: 0, host: "{{ env "ip4_add" }}:27017"
+  }]
+ })
+ 
