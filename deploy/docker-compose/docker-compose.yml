@@ -5,7 +5,7 @@ services:
     image: consul:1.6.0
     command: ["consul","agent","-config-dir=/config"]
     volumes:
-      - "../consul_config_dc1:/config"
+      - "../consul_config/dc1:/config"
     ports:
       - 8500:8500
     networks:
@@ -36,7 +36,7 @@ services:
   mongo2:
     image: crizstian/cinemas-db:v0.1
     ports:
-      - "27017"
+      - "27018:27017"
     environment:
       DB_ADMIN_USER: "cristian"
       DB_ADMIN_PASS: "cristianPassword2017"
@@ -55,7 +55,7 @@ services:
   mongo3:
     image: crizstian/cinemas-db:v0.1
     ports:
-      - "27017"
+      - "27019:27017"
     environment:
       DB_ADMIN_USER: "cristian"
       DB_ADMIN_PASS: "cristianPassword2017"
