@@ -54,7 +54,7 @@ func (a API) RegisterPurchase(c echo.Context) error {
 		"charge": ch,
 	}
 
-	return c.JSON(http.StatusOK, res)
+	return c.JSON(http.StatusCreated, res)
 }
 
 // GetPurchaseByID ...

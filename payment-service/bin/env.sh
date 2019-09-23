@@ -9,6 +9,3 @@ export DB_NAME=payment
 export DB_REPLICA=rs1
 
 export SERVICE_PORT=8100
-
-export STRIPE_SECRET=sk_test_lPPoJjmmbSjymtgo4r0O3z89
-export STRIPE_PUBLIC=pk_test_l10342hIODZmOJsBpY6GVPHj

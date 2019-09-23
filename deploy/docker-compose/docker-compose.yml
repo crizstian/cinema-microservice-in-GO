@@ -10,7 +10,7 @@ services:
       - 8500:8500
     networks:
       dc1:
-        ipv4_address: 10.7.0.10
+        ipv4_address: 10.7.0.2
       # wan:
       #   ipv4_address: 192.169.7.2
 
@@ -25,13 +25,13 @@ services:
       DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
       DB_REPLSET_NAME: "rs1"
       DB_PORT: "27017"
-      DB1: "10.7.0.2"
-      DB2: "10.7.0.3"
-      DB3: "10.7.0.4"
+      DB1: "10.7.0.3"
+      DB2: "10.7.0.4"
+      DB3: "10.7.0.5"
       IS_PRIMARY: "false"
     networks:
       dc1:
-        ipv4_address: 10.7.0.2
+        ipv4_address: 10.7.0.3
 
   mongo2:
     image: crizstian/cinemas-db:v0.1
@@ -44,13 +44,13 @@ services:
       DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
       DB_REPLSET_NAME: "rs1"
       DB_PORT: "27017"
-      DB1: "10.7.0.2"
-      DB2: "10.7.0.3"
-      DB3: "10.7.0.4"
+      DB1: "10.7.0.3"
+      DB2: "10.7.0.4"
+      DB3: "10.7.0.5"
       IS_PRIMARY: "false"
     networks:
       dc1:
-        ipv4_address: 10.7.0.3
+        ipv4_address: 10.7.0.4
 
   mongo3:
     image: crizstian/cinemas-db:v0.1
@@ -63,16 +63,16 @@ services:
       DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
       DB_REPLSET_NAME: "rs1"
       DB_PORT: "27017"
-      DB3: "10.7.0.2"
-      DB2: "10.7.0.3"
-      DB1: "10.7.0.4"
+      DB3: "10.7.0.3"
+      DB2: "10.7.0.4"
+      DB1: "10.7.0.5"
       IS_PRIMARY: "true"
     depends_on:
       - mongo1
       - mongo2
     networks:
       dc1:
-        ipv4_address: 10.7.0.4
+        ipv4_address: 10.7.0.5
 
   movie:
     image: crizstian/movies-service-go:v0.1
@@ -90,7 +90,27 @@ services:
       - mongo3
     networks:
       dc1:
-        ipv4_address: 10.7.0.5
+        ipv4_address: 10.7.0.6
+
+  payment:
+    image: crizstian/payment-service-go:v0.1
+    restart: on-failure
+    ports:
+      - "8100:8000"
+    environment:
+      DB_USER: "cristian"
+      DB_PASS: "cristianPassword2017"
+      DB_SERVERS: "10.7.0.2:27017,10.7.0.3:27017,10.7.0.4:27017"
+      DB_NAME: "payment"
+      DB_REPLICA: "rs1"
+      SERVICE_PORT: "8000"
+      STRIPE_SECRET: "${STRIPE_SECRET}"
+      STRIPE_PUBLIC: "${STRIPE_PUBLIC}"
+    depends_on:
+      - mongo3
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.7
 
 networks:
   dc1:
