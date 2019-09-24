@@ -10,8 +10,8 @@ services {
   checks = [
     {
       id = "movie-api",
-      name = "movie-api TCP on port 8000",
-      tcp = "0.0.0.0:8000",
+      name = "movie-api TCP on port 8000 internal",
+      tcp = "10.7.0.6:8000",
       interval = "10s",
       timeout = "1s"
     }

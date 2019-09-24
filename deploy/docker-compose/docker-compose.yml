@@ -112,6 +112,19 @@ services:
       dc1:
         ipv4_address: 10.7.0.7
 
+  notification:
+    image: crizstian/notification-service-go:v0.1
+    restart: on-failure
+    ports:
+      - "8200:8000"
+    environment:
+      SERVICE_PORT: "8000"
+      EMAIL: "${EMAIL}"
+      EMAIL_PASS: "${EMAIL_PASS}"
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.8
+
 networks:
   dc1:
     driver: bridge
