@@ -4,8 +4,7 @@ FROM golang:1.13.1
 RUN go get -u github.com/labstack/echo && \
     go get github.com/dgrijalva/jwt-go && \
     go get github.com/sirupsen/logrus && \
-    go get gopkg.in/mgo.v2 && \
-    go get github.com/stripe/stripe-go
+    go get gopkg.in/mgo.v2 
 
 WORKDIR /go/src/cinemas-microservices/notification-service/src
 

@@ -2,8 +2,6 @@ package config
 
 import (
 	"cinemas-microservices/booking-service/src/db"
-
-	"github.com/stripe/stripe-go/client"
 )
 
 // DI ...
@@ -20,10 +18,6 @@ func InitDI(di chan *DI) {
 	// start db connection
 	conn := make(chan *db.MongoConnection)
 	go db.MongoDB(settings["dbSettings"].(db.MongoReplicaSet), conn)
-
-	secret := settings["stripeSettings"].(StripeSettings).Secret
-	sc := &client.API{}
-	sc.Init(secret, nil)
 
 	// return di object
 	di <- &DI{

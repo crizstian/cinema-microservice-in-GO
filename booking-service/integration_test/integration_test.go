@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/labstack/echo"
-
 	"github.com/stretchr/testify/assert"
 
 	"gopkg.in/mgo.v2"

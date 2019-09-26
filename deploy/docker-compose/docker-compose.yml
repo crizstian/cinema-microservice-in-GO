@@ -125,6 +125,24 @@ services:
       dc1:
         ipv4_address: 10.7.0.8
 
+  booking:
+    image: crizstian/booking-service-go:v0.1
+    restart: on-failure
+    ports:
+      - "8300:8000"
+    environment:
+      DB_USER: "cristian"
+      DB_PASS: "cristianPassword2017"
+      DB_SERVERS: "10.7.0.2:27017,10.7.0.3:27017,10.7.0.4:27017"
+      DB_NAME: "booking"
+      DB_REPLICA: "rs1"
+      SERVICE_PORT: "8000"
+      PAYMENT_URL: "http://10.7.0.7:8000"
+      NOTIFICATION_URL: "http://10.7.0.8:8000"
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.9
+
 networks:
   dc1:
     driver: bridge

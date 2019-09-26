@@ -9,12 +9,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// StripeSettings ...
-type StripeSettings struct {
-	Secret string
-	Public string
-}
-
 // GetServiceConfig ...
 func GetServiceConfig() map[string]interface{} {
 
@@ -67,23 +61,6 @@ func GetServiceConfig() map[string]interface{} {
 		os.Exit(1)
 	}
 
-	ss, ssok := os.LookupEnv("STRIPE_SECRET")
-	stp, stpok := os.LookupEnv("STRIPE_PUBLIC")
-	st := StripeSettings{}
-
-	if !ssok {
-		log.Errorln("[ERROR] NO STRIPE_SECRET defined")
-		os.Exit(1)
-	}
-
-	if !stpok {
-		log.Errorln("[ERROR] NO STRIPE_PUBLIC defined")
-		os.Exit(1)
-	}
-
-	st.Secret = ss
-	st.Public = stp
-
 	c, err := InitClient()
 
 	if err != nil {
@@ -115,8 +92,7 @@ func GetServiceConfig() map[string]interface{} {
 		"serverSettings": map[string]interface{}{
 			"port": port,
 		},
-		"stripeSettings": st,
-		"apiClient":      c,
+		"apiClient": c,
 	}
 }
 
