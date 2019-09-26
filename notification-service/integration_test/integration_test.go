@@ -28,25 +28,24 @@ var m = &NotificationServiceSuit{
 
 var notificationJSON = `
 {
-	"city": "Morelia",
-	"userType": "loyal",
-	"totalAmount": 71,
-	"cinema": {
-		"name": "Plaza Morelia",
-		"room": "1",
-		"seats": "53, 54"
-	},
-	"movie": {
-		"title": "Assasins Creed",
-		"format": "IMAX",
-		"schedule": "2019-09-24T16:56:38.775Z"
+	"booking": {
+		"city": "Morelia",
+		"userType": "loyal",
+		"cinema": "Plaza Morelia",
+		"cinemaRoom": 1,
+		"seats": ["53", "54"],
+		"movie": {
+			"title": "Assasins Creed",
+			"format": "IMAX"
+		},
+		"schedule": "2019-09-24T16:56:38.775Z",
+		"totalAmount": 71
 	},
 	"orderId": "1aa90cx",
 	"description": "some description",
-	"user": {
-		"name": "Cristian Ramirez",
-		"email": "cristiano.rosetti@gmail.com"
-	}
+	"userName": "Cristian Ramirez",
+	"email": "cristiano.rosetti@gmail.com",
+	"receipt_url": "test"
 }
 `
 

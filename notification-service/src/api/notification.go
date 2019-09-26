@@ -6,6 +6,7 @@ import (
 	"cinemas-microservices/notification-service/src/smtp"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo"
 )
@@ -14,23 +15,24 @@ import (
 func (a API) SendEmail(c echo.Context) error {
 	c.Request().Header.Set("Content-Type", echo.MIMEApplicationJSONCharsetUTF8)
 
-	n := new(models.Notification)
+	n := new(models.Ticket)
 
 	if err := c.Bind(n); err != nil {
 		return errs.Send("User", "Could not get Notification data", err)
 	}
 
 	//The receiver needs to be in slice as the receive supports multiple receiver
-	Receiver := []string{n.User.Email}
+	Receiver := []string{n.Email}
 
 	Subject := "Do Not Reply, Cinemas Company 👥 <no-replay@cinemas.com>"
-	tickets := fmt.Sprintf("<h1>Tickest for %s</h1>", n.Movie.Title)
-	cinema := fmt.Sprintf("<p>Cinema: %s</p>", n.Cinema.Name)
-	room := fmt.Sprintf("<p>Room: %s</p>", n.Cinema.Room)
-	seat := fmt.Sprintf("<p>Seats: %s</p>", n.Cinema.Seats)
+	tickets := fmt.Sprintf("<h1>Tickest for %s</h1>", n.Booking.Movie.Title)
+	cinema := fmt.Sprintf("<p>Cinema: %s</p>", n.Booking.Cinema)
+	room := fmt.Sprintf("<p>Room: %d</p>", n.Booking.CinemaRoom)
+	seat := fmt.Sprintf("<p>Seats: %s</p>", strings.Join(n.Booking.Seats, ", "))
 	description := fmt.Sprintf("<p>description: %s</p>", n.Description)
-	total := fmt.Sprintf("<p>Total: %d</p>", n.TotalAmount)
+	total := fmt.Sprintf("<p>Total: %d</p>", n.Booking.TotalAmount)
 	orderID := fmt.Sprintf("<p>Order ID: %s</p>", n.OrderID)
+	receipt := fmt.Sprintf("<p>Receipt: %s</p>", n.ReceiptURL)
 
 	message := fmt.Sprintf(`
 	<!DOCTYPE HTML PULBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
@@ -49,11 +51,12 @@ func (a API) SendEmail(c echo.Context) error {
 
 	%s
 	%s
+	%s
 
 	<h3>Cinemas Microserivce 2019, Enjoy your movie !</h3>
 	</body>
 	</html>
-	`, tickets, cinema, room, seat, description, total, orderID)
+	`, tickets, cinema, room, seat, description, total, orderID, receipt)
 
 	bodyMessage := a.SMTP.WriteHTMLEmail(Receiver, Subject, message)
 
@@ -62,7 +65,7 @@ func (a API) SendEmail(c echo.Context) error {
 	}
 
 	res := map[string]interface{}{
-		"msg": "Mail sent successfully to " + n.User.Email,
+		"msg": "Mail sent successfully to " + n.Email,
 	}
 
 	return c.JSON(http.StatusCreated, res)

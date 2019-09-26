@@ -1,33 +1,29 @@
 package models
 
-// Cinema ...
-type Cinema struct {
-	Name  string `json:"name"`
-	Room  string `json:"room"`
-	Seats string `json:"seats"`
-}
-
 // Movie ...
 type Movie struct {
-	Title    string `json:"title"`
-	Format   string `json:"format"`
-	Schedule string `json:"schedule"`
+	Title   string `json:"title"`
+	Formtat string `json:"format"`
 }
 
-// User ...
-type User struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
+// Booking ...
+type Booking struct {
+	UserType    string   `json:"userType"`
+	City        string   `json:"city"`
+	Cinema      string   `json:"cinema"`
+	Schedule    string   `json:"schedule"`
+	Movie       Movie    `json:"movie"`
+	CinemaRoom  int      `json:"cinemaRoom"`
+	Seats       []string `json:"seats"`
+	TotalAmount int      `json:"totalAmount"`
 }
 
-// Notification ...
-type Notification struct {
-	City        string `json:"city"`
-	UserType    string `json:"userType"`
-	TotalAmount int    `json:"totalAmount"`
-	Cinema      Cinema `json:"cinema"`
-	Movie       Movie  `json:"movie"`
-	OrderID     string `json:"orderId"`
-	Description string `json:"description"`
-	User        User   `json:"user"`
+// Ticket ...
+type Ticket struct {
+	Booking     Booking `json:"booking"`
+	OrderID     string  `json:"orderId"`
+	Description string  `json:"description"`
+	ReceiptURL  string  `json:"receipt_url"`
+	UserName    string  `json:"userName"`
+	Email       string  `json:"email"`
 }
