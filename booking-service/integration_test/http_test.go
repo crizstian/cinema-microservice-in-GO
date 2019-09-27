@@ -61,11 +61,10 @@ func TestBookingEndpoint(t *testing.T) {
 	fmt.Println("response Status:", resp.Status)
 	fmt.Println("response Headers:", resp.Header)
 	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("response Body:")
 
 	var prettyJSON bytes.Buffer
 	errr := json.Indent(&prettyJSON, body, "", "\t")
 	assert.NoError(t, errr)
 
-	log.Println("CSP Violation:", string(prettyJSON.Bytes()))
+	log.Println("response Body:", string(prettyJSON.Bytes()))
 }
