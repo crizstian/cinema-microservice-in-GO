@@ -45,8 +45,9 @@ func (a API) MakeBooking(c echo.Context) error {
 	nrp := *nr.(*map[string]interface{})
 
 	res := map[string]interface{}{
-		"msg":  "Booking has bee created successfully",
-		"note": nrp["msg"].(string),
+		"msg":          "Booking has been created successfully",
+		"notification": nrp["msg"].(string),
+		"ticket":       ticket,
 	}
 
 	return c.JSON(http.StatusCreated, res)
