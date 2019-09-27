@@ -11,8 +11,8 @@ services:
     networks:
       dc1:
         ipv4_address: 10.7.0.2
-      # wan:
-      #   ipv4_address: 192.169.7.2
+      wan:
+        ipv4_address: 192.169.10.2
 
   mongo1:
     image: crizstian/cinemas-db:v0.1
@@ -154,7 +154,6 @@ services:
       - "./consul_config/service_config:/config"
     command: ["consul", "connect", "envoy","-sidecar-for", "notification-dc1"]
     network_mode: "service:notification_dc1"
-
 
   booking:
     image: crizstian/booking-service-go:v0.1
