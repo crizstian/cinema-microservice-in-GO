@@ -5,7 +5,7 @@ services:
     image: consul:1.6.0
     command: ["consul","agent","-config-dir=/config"]
     volumes:
-      - "../consul_config/dc1:/config"
+      - "./consul_config/dc1:/config"
     ports:
       - 8500:8500
     networks:
@@ -74,7 +74,7 @@ services:
       dc1:
         ipv4_address: 10.7.0.5
 
-  movie:
+  movie_dc1:
     image: crizstian/movies-service-go:v0.1
     restart: on-failure
     ports:
@@ -82,7 +82,7 @@ services:
     environment:
       DB_USER: "cristian"
       DB_PASS: "cristianPassword2017"
-      DB_SERVERS: "10.7.0.2:27017,10.7.0.3:27017,10.7.0.4:27017"
+      DB_SERVERS: "10.7.0.3:27017,10.7.0.4:27017,10.7.0.5:27017"
       DB_NAME: "movies"
       DB_REPLICA: "rs1"
       SERVICE_PORT: "8000"
@@ -91,8 +91,18 @@ services:
     networks:
       dc1:
         ipv4_address: 10.7.0.6
+  movie_envoy_dc1:
+    image: nicholasjackson/consul-envoy:v1.6.0-v0.10.0
+    environment:
+      CONSUL_HTTP_ADDR: 10.7.0.2:8500
+      CONSUL_GRPC_ADDR: 10.7.0.2:8502
+      SERVICE_CONFIG: /config/movie-dc1.hcl
+    volumes:
+      - "./consul_config/service_config:/config"
+    command: ["consul", "connect", "envoy","-sidecar-for", "movie-dc1"]
+    network_mode: "service:movie_dc1"
 
-  payment:
+  payment_dc1:
     image: crizstian/payment-service-go:v0.1
     restart: on-failure
     ports:
@@ -100,7 +110,7 @@ services:
     environment:
       DB_USER: "cristian"
       DB_PASS: "cristianPassword2017"
-      DB_SERVERS: "10.7.0.2:27017,10.7.0.3:27017,10.7.0.4:27017"
+      DB_SERVERS: "10.7.0.3:27017,10.7.0.4:27017,10.7.0.5:27017"
       DB_NAME: "payment"
       DB_REPLICA: "rs1"
       SERVICE_PORT: "8000"
@@ -111,8 +121,18 @@ services:
     networks:
       dc1:
         ipv4_address: 10.7.0.7
+  payment_envoy_dc1:
+    image: nicholasjackson/consul-envoy:v1.6.0-v0.10.0
+    environment:
+      CONSUL_HTTP_ADDR: 10.7.0.2:8500
+      CONSUL_GRPC_ADDR: 10.7.0.2:8502
+      SERVICE_CONFIG: /config/payment-dc1.hcl
+    volumes:
+      - "./consul_config/service_config:/config"
+    command: ["consul", "connect", "envoy","-sidecar-for", "payment-dc1"]
+    network_mode: "service:payment_dc1"
 
-  notification:
+  notification_dc1:
     image: crizstian/notification-service-go:v0.1
     restart: on-failure
     ports:
@@ -124,6 +144,17 @@ services:
     networks:
       dc1:
         ipv4_address: 10.7.0.8
+  notification_envoy_dc1:
+    image: nicholasjackson/consul-envoy:v1.6.0-v0.10.0
+    environment:
+      CONSUL_HTTP_ADDR: 10.7.0.2:8500
+      CONSUL_GRPC_ADDR: 10.7.0.2:8502
+      SERVICE_CONFIG: /config/notification-dc1.hcl
+    volumes:
+      - "./consul_config/service_config:/config"
+    command: ["consul", "connect", "envoy","-sidecar-for", "notification-dc1"]
+    network_mode: "service:notification_dc1"
+
 
   booking:
     image: crizstian/booking-service-go:v0.1
@@ -133,7 +164,7 @@ services:
     environment:
       DB_USER: "cristian"
       DB_PASS: "cristianPassword2017"
-      DB_SERVERS: "10.7.0.2:27017,10.7.0.3:27017,10.7.0.4:27017"
+      DB_SERVERS: "10.7.0.3:27017,10.7.0.4:27017,10.7.0.5:27017"
       DB_NAME: "booking"
       DB_REPLICA: "rs1"
       SERVICE_PORT: "8000"
@@ -142,6 +173,18 @@ services:
     networks:
       dc1:
         ipv4_address: 10.7.0.9
+  booking_envoy:
+    image: nicholasjackson/consul-envoy:v1.6.0-v0.10.0
+    environment:
+      CONSUL_HTTP_ADDR: 10.7.0.2:8500
+      CONSUL_GRPC_ADDR: 10.7.0.2:8502
+      SERVICE_CONFIG: /config/booking-service.hcl
+      CENTRAL_CONFIG_DIR: "/central_config"
+    volumes:
+      - "./consul_config/service_config:/config"
+      - "./consul_config/central_config:/central_config"
+    command: ["consul", "connect", "envoy","-sidecar-for", "booking"]
+    network_mode: "service:booking"
 
 networks:
   dc1:
