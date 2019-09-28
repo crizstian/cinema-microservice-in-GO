@@ -3,7 +3,6 @@ log_level = "DEBUG"
 
 datacenter = "dc1"
 primary_datacenter = "dc1"
-node_name          = "Consul-Server"
 
 server = true
 
@@ -21,6 +20,6 @@ connect {
   enabled = true
 }
 
-advertise_addr = "10.7.0.2"
+advertise_addr = "10.10.0.2"
 # advertise_addr_wan = "192.169.7.2"
 enable_central_service_config = true

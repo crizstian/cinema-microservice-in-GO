@@ -4,13 +4,13 @@ services {
   tags = [
     "db"
   ]
-  address = "10.7.0.3"
+  address = "10.10.0.3"
   port = 27017
    checks = [
     {
       id = "mongo",
       name = "mongo TCP on port 27017",
-      tcp = "10.7.0.3:27017",
+      tcp = "10.10.0.3:27017",
       interval = "10s",
       timeout = "1s"
     }
@@ -22,13 +22,13 @@ services {
   tags = [
     "db"
   ]
-  address = "10.7.0.4"
+  address = "10.10.0.4"
   port = 27017
    checks = [
     {
       id = "mongo",
       name = "mongo TCP on port 27017",
-      tcp = "10.7.0.4:27017",
+      tcp = "10.10.0.4:27017",
       interval = "10s",
       timeout = "1s"
     }
@@ -40,13 +40,13 @@ services {
   tags = [
     "db"
   ]
-  address = "10.7.0.5"
+  address = "10.10.0.5"
   port = 27017
    checks = [
     {
       id = "mongo",
       name = "mongo TCP on port 27017",
-      tcp = "10.7.0.5:27017",
+      tcp = "10.10.0.5:27017",
       interval = "10s",
       timeout = "1s"
     }

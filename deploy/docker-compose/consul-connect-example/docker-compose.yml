@@ -1,18 +1,16 @@
-version: '3'
-
+version: "3.3"
 services:
+
   consul-dc1:
     image: consul:1.6.0
     command: ["consul","agent","-config-dir=/config"]
     volumes:
       - "./consul_config/dc1:/config"
     ports:
-      - 8500:8500
+      - 18500:8500
     networks:
       dc1:
-        ipv4_address: 10.7.0.2
-      wan:
-        ipv4_address: 192.169.10.2
+        ipv4_address: 10.10.0.2
 
   mongo1:
     image: crizstian/cinemas-db:v0.1
@@ -25,13 +23,13 @@ services:
       DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
       DB_REPLSET_NAME: "rs1"
       DB_PORT: "27017"
-      DB1: "10.7.0.3"
-      DB2: "10.7.0.4"
-      DB3: "10.7.0.5"
+      DB1: "10.10.0.3"
+      DB2: "10.10.0.4"
+      DB3: "10.10.0.5"
       IS_PRIMARY: "false"
     networks:
       dc1:
-        ipv4_address: 10.7.0.3
+        ipv4_address: 10.10.0.3
 
   mongo2:
     image: crizstian/cinemas-db:v0.1
@@ -44,13 +42,13 @@ services:
       DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
       DB_REPLSET_NAME: "rs1"
       DB_PORT: "27017"
-      DB1: "10.7.0.3"
-      DB2: "10.7.0.4"
-      DB3: "10.7.0.5"
+      DB1: "10.10.0.3"
+      DB2: "10.10.0.4"
+      DB3: "10.10.0.5"
       IS_PRIMARY: "false"
     networks:
       dc1:
-        ipv4_address: 10.7.0.4
+        ipv4_address: 10.10.0.4
 
   mongo3:
     image: crizstian/cinemas-db:v0.1
@@ -63,44 +61,16 @@ services:
       DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
       DB_REPLSET_NAME: "rs1"
       DB_PORT: "27017"
-      DB3: "10.7.0.3"
-      DB2: "10.7.0.4"
-      DB1: "10.7.0.5"
+      DB3: "10.10.0.3"
+      DB2: "10.10.0.4"
+      DB1: "10.10.0.5"
       IS_PRIMARY: "true"
     depends_on:
       - mongo1
       - mongo2
     networks:
       dc1:
-        ipv4_address: 10.7.0.5
-
-  movie_dc1:
-    image: crizstian/movies-service-go:v0.1
-    restart: on-failure
-    ports:
-      - "8000:8000"
-    environment:
-      DB_USER: "cristian"
-      DB_PASS: "cristianPassword2017"
-      DB_SERVERS: "10.7.0.3:27017,10.7.0.4:27017,10.7.0.5:27017"
-      DB_NAME: "movies"
-      DB_REPLICA: "rs1"
-      SERVICE_PORT: "8000"
-    depends_on:
-      - mongo3
-    networks:
-      dc1:
-        ipv4_address: 10.7.0.6
-  movie_envoy_dc1:
-    image: nicholasjackson/consul-envoy:v1.6.0-v0.10.0
-    environment:
-      CONSUL_HTTP_ADDR: 10.7.0.2:8500
-      CONSUL_GRPC_ADDR: 10.7.0.2:8502
-      SERVICE_CONFIG: /config/movie-dc1.hcl
-    volumes:
-      - "./consul_config/service_config:/config"
-    command: ["consul", "connect", "envoy","-sidecar-for", "movie-dc1"]
-    network_mode: "service:movie_dc1"
+        ipv4_address: 10.10.0.5
 
   payment_dc1:
     image: crizstian/payment-service-go:v0.1
@@ -110,7 +80,7 @@ services:
     environment:
       DB_USER: "cristian"
       DB_PASS: "cristianPassword2017"
-      DB_SERVERS: "10.7.0.3:27017,10.7.0.4:27017,10.7.0.5:27017"
+      DB_SERVERS: "10.10.0.3:27017,10.10.0.4:27017,10.10.0.5:27017"
       DB_NAME: "payment"
       DB_REPLICA: "rs1"
       SERVICE_PORT: "8000"
@@ -120,12 +90,12 @@ services:
       - mongo3
     networks:
       dc1:
-        ipv4_address: 10.7.0.7
+        ipv4_address: 10.10.0.7
   payment_envoy_dc1:
     image: nicholasjackson/consul-envoy:v1.6.0-v0.10.0
     environment:
-      CONSUL_HTTP_ADDR: 10.7.0.2:8500
-      CONSUL_GRPC_ADDR: 10.7.0.2:8502
+      CONSUL_HTTP_ADDR: 10.10.0.2:8500
+      CONSUL_GRPC_ADDR: 10.10.0.2:8502
       SERVICE_CONFIG: /config/payment-dc1.hcl
     volumes:
       - "./consul_config/service_config:/config"
@@ -143,12 +113,13 @@ services:
       EMAIL_PASS: "${EMAIL_PASS}"
     networks:
       dc1:
-        ipv4_address: 10.7.0.8
+        ipv4_address: 10.10.0.8
+
   notification_envoy_dc1:
     image: nicholasjackson/consul-envoy:v1.6.0-v0.10.0
     environment:
-      CONSUL_HTTP_ADDR: 10.7.0.2:8500
-      CONSUL_GRPC_ADDR: 10.7.0.2:8502
+      CONSUL_HTTP_ADDR: 10.10.0.2:8500
+      CONSUL_GRPC_ADDR: 10.10.0.2:8502
       SERVICE_CONFIG: /config/notification-dc1.hcl
     volumes:
       - "./consul_config/service_config:/config"
@@ -163,26 +134,26 @@ services:
     environment:
       DB_USER: "cristian"
       DB_PASS: "cristianPassword2017"
-      DB_SERVERS: "10.7.0.3:27017,10.7.0.4:27017,10.7.0.5:27017"
+      DB_SERVERS: "10.10.0.3:27017,10.10.0.4:27017,10.10.0.5:27017"
       DB_NAME: "booking"
       DB_REPLICA: "rs1"
       SERVICE_PORT: "8000"
-      PAYMENT_URL: "http://10.7.0.7:8000"
-      NOTIFICATION_URL: "http://10.7.0.8:8000"
+      PAYMENT_URL: "http://localhost:9091"
+      NOTIFICATION_URL: "http://localhost:9092"
     networks:
       dc1:
-        ipv4_address: 10.7.0.9
+        ipv4_address: 10.10.0.9
   booking_envoy:
     image: nicholasjackson/consul-envoy:v1.6.0-v0.10.0
     environment:
-      CONSUL_HTTP_ADDR: 10.7.0.2:8500
-      CONSUL_GRPC_ADDR: 10.7.0.2:8502
+      CONSUL_HTTP_ADDR: 10.10.0.2:8500
+      CONSUL_GRPC_ADDR: 10.10.0.2:8502
       SERVICE_CONFIG: /config/booking-service.hcl
       CENTRAL_CONFIG_DIR: "/central_config"
     volumes:
       - "./consul_config/service_config:/config"
       - "./consul_config/central_config:/central_config"
-    command: ["consul", "connect", "envoy","-sidecar-for", "booking"]
+    command: ["consul", "connect", "envoy","-sidecar-for", "booking-dc1"]
     network_mode: "service:booking"
 
 networks:
@@ -190,4 +161,4 @@ networks:
     driver: bridge
     ipam:
      config:
-       - subnet: 10.7.0.0/16
+       - subnet: 10.10.0.0/16
