@@ -14,8 +14,6 @@ services:
 
   mongo1:
     image: crizstian/cinemas-db:v0.1
-    ports:
-      - "27017:27017"
     environment:
       DB_ADMIN_USER: "cristian"
       DB_ADMIN_PASS: "cristianPassword2017"
@@ -33,8 +31,6 @@ services:
 
   mongo2:
     image: crizstian/cinemas-db:v0.1
-    ports:
-      - "27018:27017"
     environment:
       DB_ADMIN_USER: "cristian"
       DB_ADMIN_PASS: "cristianPassword2017"
@@ -52,8 +48,6 @@ services:
 
   mongo3:
     image: crizstian/cinemas-db:v0.1
-    ports:
-      - "27019:27017"
     environment:
       DB_ADMIN_USER: "cristian"
       DB_ADMIN_PASS: "cristianPassword2017"
@@ -75,8 +69,6 @@ services:
   payment_dc1:
     image: crizstian/payment-service-go:v0.1
     restart: on-failure
-    ports:
-      - "8100:8000"
     environment:
       DB_USER: "cristian"
       DB_PASS: "cristianPassword2017"
@@ -101,12 +93,12 @@ services:
       - "./consul_config/service_config:/config"
     command: ["consul", "connect", "envoy","-sidecar-for", "payment-dc1"]
     network_mode: "service:payment_dc1"
+    depends_on:
+      - payment_dc1
 
   notification_dc1:
     image: crizstian/notification-service-go:v0.1
     restart: on-failure
-    ports:
-      - "8200:8000"
     environment:
       SERVICE_PORT: "8000"
       EMAIL: "${EMAIL}"
@@ -125,12 +117,14 @@ services:
       - "./consul_config/service_config:/config"
     command: ["consul", "connect", "envoy","-sidecar-for", "notification-dc1"]
     network_mode: "service:notification_dc1"
+    depends_on:
+      - consul-dc1
 
   booking:
     image: crizstian/booking-service-go:v0.1
     restart: on-failure
     ports:
-      - "8300:8000"
+      - "8000:8000"
     environment:
       DB_USER: "cristian"
       DB_PASS: "cristianPassword2017"
@@ -143,6 +137,9 @@ services:
     networks:
       dc1:
         ipv4_address: 10.10.0.9
+    depends_on:
+      - mongo3
+
   booking_envoy:
     image: nicholasjackson/consul-envoy:v1.6.0-v0.10.0
     environment:
@@ -155,6 +152,8 @@ services:
       - "./consul_config/central_config:/central_config"
     command: ["consul", "connect", "envoy","-sidecar-for", "booking-dc1"]
     network_mode: "service:booking"
+    depends_on:
+      - booking
 
 networks:
   dc1:

@@ -25,6 +25,8 @@ services {
         interval = "10s"
       },
       proxy = {
+        # destination_service_name = "booking"
+        # destination_service_id = "booking-dc1"
         upstreams = [
           {
             destination_name   = "payment",
