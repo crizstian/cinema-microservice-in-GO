@@ -153,8 +153,8 @@ services:
     command: ["consul", "connect", "envoy","-sidecar-for", "booking-dc1"]
     network_mode: "service:booking"
     depends_on:
-      - booking
-
+      - consul-dc1
+      
 networks:
   dc1:
     driver: bridge

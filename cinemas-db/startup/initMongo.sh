@@ -15,7 +15,7 @@ function add_replicas {
   # add nuppdb replicas
   for server in $DB2 $DB3
   do
-    rs="rs.add('$server:$DB_PORT')"
+    rs="rs.add('$server')"
     add='mongo --eval "'$rs'" -u '$DB_REPLICA_ADMIN' -p '$DB_REPLICA_ADMIN_PASS' --authenticationDatabase="admin"'
     echo ">>>>>>>>>>> waiting for mongodb server $server to be ready"
     sleep 5

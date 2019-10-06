@@ -50,12 +50,6 @@ set -e
 # 	echo "Application is not envconsul enabled; Continuing with standard startup..."
 # 	exec $START_CMD
 # fi
-export ip4_add=`hostname -i`
-
-consul-template -template "/data/admin/admin.js.ctmpl:/data/admin/admin.js" -once
-consul-template -template "/data/admin/grantRole.js.ctmpl:/data/admin/grantRole.js" -once
-consul-template -template "/data/admin/replica.js.ctmpl:/data/admin/replica.js" -once
-
 
 mongod \
   --keyFile /data/keyfile/mongo-keyfile \

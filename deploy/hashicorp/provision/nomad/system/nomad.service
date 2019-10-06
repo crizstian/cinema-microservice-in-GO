@@ -1,0 +1,18 @@
+[Unit]
+Description=Nomad agent
+After=local-fs.target
+After=network-online.target
+Wants=consul-online.target
+After=consul.service
+Requires=multi-user.target
+
+[Service]
+Type=simple
+Restart=on-failure
+SuccessExitStatus=0 SIGINT
+KillSignal=SIGINT
+ExecStart=/bin/bash /vagrant/provision/nomad/system/nomad-service.sh
+ExecStopPost=/bin/sleep 15
+
+[Install]
+WantedBy=multi-user.target

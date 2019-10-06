@@ -1,0 +1,24 @@
+Vagrant.configure("2") do |config|
+
+  config.vm.provider "virtualbox" do |v|
+    v.memory = 2048
+    v.cpus = 2
+  end
+
+  config.vm.box = "ubuntu/xenial64"
+  config.vm.provision "shell", path: "provision/scripts/install.sh", privileged: false
+  
+# ['dc1', 'dc2'].each do |dc|
+  
+#   ip_prefix = dc == 'dc1' ? '172.20.20.11' : '172.20.20.31'
+
+    config.vm.define "consul-server" do |cs|
+      cs.vm.hostname = "consul-server"
+      cs.vm.network "private_network", ip: "172.20.20.11"
+      #cs.vm.network "private_network", ip: "#{ip_prefix}"
+      cs.vm.provision "shell", path: "provision/scripts/install.dnsmasq.dc1.sh", privileged: false
+      cs.vm.provision "shell", path: "provision/scripts/init.hashi.dc1.sh", privileged: false
+    end
+
+#  end
+end

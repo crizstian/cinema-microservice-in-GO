@@ -1,0 +1,17 @@
+[Unit]
+Description=Consul Agent
+After=local-fs.target
+After=network-online.target
+After=cloud.service
+Requires=multi-user.target
+
+[Service]
+Type=simple
+Restart=on-failure
+SuccessExitStatus=0 SIGINT
+KillSignal=SIGINT
+ExecStart=/bin/bash /vagrant/provision/consul/system/consul-service.sh
+ExecStopPost=/bin/sleep 10
+
+[Install]
+WantedBy=multi-user.target

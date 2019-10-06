@@ -40,7 +40,7 @@ var b = `{
 
 var brJSON = fmt.Sprintf(`{"user": %s, "booking": %s}`, u, b)
 
-var url = "http://0.0.0.0:8000/booking/"
+var url = "http://172.20.20.11:3002/booking/"
 
 func TestBookingEndpoint(t *testing.T) {
 
@@ -66,5 +66,8 @@ func TestBookingEndpoint(t *testing.T) {
 	errr := json.Indent(&prettyJSON, body, "", "\t")
 	assert.NoError(t, errr)
 
-	log.Println("response Body:", string(prettyJSON.Bytes()))
+	b := string(prettyJSON.Bytes())
+	log.Println("response Body:", b)
+
+	assert.NotContains(t, "An error ocurred", b)
 }
