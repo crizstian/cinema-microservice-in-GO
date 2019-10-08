@@ -55,8 +55,8 @@ job "cinemas" {
 
       env {
         SERVICE_PORT="3001"
-        EMAIL="cristiano.rosetti@gmail.com"
-        EMAIL_PASS="Cris123@#"
+        EMAIL="crr.developer.9@gmail.com"
+        EMAIL_PASS="Cris123#"
       }
 
       resources {
