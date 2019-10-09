@@ -24,7 +24,7 @@ func (a API) SendEmail(c echo.Context) error {
 	//The receiver needs to be in slice as the receive supports multiple receiver
 	Receiver := []string{n.Email}
 
-	Subject := "Do Not Reply, Cinemas Company 👥 <no-replay@cinemas.com>"
+	Subject := "Do Not Reply, Cinemas Company"
 	tickets := fmt.Sprintf("<h1>Tickest for %s</h1>", n.Booking.Movie.Title)
 	cinema := fmt.Sprintf("<p>Cinema: %s</p>", n.Booking.Cinema)
 	room := fmt.Sprintf("<p>Room: %d</p>", n.Booking.CinemaRoom)
@@ -54,6 +54,7 @@ func (a API) SendEmail(c echo.Context) error {
 	%s
 
 	<h3>Cinemas Microserivce 2019, Enjoy your movie !</h3>
+	<h3>Version 2.0</h3>
 	</body>
 	</html>
 	`, tickets, cinema, room, seat, description, total, orderID, receipt)
