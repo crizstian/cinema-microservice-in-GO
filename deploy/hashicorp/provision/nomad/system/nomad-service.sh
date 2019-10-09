@@ -1,3 +1,3 @@
 #!/bin/bash
 
-exec nomad agent -dev-connect -config /var/nomad/config >>/var/log/nomad.log 2>&1
+exec nomad agent -config /var/nomad/config >>/var/log/nomad.log 2>&1

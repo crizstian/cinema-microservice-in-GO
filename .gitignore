@@ -4,3 +4,5 @@
 **/.terraform
 **/ubuntu*
 **/.vagrant
+
+**/terraform.tfstate

@@ -1,15 +1,45 @@
+variable "dbs" {
+  default = [{
+    ip = "192.168.15.6"
+    port = 27017
+  },{
+    ip = "192.168.15.6"
+    port = 27018
+  },{
+    ip = "192.168.15.6"
+    port = 27019
+  }]
+}
+
 provider "consul" {
-  address    = "172.20.20.11:8500"
-  datacenter = "dc1"
+  address    = "172.20.20.31:8500"
+  datacenter = "dc2"
 }
 
 resource "consul_keys" "cluster_status" {
-  datacenter = "dc1"
+  datacenter = "dc2"
 
   key {
     path  = "cluster/info/status"
     value = "standby"
   }
+}
+
+resource "consul_node" "mongodb_node" {
+  count = length(var.dbs)
+
+  name    = "mongodb${count.index+1}"
+  address = var.dbs[count.index].ip
+}
+
+resource "consul_service" "mongodb_service" {
+  count = length(var.dbs)
+
+  name = "mongodb${count.index+1}"
+  node = "${consul_node.mongodb_node[count.index].name}"
+  port = var.dbs[count.index].port
+  tags = ["external-services", "external-database"]
+  datacenter = "dc2"
 }
 
 resource "consul_prepared_query" "mongodb1" {

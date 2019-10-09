@@ -32,7 +32,6 @@ job "db-cluster" {
             port "service_port" {
               static = 27017
             }
-            port "aero" {}
         }
       }
       service {
@@ -72,7 +71,6 @@ job "db-cluster" {
             port "service_port" {
               static = 27018
             }
-            port "aero" {}
         }
       }
       service {
@@ -115,7 +113,6 @@ job "db-cluster" {
             port "service_port" {
               static = 27019
             }
-            port "aero" {}
         }
       }
       service {
@@ -130,52 +127,4 @@ job "db-cluster" {
       }
     }
   }
-
-
-  # group "movies-api" {
-  #   count = 1
-
-    #     restart {
-    #   interval = "30s"
-    #   attempts = 10
-    #   delay    = "15s"
-    #   mode     = "delay"
-    # }
-
-  #   task "movies-api" {
-  #     driver = "docker"
-  #     config {
-  #       image   = "crizstian/movies-service-go:v0.1"
-  #       port_map {
-  #         service_port = 3000
-  #       }
-  #     }
-
-  #     env {
-  #      DB="movies"
-  #      DB_USER="cristian"
-  #      DB_PASS="cristianPassword2017"
-  #      PORT="3000"
-  #      DB_SERVERS="mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
-  #     }
-
-  #     resources {
-  #       network {
-  #           mbits = 10
-  #           port "service_port" {}
-  #           port "aero" {}
-  #       }
-  #     }
-  #     service {
-  #       name = "movies-api"
-  #       tags = [ "cinemas-microservice" ]
-  #       port = "service_port"
-  #       check {
-  #         type     = "tcp"
-  #         interval = "10s"
-  #         timeout  = "2s"
-  #       }
-  #     }
-  #   }
-  # }
 }

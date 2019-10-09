@@ -1,4 +1,4 @@
-data_dir = "/var/consul/config"
+data_dir = "/var/consul/config/"
 log_level = "DEBUG"
 
 datacenter = "dc1"
