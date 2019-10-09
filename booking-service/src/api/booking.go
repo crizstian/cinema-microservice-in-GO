@@ -42,12 +42,14 @@ func (a API) MakeBooking(c echo.Context) error {
 		return errs.Send("External", "Could not send email to user", err)
 	}
 
+	prp := *pr.(*map[string]interface{})
 	nrp := *nr.(*map[string]interface{})
 
 	res := map[string]interface{}{
 		"msg":          "Booking has been created successfully",
 		"notification": nrp["msg"].(string),
 		"ticket":       ticket,
+		"payment":      "Payment has been charged succuessfully with " + prp["version"].(string),
 	}
 
 	return c.JSON(http.StatusCreated, res)

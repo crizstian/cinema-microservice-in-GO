@@ -49,9 +49,10 @@ func (a API) RegisterPurchase(c echo.Context) error {
 	}
 
 	res := map[string]interface{}{
-		"user":   p.UserName,
-		"amount": p.Amount,
-		"charge": ch,
+		"user":    p.UserName,
+		"amount":  p.Amount,
+		"charge":  ch,
+		"version": "Payment Wall V2",
 	}
 
 	return c.JSON(http.StatusCreated, res)
