@@ -4,46 +4,6 @@ job "cinemas" {
   region      = "dc2-region"
   type        = "service"
 
-  group "payment-api" {
-    count = 1
-
-    task "paymentapi" {
-      driver = "docker"
-      config {
-        image   = "crizstian/payment-service-go:v0.1"
-      }
-
-      env {
-        DB_USER="cristian"
-        DB_PASS="cristianPassword2017"
-        DB_SERVERS="mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
-        DB_NAME="payment"
-        DB_REPLICA="rs1"
-        SERVICE_PORT="3000"
-        STRIPE_SECRET="sk_test_lPPoJjmmbSjymtgo4r0O3z89"
-        STRIPE_PUBLIC="pk_test_l10342hIODZmOJsBpY6GVPHj"
-      }
-
-      resources {
-        cpu    = 100
-        memory = 200
-      }
-    }
-
-    network {
-      mode = "bridge"
-    }
-
-    service {
-      name = "payment-api"
-      port = "3000"
-
-      connect {
-        sidecar_service {}
-      }
-    }
-  }
-
   group "notification-api-v1" {
     count = 1
 

@@ -1,13 +1,13 @@
 kind = "service-splitter"
-name = "notification-api"
+name = "payment-api"
 
 splits = [
   {
-    weight = 0,
+    weight = 60,
     service_subset = "v1"
   },
   {
-    weight = 100,
+    weight = 40,
     service_subset = "v2"
   }
 ]

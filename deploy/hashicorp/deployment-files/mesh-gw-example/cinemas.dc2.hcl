@@ -7,7 +7,7 @@ job "cinemas" {
   group "payment-api" {
     count = 1
 
-    task "paymentapi" {
+    task "payment-api" {
       driver = "docker"
       config {
         image   = "crizstian/payment-service-go:v0.1"
@@ -47,7 +47,7 @@ job "cinemas" {
   group "notification-api" {
     count = 1
 
-    task "notificationapi" {
+    task "notification-api" {
       driver = "docker"
       config {
         image   = "crizstian/notification-service-go:v0.1"

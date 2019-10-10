@@ -7,7 +7,7 @@ job "cinemas" {
   group "payment-api" {
     count = 1
 
-    task "paymentapi" {
+    task "payment-api" {
       driver = "docker"
       config {
         image   = "crizstian/payment-service-go:v0.1"
@@ -43,87 +43,6 @@ job "cinemas" {
       }
     }
   }
-
-  group "notification-api-v1" {
-    count = 1
-
-    task "notification-api-v1" {
-      driver = "docker"
-      config {
-        image   = "crizstian/notification-service-go:v0.1"
-      }
-
-      env {
-        SERVICE_PORT="3001"
-        EMAIL="crr.developer.9@gmail.com"
-        EMAIL_PASS="Cris123#"
-      }
-
-      resources {
-        cpu    = 100
-        memory = 100
-      }
-    }
-
-    network {
-      mode = "bridge"
-    }
-
-    service {
-      name = "notification-api"
-      port = "3001"
-      tags = ["notification-api-v1", "cinema-microservice-project"]
-
-      meta {
-        version = "1"
-      }
-
-      connect {
-        sidecar_service {}
-      }
-    }
-  }
-
-  group "notification-api-v2" {
-    count = 1
-
-    task "notification-api-v2" {
-      driver = "docker"
-      config {
-        image   = "crizstian/notification-service-go:v0.2"
-      }
-
-      env {
-        SERVICE_PORT="3001"
-        EMAIL="crr.developer.9@gmail.com"
-        EMAIL_PASS="Cris123#"
-      }
-
-      resources {
-        cpu    = 100
-        memory = 100
-      }
-    }
-
-    network {
-      mode = "bridge"
-    }
-
-    service {
-      name = "notification-api"
-      port = "3001"
-      tags = ["notification-api-v2", "cinema-microservice-project"]
-
-      meta {
-        version = "2"
-      }
-
-      connect {
-        sidecar_service {}
-      }
-    }
-  }
-
 
   group "booking-service" {
     count = 1
