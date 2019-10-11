@@ -4,7 +4,10 @@ FROM golang:1.13.1
 RUN go get -u github.com/labstack/echo && \
     go get github.com/dgrijalva/jwt-go && \
     go get github.com/sirupsen/logrus && \
-    go get gopkg.in/mgo.v2
+    go get gopkg.in/mgo.v2 && \
+    go get github.com/opentracing/opentracing-go && \
+	  go get github.com/uber/jaeger-client-go && \
+    go get github.com/pkg/errors
 
 WORKDIR /go/src/cinemas-microservices/booking-service/src
 

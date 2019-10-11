@@ -5,6 +5,7 @@ import (
 	"cinemas-microservices/booking-service/src/ctrls"
 	errs "cinemas-microservices/booking-service/src/errors"
 	"cinemas-microservices/booking-service/src/models"
+	"cinemas-microservices/booking-service/src/tracing"
 	"errors"
 	"net/http"
 
@@ -14,42 +15,55 @@ import (
 	"github.com/labstack/echo"
 )
 
+const makeBookingResponse = "Booking has been created successfully"
+
 // MakeBooking ...
 func (a API) MakeBooking(c echo.Context) error {
+
 	c.Request().Header.Set("Content-Type", echo.MIMEApplicationJSONCharsetUTF8)
+
+	sp := tracing.CreateChildSpan(c, "MakeBooking handler")
+	defer sp.Finish()
 
 	b := new(models.BookingRequest)
 
 	if err := c.Bind(b); err != nil {
-		return errs.Send("User", "Could not get Booking Request data", err)
+		return errs.SendWithOpenTracing(sp, "User", "Could not get Booking Request data", err)
 	}
 
-	pr, err := ctrls.MakePayment(b, a.client)
+	pr := tracing.TraceFunction(c, ctrls.MakePayment, b, a.client)
+	prp := pr[0].Interface().(*map[string]interface{})
+	prv := *prp
 
-	if err != nil {
-		return errs.Send("External", "An error ocurred with the Payment Wall", err)
+	if e := pr[1].Interface(); e != nil {
+		return errs.SendWithOpenTracing(sp, "External", "An error ocurred with the Payment Wall", e.(error))
 	}
 
-	ticket, err := ctrls.CreateTicket(pr, b, a.db)
+	t := tracing.TraceFunction(c, ctrls.CreateTicket, prp, b, a.db)
+	ticket := t[0].Interface().(models.Ticket)
 
-	if err != nil {
-		return errs.Send("External", "Could not insert ticket into DB", err)
+	if e := t[1].Interface(); e != nil {
+		return errs.SendWithOpenTracing(sp, "External", "Could not insert ticket into DB", e.(error))
 	}
 
-	nr, err := a.client.API.NotificationWall(ticket)
+	n := tracing.TraceFunction(c, a.client.API.NotificationWall, ticket)
+	nrp := *n[0].Interface().(*map[string]interface{})
 
-	if err != nil {
-		return errs.Send("External", "Could not send email to user", err)
+	if e := n[1].Interface(); e != nil {
+		return errs.SendWithOpenTracing(sp, "External", "Could not send email to user", e.(error))
 	}
 
-	prp := *pr.(*map[string]interface{})
-	nrp := *nr.(*map[string]interface{})
+	pm := "Payment has been charged succuessfully"
+	if prv["version"] != nil {
+		pm += " with " + prv["version"].(string)
+	}
 
+	sp.LogEvent("Called MakeBooking function, with response: " + makeBookingResponse)
 	res := map[string]interface{}{
-		"msg":          "Booking has been created successfully",
+		"msg":          makeBookingResponse,
 		"notification": nrp["msg"].(string),
 		"ticket":       ticket,
-		"payment":      "Payment has been charged succuessfully with " + prp["version"].(string),
+		"payment":      pm,
 	}
 
 	return c.JSON(http.StatusCreated, res)

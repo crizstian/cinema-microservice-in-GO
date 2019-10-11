@@ -55,7 +55,7 @@ func startServer(di *config.DI, se chan error) {
 	log.Info("Starting Booking Service now ...")
 
 	server.Start(map[string]interface{}{
-		"port": di.ServerSettings["port"].(int),
+		"ss":   di.ServerSettings,
 		"repo": r,
 	}, se)
 }

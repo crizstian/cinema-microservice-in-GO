@@ -3,6 +3,8 @@ package config
 import (
 	"cinemas-microservices/booking-service/src/client"
 	"cinemas-microservices/booking-service/src/db"
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
 
@@ -12,73 +14,82 @@ import (
 // GetServiceConfig ...
 func GetServiceConfig() map[string]interface{} {
 
-	conn := db.MongoReplicaSet{}
-	u, uok := os.LookupEnv("DB_USER")
-	p, pok := os.LookupEnv("DB_PASS")
-	s, sok := os.LookupEnv("DB_SERVERS")
-	n, nok := os.LookupEnv("DB_NAME")
-	r, rok := os.LookupEnv("DB_REPLICA")
-
-	if !uok {
-		log.Errorln("[ERROR] NO DB_USER defined")
-		os.Exit(1)
-	}
-	if !pok {
-		log.Errorln("[ERROR] NO DB_PASS defined")
-		os.Exit(1)
-	}
-	if !sok {
-		log.Errorln("[ERROR] NO DB_SERVERS defined")
-		os.Exit(1)
-	}
-	if !nok {
-		log.Errorln("[ERROR] NO DB_NAME defined")
-		os.Exit(1)
-	}
-	if !rok {
-		log.Errorln("[ERROR] NO DB_REPLICA defined")
+	conn, err := initDBEnvironment()
+	if err != nil {
+		log.Errorln(err.Error())
 		os.Exit(1)
 	}
 
-	conn.User = u
-	conn.Pass = p
-	conn.Servers = s
-	conn.Db = n
-	conn.ReplicaSet = r
-	conn.AuthSource = "authSource=admin"
-
-	sp, spok := os.LookupEnv("SERVICE_PORT")
-
-	if !spok {
-		log.Errorln("[ERROR] NO SERVICE_PORT defined")
+	p, err := initServerEnvironment()
+	if err != nil {
+		log.Errorln(err.Error())
 		os.Exit(1)
 	}
 
-	port, perr := strconv.Atoi(sp)
-
-	if perr != nil {
-		log.Errorln("[ERROR] SERVICE_PORT not valid")
-		os.Exit(1)
+	ss := map[string]interface{}{
+		"port": p,
 	}
 
 	c, err := InitClient()
-
 	if err != nil {
-		log.Errorln("[ERROR] API Client could not be generated")
+		log.Errorln(err.Error())
 		os.Exit(1)
 	}
 
+	err2 := initUpstreamsURIEnvironment(c)
+	if err2 != nil {
+		log.Errorln(err2.Error())
+		os.Exit(1)
+	}
+
+	tr, err := initTracingEnvironment()
+	if err != nil {
+		log.Errorln(err.Error())
+		os.Exit(1)
+	}
+
+	if tr != "" {
+		ss["tracingUpstream"] = tr
+	}
+
+	return map[string]interface{}{
+		"dbSettings":     *conn,
+		"serverSettings": ss,
+		"apiClient":      c,
+	}
+}
+
+func initTracingEnvironment() (string, error) {
+	et, etok := os.LookupEnv("ENABLE_TRACING")
+
+	if !etok {
+		return "", nil
+	}
+
+	if et == "true" {
+		tr, trok := os.LookupEnv("TRACER_URL")
+		if !trok {
+			return "", errors.New("[ERROR] NO TRACER_URL defined")
+		}
+		log.Info("TRACER_URL URL IS: " + tr)
+
+		return tr, nil
+	}
+
+	return "", nil
+}
+
+// initUpstreamsURIEnvironment ...
+func initUpstreamsURIEnvironment(c *Client) error {
 	pu, puok := os.LookupEnv("PAYMENT_URL")
 	nu, nuok := os.LookupEnv("NOTIFICATION_URL")
 
 	if !puok {
-		log.Errorln("[ERROR] NO PAYMENT_URL defined")
-		os.Exit(1)
+		return errors.New("[ERROR] NO PAYMENT_URL defined")
 	}
 
 	if !nuok {
-		log.Errorln("[ERROR] NO NOTIFICATION_URL defined")
-		os.Exit(1)
+		return errors.New("[ERROR] NO NOTIFICATION_URL defined")
 	}
 
 	c.API.SetBasePaymentURL(pu)
@@ -87,13 +98,59 @@ func GetServiceConfig() map[string]interface{} {
 	log.Info("PAYMENT_URL IS: " + c.API.GetBasePaymentURL())
 	log.Info("NOTIFICATION_URL URL IS: " + c.API.GetNotificationURL())
 
-	return map[string]interface{}{
-		"dbSettings": conn,
-		"serverSettings": map[string]interface{}{
-			"port": port,
-		},
-		"apiClient": c,
+	return nil
+}
+
+// initServerEnvironment ...
+func initServerEnvironment() (int, error) {
+	sp, spok := os.LookupEnv("SERVICE_PORT")
+
+	if !spok {
+		return -1, errors.New("[ERROR] NO SERVICE_PORT defined")
 	}
+
+	port, perr := strconv.Atoi(sp)
+
+	if perr != nil {
+		return -1, errors.New("[ERROR] SERVICE_PORT not valid")
+	}
+
+	return port, nil
+}
+
+// initDBEnvironment ...
+func initDBEnvironment() (*db.MongoReplicaSet, error) {
+
+	u, uok := os.LookupEnv("DB_USER")
+	p, pok := os.LookupEnv("DB_PASS")
+	s, sok := os.LookupEnv("DB_SERVERS")
+	n, nok := os.LookupEnv("DB_NAME")
+	r, rok := os.LookupEnv("DB_REPLICA")
+
+	if !uok {
+		return nil, errors.New("[ERROR] NO DB_USER defined")
+	}
+	if !pok {
+		return nil, errors.New("[ERROR] NO DB_PASS defined")
+	}
+	if !sok {
+		return nil, errors.New("[ERROR] NO DB_SERVERS defined")
+	}
+	if !nok {
+		return nil, errors.New("[ERROR] NO DB_NAME defined")
+	}
+	if !rok {
+		return nil, errors.New("[ERROR] NO DB_REPLICA defined")
+	}
+
+	return &db.MongoReplicaSet{
+		User:       u,
+		Pass:       p,
+		Servers:    s,
+		Db:         n,
+		ReplicaSet: r,
+		AuthSource: "authSource=admin",
+	}, nil
 }
 
 // Client ...
@@ -108,7 +165,7 @@ func InitClient() (*Client, error) {
 	c, err := client.NewClient()
 
 	if err != nil {
-		return nil, err
+		return nil, errors.New(fmt.Errorf("[ERROR] API Client could not be generated \n %v", err).Error())
 	}
 
 	f := &Client{

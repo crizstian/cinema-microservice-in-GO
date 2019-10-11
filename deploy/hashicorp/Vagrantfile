@@ -24,14 +24,17 @@ Vagrant.configure("2") do |config|
         cs.vm.network :forwarded_port, guest: 27017, guest_ip:"10.0.2.15", host: 27017, host_ip:"0.0.0.0"
         cs.vm.network :forwarded_port, guest: 27018, guest_ip:"10.0.2.15", host: 27018, host_ip:"0.0.0.0"
         cs.vm.network :forwarded_port, guest: 27019, guest_ip:"10.0.2.15", host: 27019, host_ip:"0.0.0.0"
+        # Mesh GW
         cs.vm.network :forwarded_port, guest: 8433,  guest_ip:"10.0.2.15", host: 8433,  host_ip:"0.0.0.0"
+        # jaeger
+        cs.vm.network :forwarded_port, guest: 16686,  guest_ip:"10.0.2.15", host: 16686,  host_ip:"0.0.0.0"
       end
       if dc == "dc2"
+        # Mesh GW
         cs.vm.network :forwarded_port, guest: 9433,  guest_ip:"10.0.2.15", host: 9433,  host_ip:"0.0.0.0"
       end
       
       cs.vm.provision "shell", privileged: false, inline: <<-EOF
-        echo "export NOMAD_ADDR="http://#{dc}:4646" >> ~/.profile
         echo "Vagrant Box provisioned!"
       EOF
       

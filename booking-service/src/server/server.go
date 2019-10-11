@@ -3,6 +3,7 @@ package server
 import (
 	"cinemas-microservices/booking-service/src/api"
 	"cinemas-microservices/booking-service/src/routes"
+	tracing "cinemas-microservices/booking-service/src/tracing"
 	"context"
 	"os"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
+	"github.com/opentracing/opentracing-go"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -32,12 +34,26 @@ var e *echo.Echo
 // Start ...
 func Start(r map[string]interface{}, se chan error) {
 
+	// get server settings from dependecy injection
+	ss := r["ss"].(map[string]interface{})
+
 	e = echo.New()
 
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Format: "method=${method}, uri=${uri}, status=${status}\n",
 	}))
+
 	e.Use(middleware.Recover())
+
+	tracer, closer := tracing.InitJaeger("booking-service", ss["tracingUpstream"].(string))
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+
+	e.Use(tracing.TraceWithConfig(tracing.TraceConfig{
+		Tracer:  tracer,
+		Skipper: nil,
+	}))
+
 	app := e.Group("/booking")
 
 	routes.API(app, r["repo"].(api.Repository))
@@ -45,7 +61,7 @@ func Start(r map[string]interface{}, se chan error) {
 
 	// Start server
 	go func() {
-		if err := e.Start(":" + strconv.Itoa(r["port"].(int))); err != nil {
+		if err := e.Start(":" + strconv.Itoa(ss["port"].(int))); err != nil {
 			log.Info("shutting down the server")
 			se <- err
 		}
