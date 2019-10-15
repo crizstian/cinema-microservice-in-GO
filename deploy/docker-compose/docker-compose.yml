@@ -1,0 +1,178 @@
+version: '3'
+
+services:
+  mongo1:
+    image: crizstian/cinemas-db:v0.1
+    ports:
+      - "27017:27017"
+    environment:
+      DB_ADMIN_USER: "cristian"
+      DB_ADMIN_PASS: "cristianPassword2017"
+      DB_REPLICA_ADMIN: "replicaAdmin"
+      DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
+      DB_REPLSET_NAME: "rs1"
+      DB_PORT: "27017"
+      DB1: "10.7.0.3"
+      DB2: "10.7.0.4"
+      DB3: "10.7.0.5"
+      IS_PRIMARY: "false"
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.3
+
+  mongo2:
+    image: crizstian/cinemas-db:v0.1
+    ports:
+      - "27018:27017"
+    environment:
+      DB_ADMIN_USER: "cristian"
+      DB_ADMIN_PASS: "cristianPassword2017"
+      DB_REPLICA_ADMIN: "replicaAdmin"
+      DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
+      DB_REPLSET_NAME: "rs1"
+      DB_PORT: "27017"
+      DB1: "10.7.0.3"
+      DB2: "10.7.0.4"
+      DB3: "10.7.0.5"
+      IS_PRIMARY: "false"
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.4
+
+  mongo3:
+    image: crizstian/cinemas-db:v0.1
+    ports:
+      - "27019:27017"
+    environment:
+      DB_ADMIN_USER: "cristian"
+      DB_ADMIN_PASS: "cristianPassword2017"
+      DB_REPLICA_ADMIN: "replicaAdmin"
+      DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
+      DB_REPLSET_NAME: "rs1"
+      DB_PORT: "27017"
+      DB3: "10.7.0.3"
+      DB2: "10.7.0.4"
+      DB1: "10.7.0.5"
+      IS_PRIMARY: "true"
+    depends_on:
+      - mongo1
+      - mongo2
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.5
+
+  movie:
+    image: crizstian/movies-service-go:v0.1
+    restart: on-failure
+    ports:
+      - "8000:8000"
+    environment:
+      DB_USER: "cristian"
+      DB_PASS: "cristianPassword2017"
+      DB_SERVERS: "10.7.0.2:27017,10.7.0.3:27017,10.7.0.4:27017"
+      DB_NAME: "movies"
+      DB_REPLICA: "rs1"
+      SERVICE_PORT: "8000"
+    depends_on:
+      - mongo3
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.6
+
+  payment:
+    image: crizstian/payment-service-go:v0.1
+    restart: on-failure
+    ports:
+      - "8100:8000"
+    environment:
+      DB_USER: "cristian"
+      DB_PASS: "cristianPassword2017"
+      DB_SERVERS: "10.7.0.2:27017,10.7.0.3:27017,10.7.0.4:27017"
+      DB_NAME: "payment"
+      DB_REPLICA: "rs1"
+      SERVICE_PORT: "8000"
+      STRIPE_SECRET: "sk_test_lPPoJjmmbSjymtgo4r0O3z89"
+      STRIPE_PUBLIC: "pk_test_l10342hIODZmOJsBpY6GVPHj"
+    depends_on:
+      - mongo3
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.7
+
+  notification:
+    image: crizstian/notification-service-go:v0.1
+    restart: on-failure
+    ports:
+      - "8200:8000"
+    environment:
+      SERVICE_PORT: "8000"
+      EMAIL: "crr.developer.9@gmail.com"
+      EMAIL_PASS: "Cris123#"
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.8
+
+  booking:
+    image: crizstian/booking-service-go:v0.2
+    restart: on-failure
+    ports:
+      - "8300:8000"
+    environment:
+      DB_USER: "cristian"
+      DB_PASS: "cristianPassword2017"
+      DB_SERVERS: "10.7.0.2:27017,10.7.0.3:27017,10.7.0.4:27017"
+      DB_NAME: "booking"
+      DB_REPLICA: "rs1"
+      SERVICE_PORT: "8000"
+      PAYMENT_URL: "http://10.7.0.7:8000"
+      NOTIFICATION_URL: "http://10.7.0.8:8000"
+      ENABLE_TRACING: "true"
+      TRACER_URL: "10.7.0.20:6831"
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.9
+
+# # Tracing and Metrics  
+#   grafana:
+#     image: grafana/grafana
+#     ports:
+#       - 3000:3000
+#     environment:
+#       - GF_SECURITY_ADMIN_PASSWORD=secret
+#     links:
+#       - prometheus-server:prometheus
+#     volumes:
+#       - "./grafana/config.ini:/etc/grafana/config.ini"
+#       - "./grafana/provisioning:/etc/grafana/provisioning"
+#       - "./grafana/dashboards:/var/lib/grafana/dashboards"
+#     networks:
+#       dc1:
+#         ipv4_address: 10.7.0.18
+
+#   prometheus-server:
+#     image: prom/prometheus
+#     ports:
+#       - 9990:9090
+#     volumes:
+#       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+#     networks:
+#       dc1:
+#         ipv4_address: 10.7.0.19
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.7
+    command: "--log-level=debug"
+    ports:
+    - "6831:6831/udp"
+    - "6832:6832/udp"
+    - "16686:16686"
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.20
+
+networks:
+  dc1:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 10.7.0.0/16
