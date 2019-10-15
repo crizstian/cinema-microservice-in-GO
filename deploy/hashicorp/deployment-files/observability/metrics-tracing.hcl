@@ -92,21 +92,13 @@ job "metrics" {
       driver = "docker"
       config {
         image = "jaegertracing/all-in-one:1.13"
+        command = "--log-level=debug"
          port_map {
-          service_port_1 = 5775
-          service_port_2 = 6831
-          service_port_3 = 6832
-          service_port_4 = 5778
-          service_port_5 = 16686
-          service_port_6 = 14268
-          service_port_7 = 9411
+          service_port_1 = 6831
+          service_port_2 = 6832
+          service_port_3 = 16686
         }
       }
-
-      env {
-        COLLECTOR_ZIPKIN_HTTP_PORT=9411
-      }
-
 
       resources {
         cpu    = 50
@@ -115,34 +107,23 @@ job "metrics" {
         network {
           mbits = 10
           port "service_port_1" {
-            static = 5775
+            static = 6831
+            to     = 6831
           }
           port "service_port_2" {
-            static = 6831
+            static = 6832
+            to     = 6832
           }
           port "service_port_3" {
-            static = 6832
-          }
-          port "service_port_4" {
-            static = 5778
-          }
-          port "service_port_5" {
             static = 16686
             to     = 16686
-          }
-          port "service_port_6" {
-            static = 14268
-          }
-          port "service_port_7" {
-            static = 9411
-            to     = 9411
           }
         }
       }
 
       service {
         name = "jaeger"
-        port = "service_port_7"
+        port = "service_port_3"
         check {
           type     = "tcp"
           interval = "10s"

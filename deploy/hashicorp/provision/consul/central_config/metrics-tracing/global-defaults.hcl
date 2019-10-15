@@ -10,7 +10,7 @@ config {
       "dns_lookup_family": "V4_ONLY",
       "lb_policy": "ROUND_ROBIN",
       "load_assignment": {
-          "cluster_name": "jaeger_6831",
+          "cluster_name": "jaeger",
           "endpoints": [
               {
                   "lb_endpoints": [
@@ -29,7 +29,7 @@ config {
               }
           ]
       },
-      "name": "jaeger_6831",
+      "name": "jaeger",
       "type": "STRICT_DNS"
     }
   EOL
@@ -38,8 +38,9 @@ config {
     {
         "http": {
             "config": {
-                "collector_cluster": "jaeger_6831",
-                "collector_endpoint": "/api/v2/spans"
+                "collector_cluster": "jaeger",
+                "collector_endpoint": "/api/v1/spans",
+                "shared_span_context": false
             },
             "name": "envoy.zipkin"
         }
