@@ -40,7 +40,7 @@ var b = `{
 
 var brJSON = fmt.Sprintf(`{"user": %s, "booking": %s}`, u, b)
 
-var url = "http://0.0.0.0:8300/booking/"
+var url = "http://172.20.20.11:3002/booking/"
 
 func TestBookingEndpoint(t *testing.T) {
 

@@ -98,9 +98,7 @@ job "cinemas" {
         SERVICE_PORT="3002"
         PAYMENT_URL="http://${NOMAD_UPSTREAM_ADDR_payment_api}"
         NOTIFICATION_URL="http://${NOMAD_UPSTREAM_ADDR_notification_api}"
-        ENABLE_TRACING="true"
-        JAEGER_AGENT_HOST="10.0.2.15"
-        JAEGER_AGENT_PORT="6831"
+        TRACER_URL = "10.0.2.15:6831"
       }
 
       resources {
