@@ -1,19 +1,11 @@
 FROM golang:1.13.1
 
-# Install go dependencies
-RUN go get -u github.com/labstack/echo && \
-    go get github.com/dgrijalva/jwt-go && \
-    go get github.com/sirupsen/logrus && \
-    go get gopkg.in/mgo.v2 && \
-    go get github.com/opentracing/opentracing-go && \
-	  go get github.com/uber/jaeger-client-go && \
-    go get github.com/pkg/errors
-
 WORKDIR /go/src/cinemas-microservices/booking-service/src
 
 COPY src /go/src/cinemas-microservices/booking-service/src
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+RUN go mod init && \
+    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates curl

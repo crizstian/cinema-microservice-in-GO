@@ -10,7 +10,7 @@ import (
 )
 
 // TraceFunction wraps funtion with opentracing span adding tags for the function name and caller details
-func TraceFunction(ctx echo.Context, fn interface{}, params ...interface{}) (result []reflect.Value) {
+func TraceFunction(parentSpan opentracing.Span, fn interface{}, params ...interface{}) (result []reflect.Value) {
 	f := reflect.ValueOf(fn)
 	if f.Type().NumIn() != len(params) {
 		panic("incorrect number of parameters!")
@@ -22,11 +22,12 @@ func TraceFunction(ctx echo.Context, fn interface{}, params ...interface{}) (res
 	pc, file, no, ok := runtime.Caller(1)
 	details := runtime.FuncForPC(pc)
 	name := runtime.FuncForPC(reflect.ValueOf(fn).Pointer()).Name()
-	parentSpan := opentracing.SpanFromContext(ctx.Request().Context())
+
 	sp := opentracing.StartSpan(
 		"Function - "+name,
 		opentracing.ChildOf(parentSpan.Context()))
 	(opentracing.Tag{Key: "function", Value: name}).Set(sp)
+
 	if ok {
 		callerDetails := fmt.Sprintf("%s - %s#%d", details.Name(), file, no)
 		(opentracing.Tag{Key: "caller", Value: callerDetails}).Set(sp)

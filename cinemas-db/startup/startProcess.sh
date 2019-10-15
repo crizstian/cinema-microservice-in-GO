@@ -2,18 +2,16 @@
 set -e
 
 echo "Proceeding with startup..."
-echo "IS_PRIMARY = " $IS_PRIMARY
+/var/tmp/start/startWithConfig.sh & 
 
-if [ $IS_PRIMARY == "true" ]; then
-  export ip4_add=`hostname -i`
+curl \
+    --request PUT \
+    --data "started" \
+  http://${CONSUL_IP}:8500/v1/kv/cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/${NOMAD_TASK_NAME}
 
-  consul-template -template "/data/admin/admin.js.ctmpl:/data/admin/admin.js" -once
-  consul-template -template "/data/admin/grantRole.js.ctmpl:/data/admin/grantRole.js" -once
-  consul-template -template "/data/admin/replica.js.ctmpl:/data/admin/replica.js" -once
+echo "Proceeding with replica set config..."
+/usr/local/bin/consul lock -http-addr=${CONSUL_IP}:8500 cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/initMongo /var/tmp/start/mongoStart.sh &
 
-  /var/tmp/start/startWithConfig.sh & 
-  /var/tmp/start/initMongo.sh &
-  wait
-else 
-  /var/tmp/start/startWithConfig.sh
-fi
+wait
+
+

@@ -4,7 +4,6 @@ import (
 	"cinemas-microservices/booking-service/src/api"
 	"cinemas-microservices/booking-service/src/config"
 	"cinemas-microservices/booking-service/src/server"
-	"fmt"
 	"os"
 	"os/signal"
 
@@ -30,10 +29,10 @@ func main() {
 		case c := <-di:
 			startServer(c, serverError)
 		case q := <-quit:
-			fmt.Println(q)
+			log.Infof("Signal Interruption Received: %v", q)
 			server.Shutdown(s)
 		case se := <-serverError:
-			log.Infof(fmt.Sprintf("[ERROR] an error happend in the server, %v", se))
+			log.Errorf("An error occured in the server, %v", se)
 			server.Shutdown(s)
 		}
 	}
@@ -41,22 +40,21 @@ func main() {
 
 func startServer(di *config.DI, se chan error) {
 	log.Info("Connected to Booking Service DB")
-	log.Info("Connecting to booking repository...")
 
 	s = di.Database.Session
 
+	log.Info("Initializaing API Repository Configuration")
 	r, err := api.Connect(di.Database.DB, di.APIClient)
 
 	if err != nil {
-		mainErrorHandler(fmt.Sprintf("[ERROR] Could not connect to Repo -> %s", err))
+		mainErrorHandler("An error occured initializing the API Repository: " + err.Error())
 	}
 
-	log.Info("Connected to Booking Repository")
-	log.Info("Starting Booking Service now ...")
-
+	log.Info("API Repository configuration completed")
 	server.Start(map[string]interface{}{
-		"ss":   di.ServerSettings,
-		"repo": r,
+		"ss":     di.ServerSettings,
+		"repo":   r,
+		"tracer": di.Tracer,
 	}, se)
 }
 

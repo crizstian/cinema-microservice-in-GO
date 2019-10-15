@@ -10,7 +10,7 @@ config {
       "dns_lookup_family": "V4_ONLY",
       "lb_policy": "ROUND_ROBIN",
       "load_assignment": {
-          "cluster_name": "jaeger_9411",
+          "cluster_name": "jaeger_6831",
           "endpoints": [
               {
                   "lb_endpoints": [
@@ -19,7 +19,7 @@ config {
                               "address": {
                                   "socket_address": {
                                       "address": "10.0.2.15",
-                                      "port_value": 9411,
+                                      "port_value": 6831,
                                       "protocol": "TCP"
                                   }
                               }
@@ -29,7 +29,7 @@ config {
               }
           ]
       },
-      "name": "jaeger_9411",
+      "name": "jaeger_6831",
       "type": "STRICT_DNS"
     }
   EOL
@@ -38,7 +38,7 @@ config {
     {
         "http": {
             "config": {
-                "collector_cluster": "jaeger_9411",
+                "collector_cluster": "jaeger_6831",
                 "collector_endpoint": "/api/v2/spans"
             },
             "name": "envoy.zipkin"

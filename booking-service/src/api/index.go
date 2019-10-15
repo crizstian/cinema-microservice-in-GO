@@ -8,5 +8,5 @@ import (
 
 // PingAPI ...
 func PingAPI(c echo.Context) error {
-	return c.String(http.StatusOK, "pong")
+	return c.String(http.StatusOK, "pong .../booking service/ ...response")
 }

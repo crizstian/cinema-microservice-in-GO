@@ -2,7 +2,9 @@ sudo mkdir -p /var/consul/config
 sudo mkdir -p /var/nomad/config
 
 sudo cp /vagrant/provision/consul/dc1/* /var/consul/config/
+sudo cp /vagrant/provision/consul/watches/* /var/consul/config/
 sudo cp /vagrant/provision/consul/system/consul.service /etc/systemd/system/consul.service
+sudo chmod +x /var/consul/config/*.sh
 
 sudo cp /vagrant/provision/nomad/dc1/* /var/nomad/config/
 sudo cp /vagrant/provision/nomad/system/nomad.service /etc/systemd/system/nomad.service

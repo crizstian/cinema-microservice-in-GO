@@ -25,14 +25,14 @@ type MongoConnection struct {
 
 // MongoDB ...
 func MongoDB(options MongoReplicaSet, c chan *MongoConnection) {
-	log.Info("connecting to db ....")
+	log.Info("Connecting to Booking Service DB ....")
 
 	url := "mongodb://" + options.User + ":" + options.Pass + "@" + options.Servers + "/" + options.Db + "?replicaSet=" + options.ReplicaSet + "&" + options.AuthSource
 
 	session, err := mgo.Dial(url)
 
 	if err != nil {
-		log.Errorf("An error occured connecting to the DB, \n[ERROR] -> %s", err.Error())
+		log.Errorf("An error occured connecting to Booking Service DB: %s", err.Error())
 		os.Exit(1)
 	}
 

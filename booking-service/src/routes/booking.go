@@ -6,8 +6,8 @@ import (
 	"github.com/labstack/echo"
 )
 
-// PaymentAPI ...
-func PaymentAPI(app *echo.Group, repo api.Repository) {
+// BookingAPI ...
+func BookingAPI(app *echo.Group, repo api.Repository) {
 	app.POST("/", repo.MakeBooking)
 	app.GET("/:orderId", repo.GetOrderByID)
 }

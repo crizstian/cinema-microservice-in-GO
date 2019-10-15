@@ -8,5 +8,5 @@ import (
 
 // API ...
 func API(app *echo.Group, repo api.Repository) {
-	PaymentAPI(app, repo)
+	BookingAPI(app, repo)
 }

@@ -7,16 +7,16 @@ function createKeyFile {
 
 createKeyFile files/mongo-keyfile
 
-docker rm -f cinemas-db:v0.1
+docker rm -f cinemas-db:v0.2
 
-docker rmi cinemas-db:v0.1
+docker rmi cinemas-db:v0.2
 
 docker image prune
 
 docker volume prune
 
-docker build -t cinemas-db:v0.1 .
+docker build -t cinemas-db:v0.2 .
 
-docker tag cinemas-db:v0.1 crizstian/cinemas-db:v0.1
+docker tag cinemas-db:v0.2 crizstian/cinemas-db:v0.2
 
-docker push crizstian/cinemas-db:v0.1
+docker push crizstian/cinemas-db:v0.2

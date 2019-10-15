@@ -11,8 +11,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// GetServiceConfig ...
-func GetServiceConfig() map[string]interface{} {
+// LoadEnvSettings ...
+func LoadEnvSettings() map[string]interface{} {
 
 	conn, err := initDBEnvironment()
 	if err != nil {
@@ -24,10 +24,6 @@ func GetServiceConfig() map[string]interface{} {
 	if err != nil {
 		log.Errorln(err.Error())
 		os.Exit(1)
-	}
-
-	ss := map[string]interface{}{
-		"port": p,
 	}
 
 	c, err := InitClient()
@@ -48,35 +44,24 @@ func GetServiceConfig() map[string]interface{} {
 		os.Exit(1)
 	}
 
-	if tr != "" {
-		ss["tracingUpstream"] = tr
-	}
-
 	return map[string]interface{}{
-		"dbSettings":     *conn,
-		"serverSettings": ss,
-		"apiClient":      c,
+		"dbSettings": *conn,
+		"serverSettings": map[string]interface{}{
+			"port": p,
+		},
+		"apiClient": c,
+		"tracing":   tr,
 	}
 }
 
 func initTracingEnvironment() (string, error) {
-	et, etok := os.LookupEnv("ENABLE_TRACING")
+	tr, trok := os.LookupEnv("TRACER_URL")
 
-	if !etok {
-		return "", nil
+	if !trok {
+		return "", errors.New("NO TRACER_URL defined, using default configurations")
 	}
 
-	if et == "true" {
-		tr, trok := os.LookupEnv("TRACER_URL")
-		if !trok {
-			return "", errors.New("[ERROR] NO TRACER_URL defined")
-		}
-		log.Info("TRACER_URL URL IS: " + tr)
-
-		return tr, nil
-	}
-
-	return "", nil
+	return tr, nil
 }
 
 // initUpstreamsURIEnvironment ...

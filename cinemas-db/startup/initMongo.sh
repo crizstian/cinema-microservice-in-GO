@@ -13,7 +13,7 @@ function add_replicas {
   echo '·· adding replicas >>>> ··'
 
   # add nuppdb replicas
-  for server in $DB2 $DB3
+  for server in $DB1 $DB2 $DB3
   do
     rs="rs.add('$server')"
     add='mongo --eval "'$rs'" -u '$DB_REPLICA_ADMIN' -p '$DB_REPLICA_ADMIN_PASS' --authenticationDatabase="admin"'

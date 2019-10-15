@@ -3,7 +3,7 @@ package server
 import (
 	"cinemas-microservices/booking-service/src/api"
 	"cinemas-microservices/booking-service/src/routes"
-	tracing "cinemas-microservices/booking-service/src/tracing"
+	"cinemas-microservices/booking-service/src/tracing"
 	"context"
 	"os"
 	"strconv"
@@ -18,9 +18,6 @@ import (
 )
 
 func init() {
-	// Log as JSON instead of the default ASCII formatter.
-	// log.SetFormatter(&log.JSONFormatter{})
-
 	// Output to stdout instead of the default stderr
 	// Can be any io.Writer, see below for File example
 	log.SetOutput(os.Stdout)
@@ -45,17 +42,20 @@ func Start(r map[string]interface{}, se chan error) {
 
 	e.Use(middleware.Recover())
 
-	tracer, closer := tracing.InitJaeger("booking-service", ss["tracingUpstream"].(string))
-	defer closer.Close()
-	opentracing.SetGlobalTracer(tracer)
+	span := r["tracer"].(opentracing.Tracer).StartSpan("booking-service")
+	span.SetTag("booking-service", "Tracer started")
+	defer span.Finish()
+
+	ctx := opentracing.ContextWithSpan(context.Background(), span)
 
 	e.Use(tracing.TraceWithConfig(tracing.TraceConfig{
-		Tracer:  tracer,
+		Context: ctx,
 		Skipper: nil,
 	}))
 
 	app := e.Group("/booking")
 
+	// Register API Routes, and register Repository handlers
 	routes.API(app, r["repo"].(api.Repository))
 	routes.HealthyAPI(e)
 
@@ -78,9 +78,4 @@ func Shutdown(s *mgo.Session) {
 	s.Close()
 	log.Warn("Server shutdown")
 	os.Exit(1)
-}
-
-// GetServer ...
-func GetServer() *echo.Echo {
-	return e
 }

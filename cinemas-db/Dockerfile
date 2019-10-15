@@ -1,5 +1,10 @@
 FROM mongo
 
+RUN set -eux; \
+		apt-get update; \
+	  apt-get install -y \
+    curl software-properties-common wget unzip
+
 RUN mkdir /data/keyfile /data/admin /var/tmp/start
 
 COPY files/admin.js.ctmpl /data/admin/
@@ -13,10 +18,6 @@ COPY files/bin /var/tmp/
 
 RUN chown -R mongodb:mongodb /data
 RUN chmod -R +x /var/tmp
-
-RUN set -eux; \
-	apt-get update; \
-	apt-get install -y wget unzip
 
 RUN /var/tmp/installhashi.sh
 

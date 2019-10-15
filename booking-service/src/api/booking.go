@@ -22,7 +22,7 @@ func (a API) MakeBooking(c echo.Context) error {
 
 	c.Request().Header.Set("Content-Type", echo.MIMEApplicationJSONCharsetUTF8)
 
-	sp := tracing.CreateChildSpan(c, "MakeBooking handler")
+	sp := tracing.CreateChildSpan(c, "make-booking-handler")
 	defer sp.Finish()
 
 	b := new(models.BookingRequest)
@@ -31,7 +31,7 @@ func (a API) MakeBooking(c echo.Context) error {
 		return errs.SendWithOpenTracing(sp, "User", "Could not get Booking Request data", err)
 	}
 
-	pr := tracing.TraceFunction(c, ctrls.MakePayment, b, a.client)
+	pr := tracing.TraceFunction(sp, ctrls.MakePayment, b, a.client)
 	prp := pr[0].Interface().(*map[string]interface{})
 	prv := *prp
 
@@ -39,14 +39,14 @@ func (a API) MakeBooking(c echo.Context) error {
 		return errs.SendWithOpenTracing(sp, "External", "An error ocurred with the Payment Wall", e.(error))
 	}
 
-	t := tracing.TraceFunction(c, ctrls.CreateTicket, prp, b, a.db)
+	t := tracing.TraceFunction(sp, ctrls.CreateTicket, prp, b, a.db)
 	ticket := t[0].Interface().(models.Ticket)
 
 	if e := t[1].Interface(); e != nil {
 		return errs.SendWithOpenTracing(sp, "External", "Could not insert ticket into DB", e.(error))
 	}
 
-	n := tracing.TraceFunction(c, a.client.API.NotificationWall, ticket)
+	n := tracing.TraceFunction(sp, a.client.API.NotificationWall, ticket)
 	nrp := *n[0].Interface().(*map[string]interface{})
 
 	if e := n[1].Interface(); e != nil {
@@ -59,6 +59,7 @@ func (a API) MakeBooking(c echo.Context) error {
 	}
 
 	sp.LogEvent("Called MakeBooking function, with response: " + makeBookingResponse)
+
 	res := map[string]interface{}{
 		"msg":          makeBookingResponse,
 		"notification": nrp["msg"].(string),
