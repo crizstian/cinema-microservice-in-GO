@@ -1,0 +1,10 @@
+vault {
+  address = "http://vault.service.consul:8200"
+  token   = "[[ env "VAULT_TOKEN" ]]"
+  renew_token   = false
+}
+
+secret {
+  no_prefix = true
+  path   = "secret/[[ env "APP_NAME" ]]"
+}
