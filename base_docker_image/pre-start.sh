@@ -22,13 +22,13 @@ if [ -n "$APP_NAME" ]; then
 	if [ -n "$role_id" ] && [ -n "$secret_id" ]; then
 		echo "Exporting VAULT_TOKEN"
 
-		export VAULT_TOKEN=`curl -k -s -X POST -d '{"role_id":"'$role_id'","secret_id":"'$secret_id'"}' http://vault.service.consul:8200/v1/auth/approle/login | jq -r .auth.client_token`
+		export VAULT_TOKEN=`curl -k -s -X POST -d '{"role_id":"'$role_id'","secret_id":"'$secret_id'"}' http://vault.query.consul:8200/v1/auth/approle/login | jq -r .auth.client_token`
 		if [ -z "$VAULT_TOKEN" ]; then
 			echo "Unable to get a vault token, exiting..."
 			exit 3
 		fi
 
-	# 	response=$(curl -ks -X GET --header "X-Vault-Token: ${VAULT_TOKEN}" http://vault.service.consul:8200/v1/secret/$APP_NAME | jq .data)
+	# 	response=$(curl -ks -X GET --header "X-Vault-Token: ${VAULT_TOKEN}" http://vault.query.consul:8200/v1/secret/$APP_NAME | jq .data)
 	# 	if [ "$response" = "null" ] ; then
 	# 		echo "Secrets not available in path $APP_NAME, please store the secrets and try again"
 	# 		exit 4

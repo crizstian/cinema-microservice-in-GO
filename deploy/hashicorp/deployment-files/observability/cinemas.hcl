@@ -10,18 +10,13 @@ job "cinemas" {
     task "payment-api" {
       driver = "docker"
       config {
-        image = "crizstian/payment-service-go:v0.1"
+        image = "crizstian/payment-service-go:v0.3"
       }
 
       env {
-        DB_USER="cristian"
-        DB_PASS="cristianPassword2017"
-        DB_SERVERS="mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
-        DB_NAME="payment"
-        DB_REPLICA="rs1"
-        SERVICE_PORT="3000"
-        STRIPE_SECRET="sk_test_lPPoJjmmbSjymtgo4r0O3z89"
-        STRIPE_PUBLIC="pk_test_l10342hIODZmOJsBpY6GVPHj"
+        DB_SERVERS   = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
+        SERVICE_PORT = "3000"
+        CONSUL_IP    = "172.20.20.11"
       }
 
       resources {
@@ -50,13 +45,12 @@ job "cinemas" {
     task "notification-api" {
       driver = "docker"
       config {
-        image   = "crizstian/notification-service-go:v0.1"
+        image   = "crizstian/notification-service-go:v0.3"
       }
 
       env {
-        SERVICE_PORT="3001"
-        EMAIL="crr.developer.9@gmail.com"
-        EMAIL_PASS="Cris123#"
+        SERVICE_PORT = "3001"
+        CONSUL_IP    = "172.20.20.11"
       }
 
       resources {
@@ -90,12 +84,12 @@ job "cinemas" {
       }
 
       env {
-        DB_SERVERS="mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
-        SERVICE_PORT="3002"
-        CONSUL_IP="172.20.20.11"
-        PAYMENT_URL="http://${NOMAD_UPSTREAM_ADDR_payment_api}"
-        NOTIFICATION_URL="http://${NOMAD_UPSTREAM_ADDR_notification_api}"
-        TRACER_URL = "10.0.2.15:6831"
+        SERVICE_PORT     = "3002"
+        DB_SERVERS       = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
+        CONSUL_IP        = "172.20.20.11"
+        TRACER_URL       = "10.0.2.15:6831"
+        PAYMENT_URL      = "http://${NOMAD_UPSTREAM_ADDR_payment_api}"
+        NOTIFICATION_URL = "http://${NOMAD_UPSTREAM_ADDR_notification_api}"
       }
 
       resources {

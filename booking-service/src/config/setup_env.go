@@ -58,7 +58,8 @@ func initTracingEnvironment() (string, error) {
 	tr, trok := os.LookupEnv("TRACER_URL")
 
 	if !trok {
-		return "", errors.New("NO TRACER_URL defined, using default configurations")
+		log.Warn("NO TRACER_URL defined, falling back to localhost")
+		return "localhost:6831", nil
 	}
 
 	return tr, nil

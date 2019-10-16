@@ -10,13 +10,12 @@ job "cinemas" {
     task "notification-api-v1" {
       driver = "docker"
       config {
-        image   = "crizstian/notification-service-go:v0.1"
+        image   = "crizstian/notification-service-go:v0.4"
       }
 
       env {
         SERVICE_PORT="3001"
-        EMAIL="crr.developer.9@gmail.com"
-        EMAIL_PASS="Cris123#"
+        CONSUL_IP    = "172.20.20.31"
       }
 
       resources {
@@ -44,24 +43,24 @@ job "cinemas" {
     }
   }
 
+
   group "notification-api-v2" {
     count = 1
 
     task "notification-api-v2" {
       driver = "docker"
       config {
-        image   = "crizstian/notification-service-go:v0.2"
+        image   = "crizstian/notification-service-go:v0.3"
       }
 
       env {
-        SERVICE_PORT="3001"
-        EMAIL="crr.developer.9@gmail.com"
-        EMAIL_PASS="Cris123#"
+        SERVICE_PORT = "3001"
+        CONSUL_IP    = "172.20.20.11"
       }
 
       resources {
-        cpu    = 100
-        memory = 100
+        cpu    = 50
+        memory = 50
       }
     }
 
@@ -77,7 +76,6 @@ job "cinemas" {
       meta {
         version = "2"
       }
-
       connect {
         sidecar_service {}
       }

@@ -42,3 +42,14 @@ resource "consul_prepared_query" "mongodb3" {
     datacenters = ["dc1"]
   }
 }
+
+resource "consul_prepared_query" "vault" {
+  name         = "vault"
+  near         = "_agent"
+  service      = "vault"
+
+  failover {
+    nearest_n   = 3
+    datacenters = ["dc1"]
+  }
+}

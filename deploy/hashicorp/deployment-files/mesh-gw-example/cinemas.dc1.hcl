@@ -10,23 +10,21 @@ job "cinemas" {
     task "booking-service" {
       driver = "docker"
       config {
-        image   = "crizstian/booking-service-go:v0.1"
+        image   = "crizstian/booking-service-go:v0.3"
       }
 
       env {
-        DB_USER="cristian"
-        DB_PASS="cristianPassword2017"
-        DB_SERVERS="mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
-        DB_NAME="booking"
-        DB_REPLICA="rs1"
-        SERVICE_PORT="3002"
-        PAYMENT_URL="http://${NOMAD_UPSTREAM_ADDR_payment_api}"
-        NOTIFICATION_URL="http://${NOMAD_UPSTREAM_ADDR_notification_api}"
+        SERVICE_PORT     = "3002"
+        DB_SERVERS       = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
+        CONSUL_IP        = "172.20.20.11"
+        TRACER_URL       = "10.0.2.15:6831"
+        PAYMENT_URL      = "http://${NOMAD_UPSTREAM_ADDR_payment_api}"
+        NOTIFICATION_URL = "http://${NOMAD_UPSTREAM_ADDR_notification_api}"
       }
 
       resources {
-        cpu    = 100
-        memory = 100
+        cpu    = 50
+        memory = 50
       }
     }
 
