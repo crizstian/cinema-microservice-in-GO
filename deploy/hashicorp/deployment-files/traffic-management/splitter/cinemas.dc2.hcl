@@ -15,7 +15,7 @@ job "cinemas" {
 
       env {
         SERVICE_PORT="3001"
-        CONSUL_IP    = "172.20.20.31"
+        CONSUL_IP = "172.20.20.11"
       }
 
       resources {
