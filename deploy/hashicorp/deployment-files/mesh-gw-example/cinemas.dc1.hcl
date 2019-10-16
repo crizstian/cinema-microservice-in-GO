@@ -17,7 +17,6 @@ job "cinemas" {
         SERVICE_PORT     = "3002"
         DB_SERVERS       = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
         CONSUL_IP        = "172.20.20.11"
-        TRACER_URL       = "10.0.2.15:6831"
         PAYMENT_URL      = "http://${NOMAD_UPSTREAM_ADDR_payment_api}"
         NOTIFICATION_URL = "http://${NOMAD_UPSTREAM_ADDR_notification_api}"
       }

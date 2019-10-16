@@ -54,7 +54,7 @@ func (a API) SendEmail(c echo.Context) error {
 	%s
 
 	<h3>Cinemas Microserivce 2019, Enjoy your movie !</h3>
-	<h3>Version 2.0</h3>
+	<h3>Version 1.0</h3>
 	</body>
 	</html>
 	`, tickets, cinema, room, seat, description, total, orderID, receipt)
