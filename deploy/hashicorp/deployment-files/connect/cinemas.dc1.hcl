@@ -74,10 +74,10 @@ job "cinemas" {
   }
 
 
-  group "booking-service" {
+  group "booking-api" {
     count = 1
 
-    task "booking-service" {
+    task "booking-api" {
       driver = "docker"
       config {
         image   = "crizstian/booking-service-go:v0.3"
