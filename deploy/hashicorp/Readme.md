@@ -152,32 +152,18 @@ Description = Deployment completed successfully
 
 
 ## Testing failover
-Curl the local endpoint, by default API resolves to local datacenter
 
-```
-$ curl localhost:9090
+# Steps to Initialize the environment with Vault Integration and Consul ACL
 
-# Reponse from: web #
-Hello World
-## Called upstream uri: http://localhost:9091
-  # Reponse from: api #
-  API DC1
-```
-
-Kill the API service in DC1
-
-```
-$ docker kill failover_api_dc1_1
-```
-
-Curl the local endpoint again, upstream requests will failover to the DC2 API service, it may take a few seconds for the health checks to fail for the DC1 API instance. Transient failures while the system is failing over to the second DC could be mitigated with retries (Demo coming soon).
-
-```
-$ curl localhost:9090
-
-# Reponse from: web #
-Hello World
-## Called upstream uri: http://localhost:9091
-  # Reponse from: api #
-  API DC2
-```
+1.- Initialize VMs √
+2.- Bootstrap Consul ACL √ 
+3.- Set Root Token to agent √
+4.- Create Consul Policies √ (requires consul_http_token) - TF
+5.- Unseal Vault √
+6.- Create Vault Policies for apps √ (requires vault_addr & vault_token & consul_http_token) - TF
+7.- Create Vault Apps Secrets & Enable √ Consul Secrets engine (requires vault_token & consul_http_token)
+8.- Create Vault Roles with Consul Policies √ (requires vault_token & vault_addr)
+9.- Generate Vault Token for consul agents √ (requires vault_token & vault_addr)
+10.- Implement New Consul Token to agents √
+  - via config file
+  - or via consul acl command
