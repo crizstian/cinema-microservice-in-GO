@@ -5,16 +5,21 @@ set -e
 
 # . /etc/environment
 
-vault_url="http://172.20.20.11:8200/v1/sys"
-
+export VAULT_ADDR=http://172.20.20.11:8200
+vault_url="$VAULT_ADDR/v1/sys"
+consul_url="http://172.20.20.11:8500"
 rootToken=""
 
 function vaultConfig {
+  echo "curl -s $vault_url/init"
   isInitialized=`curl -s $vault_url/init | jq .initialized`
+  echo $isInitialized
 
   if [ "$isInitialized" == "false" ];  then
 
+    echo "curl -s -X PUT -H Content-Type: application/json -d {secret_shares:5,secret_threshold:5} $vault_url/init"
     initVaultResponse=`curl -s -X PUT -H "Content-Type: application/json" -d '{"secret_shares":5,"secret_threshold":5}' $vault_url/init`
+    echo $initVaultResponse
     error=`echo $initVaultResponse | jq .errors`
 
     if [ -z "$error" ];  then
@@ -35,14 +40,16 @@ function vaultConfig {
 
   else
     echo "Already initialized"
-    keysFromConsul=`curl -s -X GET http://172.20.20.11:8500/v1/kv/cluster/vault/unsealKeys | jq -r '.[].Value' | base64 -d -`
+    keysFromConsul=`curl -s -X GET $consul_url/v1/kv/cluster/vault/unsealKeys | jq -r '.[].Value' | base64 -d -`
     unsealVault "${keysFromConsul[@]}"
   fi
 }
 
 function isSealed {
+    echo "http://$1:8200/v1/sys"
     vault_url="http://$1:8200/v1/sys"
     response=`curl -s $vault_url/seal-status | jq .sealed`
+    echo $response
     if [ "$response" == "true" ]; then
       return 1
     else
@@ -55,16 +62,20 @@ function unsealVault {
   keysCount=`echo $keys | jq '. | length'`
 
   if [ $keysCount > 0 ]; then
-    servers=`curl -s http://$(hostname):8500/v1/catalog/service/vault`
+    echo "curl -s http://172.20.20.11:8500/v1/catalog/service/vault"
+    servers=`curl -s http://172.20.20.11:8500/v1/catalog/service/vault`
     serversCount=`echo $servers | jq '. | length'`
+    echo $servers
     
     for i in $(seq 1 $serversCount); do
 
       server=`echo $servers | jq .[$((i-1))].Address | sed  's/"//g'`
 
       while true; do
+        echo "http://$server:8200/v1/sys"
         vault_url="http://$server:8200/v1/sys"
         r=`curl -s $vault_url/seal-status | jq .sealed`
+        echo $r
         if [ "$r" == "true" ];  then
           for j in in $(seq 1 $keysCount); do
             key=`echo $keys | jq .[$((j-1))]`
@@ -110,7 +121,7 @@ function unsealServer {
 function vaultConsulKV {
   data=$1
   path=$2
-  url="http://172.20.20.11:8500/v1/kv/$path"
+  url="$consul_url/v1/kv/$path"
   if [ "$data" == "file" ]; then
    curl -s --request PUT -H "Content-Type: application/json" --data @file.json $url
   else
@@ -119,18 +130,29 @@ function vaultConsulKV {
 }
 
 function main {
-  vaultStart=`curl -s -X GET http://172.20.20.11:8500/v1/kv/cluster/lock/vaultUnseal | jq  -r '.[].Value'| base64 -d -`
+  
+  bash /vagrant/provision/consul/system/wait-consul-leader.sh "172.20.20.11"
+
+  echo "curl -s -X GET $consul_url/v1/kv/cluster/lock/vaultUnseal"
+  vaultStart=`curl -s -X GET $consul_url/v1/kv/cluster/lock/vaultUnseal | jq  -r '.[].Value'| base64 -d -`
+  echo $vaultStart
 
   if [ -z "$vaultStart" ];  then
     echo "STARTING TO UNSEAL VAULT"
     vaultConfig
     vaultConsulKV "true" "cluster/lock/vaultUnseal"
-    VAULT_TOKEN=$rootToken vault secrets enable -path=secrets kv
   else
-    echo "Vault Already initialized"
+    echo "Vault Already unsealed"
   fi
 }
 
 main
 
-bash /vagrant/provision/vault/secrets.sh $rootToken
+# # automation to write some secrets only for testing purposes
+# export VAULT_TOKEN=`echo $rootToken | sed s/\"//g`
+# echo ""
+# echo "root token: $VAULT_TOKEN"
+# echo "vault address: $VAULT_ADDR"
+
+
+# bash /vagrant/provision/vault/secrets/secrets.sh $VAULT_TOKEN $VAULT_ADDR

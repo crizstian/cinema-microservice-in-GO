@@ -1,6 +1,6 @@
 cluster_name = "dc1"
 ui = true
-api_addr = "172.20.20.11:8500"
+api_addr = "http://172.20.20.11:8200"
 
 storage "consul" {
   address = "172.20.20.11:8500"

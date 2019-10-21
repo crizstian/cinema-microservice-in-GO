@@ -17,10 +17,12 @@ variable "apps" {
   ]
 }
 
-resource "vault_auth_backend" vault_auth_backend.approle.path {
-  type = vault_auth_backend.approle.path
+# Enable approle auth method
+resource "vault_auth_backend" "approle" {
+  type = "approle"
 }
 
+# Application Policies
 resource "vault_policy" "apps-policy" {
   count = length(var.apps)
 
@@ -42,6 +44,7 @@ resource "vault_policy" "apps-policy" {
   EOT
 }
 
+# Application Roles
 resource "vault_approle_auth_backend_role" "apps-role" {
   count = length(var.apps)
 
@@ -52,6 +55,7 @@ resource "vault_approle_auth_backend_role" "apps-role" {
   secret_id_ttl  = 0
 }
 
+# Application Secret_id to auth againts vault
 resource "vault_approle_auth_backend_role_secret_id" "apps-secret" {
   count = length(var.apps)
 
@@ -59,6 +63,7 @@ resource "vault_approle_auth_backend_role_secret_id" "apps-secret" {
   role_name = vault_approle_auth_backend_role.apps-role[count.index].role_name
 }
 
+# Upload applications role_id to consul kv
 resource "consul_keys" "apps-role-id" {
   count = length(var.apps)
 
@@ -70,6 +75,7 @@ resource "consul_keys" "apps-role-id" {
   }
 }
 
+# Upload applications secret_id to consul kv
 resource "consul_keys" "app-secret-id" {
   count = length(var.apps)
 
