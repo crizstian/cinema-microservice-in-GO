@@ -20,10 +20,6 @@ Vagrant.configure("2") do |config|
       cs.vm.provision "shell", path: "provision/scripts/init.hashi.#{dc}.sh", privileged: false
 
       if dc == "dc1"
-        # This will auto-unseal vault and enable secrets kv engine and store secrets for microservices
-        # This is only for development and demostration purposes
-        cs.vm.provision "shell", path: "provision/vault/system/vault-config.sh", privileged: false
-  
         # MongoDB Ports
         cs.vm.network :forwarded_port, guest: 27017, guest_ip:"10.0.2.15", host: 27017, host_ip:"0.0.0.0"
         cs.vm.network :forwarded_port, guest: 27018, guest_ip:"10.0.2.15", host: 27018, host_ip:"0.0.0.0"
