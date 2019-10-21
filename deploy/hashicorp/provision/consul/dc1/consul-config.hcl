@@ -24,3 +24,9 @@ advertise_addr = "172.20.20.11"
 advertise_addr_wan = "172.20.20.11"
 
 enable_central_service_config = true
+
+acl = {
+  enabled = true
+  default_policy = "allow"
+  down_policy = "extend-cache"
+}
