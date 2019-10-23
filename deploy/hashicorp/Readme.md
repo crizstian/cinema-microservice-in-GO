@@ -155,15 +155,32 @@ Description = Deployment completed successfully
 
 # Steps to Initialize the environment with Vault Integration and Consul ACL
 
-1.- Initialize VMs √
-2.- Bootstrap Consul ACL √ 
-3.- Set Root Token to agent √
-4.- Create Consul Policies √ (requires consul_http_token) - TF
-5.- Unseal Vault √
-6.- Create Vault Policies for apps √ (requires vault_addr & vault_token & consul_http_token) - TF
-7.- Create Vault Apps Secrets & Enable √ Consul Secrets engine (requires vault_token & consul_http_token)
-8.- Create Vault Roles with Consul Policies √ (requires vault_token & vault_addr)
-9.- Generate Vault Token for consul agents √ (requires vault_token & vault_addr)
-10.- Implement New Consul Token to agents √
+1.- Initialize VMs -
+2.- Bootstrap Consul ACL - (bash script)
+  3.- Set Root Token to agent -  (embbeded in prev step)
+4.- Create Consul Policies - (requires consul_http_token) - Terraform script
+5.- Unseal Vault - (bash script)
+6.- Create Vault Policies for apps - (requires vault_addr & vault_token & consul_http_token) - Terraform script
+7.- Create Vault Apps Secrets & Enable - Consul Secrets engine (requires vault_token & consul_http_token) - bash script
+8.- Create Vault Roles with Consul Policies - (requires vault_token & vault_addr) - bash script
+9.- Generate Vault Token for consul agents - (requires vault_token & vault_addr & consul role) - bash script
+10.- Implement New Consul Token to agents - (consul cli)
   - via config file
-  - or via consul acl command
+  - or via consul acl command (best-practice)
+11.- Change ACL config from "allow" -> "deny" (walkarround fix for envoy authentication when ACL are enabled)
+
+
+## Before Deploying please apply the following Terraform Scripts
+
+12.- Create Prepared Queries for DC1 and DC2
+13.- Create Intentions on Primary DC
+
+## Deployments
+
+14.- Deploy Cinemas Database
+
+### Deployment Strategies
+[Connect]
+15.- Deploy Services with consul connect on single DC
+
+[Mesh Gateway - Failover]
