@@ -3,12 +3,6 @@ provider "consul" {
   datacenter = "dc1"
 }
 
-resource "consul_intention" "deny-all" {
-  source_name      = "*"
-  destination_name = "*"
-  action           = "deny"
-}
-
 resource "consul_intention" "allow-booking-to-payment" {
   source_name      = "booking-service"
   destination_name = "payment-api"
@@ -33,3 +27,8 @@ resource "consul_intention" "allow-notification-to-booking" {
   action            = "allow"
 }
 
+resource "consul_intention" "deny-all" {
+  source_name      = "*"
+  destination_name = "*"
+  action           = "deny"
+}
