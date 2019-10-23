@@ -5,7 +5,7 @@ provider "consul" {
 
 resource "consul_acl_policy" "server-policy" {
   name        = "server-policy"
-  datacenters = ["dc1"]
+  datacenters = ["dc1", "dc2"]
   description = "Policy to use for Server capabilities"
   rules       = <<-RULE
     node "" {
@@ -19,7 +19,7 @@ resource "consul_acl_policy" "server-policy" {
 
 resource "consul_acl_policy" "agent-policy" {
   name        = "agent-policy"
-  datacenters = ["dc1"]
+  datacenters = ["dc1", "dc2"]
   description = "Policy to use for Agent capabilities"
   rules       = <<-RULE
     node "" { 
@@ -49,7 +49,7 @@ resource "consul_acl_policy" "agent-policy" {
 
 resource "consul_acl_policy" "anonymous-policy" {
   name        = "anonymous-policy"
-  datacenters = ["dc1"]
+  datacenters = ["dc1", "dc2"]
   description = "Policy to use for read only capabilities"
   rules       = <<-RULE
     node "" { 
@@ -79,7 +79,7 @@ resource "consul_acl_policy" "anonymous-policy" {
 
 resource "consul_acl_policy" "sensitve-policy" {
   name        = "sensitve-policy"
-  datacenters = ["dc1"]
+  datacenters = ["dc1", "dc2"]
   description = "Policy to use to get access to sensitve capabilities"
   rules       = <<-RULE
     key_prefix "cluster/consul/" {
@@ -96,7 +96,7 @@ resource "consul_acl_policy" "sensitve-policy" {
 
 resource "consul_acl_policy" "blocking-policy" {
   name        = "blocking-policy"
-  datacenters = ["dc1"]
+  datacenters = ["dc1", "dc2"]
   description = "Policy to use for blocking access to restricted operations"
   rules       = <<-RULE
     key_prefix "cluster/consul/" {
@@ -115,7 +115,7 @@ resource "consul_acl_policy" "blocking-policy" {
 
 resource "consul_acl_policy" "agent-prefix-policy" {
   name        = "agent-prefix-policy"
-  datacenters = ["dc1"]
+  datacenters = ["dc1", "dc2"]
   description = "Policy to use for Agent capabilities"
   rules       = <<-RULE
     node_prefix "" { 
