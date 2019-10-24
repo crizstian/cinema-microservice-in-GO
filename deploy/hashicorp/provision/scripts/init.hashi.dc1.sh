@@ -4,6 +4,7 @@ sudo mkdir -p /var/vault/config
 
 sudo cp /vagrant/provision/consul/dc1/* /var/consul/config/
 sudo cp /vagrant/provision/consul/watches/* /var/consul/config/
+sudo cp /vagrant/provision/consul/check-definitions/* /var/consul/config/
 sudo cp /vagrant/provision/consul/system/consul.service /etc/systemd/system/consul.service
 sudo chmod +x /var/consul/config/*.sh
 sudo chmod +x /vagrant/provision/consul/system/*.sh

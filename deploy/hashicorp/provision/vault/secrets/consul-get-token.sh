@@ -3,4 +3,15 @@ export VAULT_ADDR=http://172.20.20.11:8200
 
 echo "Get Consul Role Token from Vault"
 
-vault read consul/creds/$2
+response=`vault read -format=json consul/creds/$2`
+
+id=`echo $response | jq .data.accessor | sed s/\"//g`
+echo "ID: $id"
+
+token=`echo $response | jq .data.token | sed s/\"//g`
+echo "Token: $token"
+
+consul kv put cluster/nodes/node-1/id $id
+consul kv put cluster/nodes/node-1/token $token
+consul kv put cluster/nodes/node-1/token-type $2
+consul kv put cluster/nodes/node-1/token-status 200
