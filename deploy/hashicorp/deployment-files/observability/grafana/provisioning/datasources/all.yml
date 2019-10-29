@@ -7,3 +7,14 @@ datasources:
   is_default: true
   version: 1
   editable: true
+
+- name: influxdb-telegraf
+  type: influxdb
+  access: proxy
+  database: telegraf
+  # user: grafana
+  url: http://influxdb.service.consul:8086
+  jsonData:
+    timeInterval: "10s"
+  # secureJsonData:
+    # password: grafana

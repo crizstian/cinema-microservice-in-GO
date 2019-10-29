@@ -23,6 +23,7 @@ job "metrics" {
 
       env {
         GF_SECURITY_ADMIN_PASSWORD="secret"
+        GF_INSTALL_PLUGINS="grafana-clock-panel,briangann-gauge-panel,natel-plotly-panel,grafana-simple-json-datasource"
       }
 
       resources {
@@ -33,6 +34,7 @@ job "metrics" {
             mbits = 10
             port "service_port" {
               static = 3999
+              to     = 3999
             }
         }
       }

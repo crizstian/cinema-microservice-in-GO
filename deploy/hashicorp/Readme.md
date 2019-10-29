@@ -156,19 +156,72 @@ Description = Deployment completed successfully
 # Steps to Initialize the environment with Vault Integration and Consul ACL
 
 1.- Initialize VMs -
-2.- Bootstrap Consul ACL - (bash script)
-  3.- Set Root Token to agent -  (embbeded in prev step)
-4.- Create Consul Policies - (requires consul_http_token) - Terraform script
-5.- Unseal Vault - (bash script)
-6.- Create Vault Policies for apps - (requires vault_addr & vault_token & consul_http_token) - Terraform script
-7.- Create Vault Apps Secrets & Enable - Consul Secrets engine (requires vault_token & consul_http_token) - bash script
-8.- Create Vault Roles with Consul Policies - (requires vault_token & vault_addr) - bash script
-9.- Generate Vault Token for consul agents - (requires vault_token & vault_addr & consul role) - bash script
-10.- Implement New Consul Token to agents - (consul cli)
+
+2.- Bootstrap Consul ACL 
+
+  - ```
+    $ bash /vagrant/provision/consul/acl/dc1/bootstrap.sh
+    ```
+
+  - run script inside the VM
+
+3.- Set Root Token to agent -  (embbeded in prev step)
+
+---
+4.- Create Consul Policies 
+
+- **(requires consul_http_token)** - execute it outside the VM
+- Terraform script (/provision/consul/acl/dc1) 
+- ```
+  $ CONSUL_HTTP_TOKEN=... terraform apply -auto-approve
+  ```
+---
+5.- Unseal Vault 
+
+- ```
+  $ bash /vagrant/provision/vault/system/vault-config.sh
+  ```
+- inside the VM
+---
+6.- Create Vault Policies for apps 
+- **(requires vault_addr & vault_token & consul_http_token)** - execute it outside the VM
+- Terraform script (/provision/vault/policies) 
+- ```
+  $ CONSUL_HTTP_TOKEN=... VAULT_ADDR=... VAULT_TOKEN=... terraform apply -auto-approve
+  ```
+---
+7.- Create Vault Apps Secrets & Enable Consul Secrets engine 
+- **(requires vault_token & consul_http_token)**
+- ```
+  $ CONSUL_HTTP_TOKEN=... VAULT_TOKEN=... bash /vagrant/provision/vault/secrets/secrets.sh
+  ```
+---
+8.- Create Vault Roles with Consul Policies 
+  - **(requires vault_token)**
+  - ```
+    $  VAULT_TOKEN=... bash /vagrant/provision/vault/secrets/consul-roles.sh
+    ```
+---
+9.- Generate Vault Token for consul agents 
+
+- **(requires vault_token & consul role as argument )**
+- ```
+  $ VAULT_TOKEN=... bash /vagrant/provision/vault/secrets/consul-get-token.sh operator-prefix
+  ```
+---
+10.- Change ACL config from "allow" -> "deny" 
+- (work arround fix for envoy authentication when ACL are enabled)
+- use editor of preference vi | nano | pico
+- ```
+  $ nano /var/consul/config/consul.hcl 
+  ```
+---
+11.- Implement New Consul Token to agent(s)
   - via config file
   - or via consul acl command (best-practice)
-11.- Change ACL config from "allow" -> "deny" (walkarround fix for envoy authentication when ACL are enabled)
-
+  ```
+  $ consul acl set-agent-token default 5f9e450a-f3cf-8116-c1c5-a437089699f9
+  ```
 
 ## Before Deploying please apply the following Terraform Scripts
 

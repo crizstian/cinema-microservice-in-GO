@@ -30,3 +30,8 @@ acl = {
   default_policy = "allow"
   down_policy = "extend-cache"
 }
+
+telemetry = {
+  dogstatsd_addr = "10.0.2.15:8125"
+  disable_hostname = true
+}

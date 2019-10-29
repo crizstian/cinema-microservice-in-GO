@@ -1,6 +1,4 @@
 #!/bin/bash
-
-export VAULT_TOKEN=$1
 export VAULT_ADDR=http://172.20.20.11:8200
 
 # Enable KV Secrets Engine
@@ -29,4 +27,4 @@ vault write secret/movie-service DB_ADMIN_USER=cristian DB_ADMIN_PASS=cristianPa
 vault secrets enable consul
 
 # Enable Consul Role Engine
-vault write consul/config/access address=172.20.20.11:8500 token=$2
+vault write consul/config/access address=172.20.20.11:8500 token=$CONSUL_HTTP_TOKEN
