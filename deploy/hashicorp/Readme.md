@@ -1,174 +1,64 @@
-# Consul Connect Failover
-This example shows how DC failover works with Consul service mesh. 
+# Cinemas Microservice in Go (Project)
 
-The setup contains two Consul datacenters federated together and connected using Consul Gateways. Both DC1 and DC2 contain instances of the Payment and Notification API's, under normal operating conditions the Booking Service will always use it's local instance of Paymanet and Notification API services. If something happen to the instance where Payment and Notification services are running and suddendly become unhealthy in DC1, traffic will automatically be routed to the second datacenter or DR.
+![](../images/Group5.png)
 
+This project consist of the following components:
 
-Components:
-* Private Network DC1
-* Private Network DC2
-* WAN Network (Consul Server, Consul Gateway)
-* Consul Datacenter DC1 - Primary
-* Consul Datacenter DC2 - Secondary, joined to DC1 with WAN federation
-* Consul Gateway DC1
-* Consul Gateway DC2
-* Booking Service (DC1) communicates with Payment and Notification API's in DC1 by default, fails over to DC2
-* Payment API service (DC1, DC2)
-* Notification API service (DC1, DC2)
-
-![](../images/failover.png)
-
-## Configuration
-To enable failover the following central configuraion is required:
-* Service-Defaults for Booking service
-* Service-Defaults for Payment service
-* Service-Resolver for Payment service
-* Service-Defaults for Notification service
-* Service-Resolver for Notification service
-
-see configuration files under the folder `provision/consul/dc1/central-config`
-
-## Running the setup
-We will use Vagrant to run Consul and Nomad as the container scheduler
-
-You can run the setup using the following command:
 ```
-$ vagrant up
-...bash
-==> dc1-consul-server: Running provisioner: shell...
-    dc1-consul-server: Running: /var/folders/qx/4twdn0f10tsg2syrzv0r5c100000gn/T/vagrant-shell20191006-2688-15o07jv.sh
-...
-==> dc2-consul-server: Running provisioner: shell...
-    dc2-consul-server: Running: /var/folders/qx/4twdn0f10tsg2syrzv0r5c100000gn/T/vagrant-shell20191006-2688-15o07jv.sh
+.
+├── base_docker_image
+├── booking-service
+├── cinemas-db
+├── deploy
+│   ├── docker-compose
+│   ├── hashicorp
+│   │   ├── Vagrantfile
+│   │   ├── deployment-files
+│   │   ├── provision
+│   │   │   ├── consul
+│   │   │   ├── docker-config
+│   │   │   ├── nomad
+│   │   │   ├── scripts
+│   │   │   └── vault
+│   └── readme.md
+├── movie-service
+├── notification-service
+└── payment-service
 ```
 
-To verify that both Vagrant boxes are up running, use the following command:
-```bash
-$ vagrant status
-Current machine states:
-
-dc1-consul-server         running (virtualbox)
-dc2-consul-server         running (virtualbox)
-
-This environment represents multiple VMs. The VMs are all listed
-above with their current state. For more information about a specific
-VM, run `vagrant status NAME`.
-```
-
-Then SSH into the the boxes in order to deploy the cinema-microservice project
-```bash
-$ vagrant ssh dc1-consul-server
-Welcome to Ubuntu 16.04.6 LTS (GNU/Linux 4.4.0-165-generic x86_64)
-
- * Documentation:  https://help.ubuntu.com
- * Management:     https://landscape.canonical.com
- * Support:        https://ubuntu.com/advantage
-
-0 packages can be updated.
-0 updates are security updates.
-
-New release '18.04.2 LTS' available.
-Run 'do-release-upgrade' to upgrade to it.
+- 4 microservices written in Go
+- 1 mongodb replica set cluster
+- 2 deployment strategies
+  - docker-compose strategy for local testing
+  - hashicorp stack strategy for local cloud simulation testing
 
 
-vagrant@dc1-consul-server:~$
-```
+# Steps to initialize the environment
 
-
-## Deploy Services
-The Microservices needs a MongoDB Cluster up and running, so we need to execute the following command to deploy the mongo containers with nomad.
-
-
-First do nomad plan to see a dry-run deployment
-```bash
-vagrant@dc1-consul-server:~$ nomad plan /vagrant/deployment-files/db-cluster.dc1.hcl
-Welcome to Ubuntu 16.04.6 LTS (GNU/Linux 4.4.0-165-generic x86_64)
-
- * Documentation:  https://help.ubuntu.com
- * Management:     https://landscape.canonical.com
- * Support:        https://ubuntu.com/advantage
-
-0 packages can be updated.
-0 updates are security updates.
-
-New release '18.04.2 LTS' available.
-Run 'do-release-upgrade' to upgrade to it.
-
-
-vagrant@dc1-consul-server:~$ sudo su
-root@dc1-consul-server:/home/vagrant# nomad plan /vagrant/deployment-files/db-cluster.dc1.hcl
-+ Job: "db-cluster"
-+ Task Group: "db-cluster" (1 create)
-  + Task: "mongodb1" (forces create)
-  + Task: "mongodb2" (forces create)
-  + Task: "mongodb3" (forces create)
-
-Scheduler dry-run:
-- All tasks successfully allocated.
-
-Job Modify Index: 0
-To submit the job with version verification run:
-
-nomad job run -check-index 0 /vagrant/deployment-files/db-cluster.dc1.hcl
-
-When running the job with the check-index flag, the job will only be run if the
-server side version matches the job modify index returned. If the index has
-changed, another user has modified the job and the plans results are
-potentially invalid.
-```
-
-Then do a nomad run, to deploy the mongo cluster
-```bash
-vagrant@dc1-consul-server:~$ nomad run /vagrant/deployment-files/db-cluster.dc1.hcl
-==> Monitoring evaluation "64522cad"
-    Evaluation triggered by job "db-cluster"
-    Allocation "0ee1d8a3" created: node "89f97afb", group "db-cluster"
-    Evaluation within deployment: "e777c7c2"
-    Evaluation status changed: "pending" -> "complete"
-==> Evaluation "64522cad" finished with status "complete"
-```
-
-Then wait unitl db cluster is fully deployed to proceed with the microservices, expect to see a similar message in your output.
-
-you can monitor the deployment with the following command:
-
-```bash
-vagrant@dc1-consul-server:~$ nomad status db-cluster
-
-...
-Latest Deployment
-ID          = e777c7c2
-Status      = successful
-Description = Deployment completed successfully
-...
-```
-
-
-### Prepared Queries with Terraform
-
-
-### Deploy cinema-microservices
-
-
-
-## Testing failover
-
-# Steps to Initialize the environment with Vault Integration and Consul ACL
-
-1.- Initialize VMs -
-
-2.- Bootstrap Consul ACL 
-
+**1.- Initialize VMs** by positioning in the terminal where the `Vagrantfile` is located, the start the vm's by the following command:
+- ```
+  $ vagrant up
+  ```
+---
+**2.- Bootstrap Consul ACL**
+  - Note: This step should be run inside the VM
+    ```
+    $ vagrant ssh dc1-consul-server
+    ```
+  - Then run the following script:
   - ```
     $ bash /vagrant/provision/consul/acl/dc1/bootstrap.sh
     ```
+---
 
-  - run script inside the VM
-
-3.- Set Root Token to agent -  (embbeded in prev step)
+**3.- Set Root Token to agent -  (embbeded in prev step)**
+- To set tokens in consul you can run the following command:
+  ```
+  $ consul acl set-agent-token default [token]
+  ```
 
 ---
-4.- Create Consul Policies 
+**4.- Create Consul Policies**
 
 - **(requires consul_http_token)** - execute it outside the VM
 - Terraform script (/provision/consul/acl/dc1) 
@@ -176,64 +66,71 @@ Description = Deployment completed successfully
   $ CONSUL_HTTP_TOKEN=... terraform apply -auto-approve
   ```
 ---
-5.- Unseal Vault 
+**5.- Unseal Vault**
 
 - ```
   $ bash /vagrant/provision/vault/system/vault-config.sh
   ```
 - inside the VM
 ---
-6.- Create Vault Policies for apps 
+**6.- Create Vault Policies for apps**
 - **(requires vault_addr & vault_token & consul_http_token)** - execute it outside the VM
 - Terraform script (/provision/vault/policies) 
 - ```
   $ CONSUL_HTTP_TOKEN=... VAULT_ADDR=... VAULT_TOKEN=... terraform apply -auto-approve
   ```
 ---
-7.- Create Vault Apps Secrets & Enable Consul Secrets engine 
+**7.- Create Vault Apps Secrets & Enable Consul Secrets engine**
 - **(requires vault_token & consul_http_token)**
 - ```
   $ CONSUL_HTTP_TOKEN=... VAULT_TOKEN=... bash /vagrant/provision/vault/secrets/secrets.sh
   ```
 ---
-8.- Create Vault Roles with Consul Policies 
+**8.- Create Vault Roles with Consul Policies**
   - **(requires vault_token)**
   - ```
     $  VAULT_TOKEN=... bash /vagrant/provision/vault/secrets/consul-roles.sh
     ```
 ---
-9.- Generate Vault Token for consul agents 
+**9.- Generate Vault Token for consul agents**
 
 - **(requires vault_token & consul role as argument )**
 - ```
   $ VAULT_TOKEN=... bash /vagrant/provision/vault/secrets/consul-get-token.sh operator-prefix
   ```
 ---
-10.- Change ACL config from "allow" -> "deny" 
+**10.- Change ACL config from "allow" -> "deny"**
 - (work arround fix for envoy authentication when ACL are enabled)
 - use editor of preference vi | nano | pico
 - ```
-  $ nano /var/consul/config/consul.hcl 
+  $ nano /var/consul/config/consul-config.hcl
   ```
 ---
-11.- Implement New Consul Token to agent(s)
-  - via config file
-  - or via consul acl command (best-practice)
+**11.- Implement New Consul Token to agent(s)**
+  - via config file (option 1)
+  - via cli (option 2 - best-practice)
   ```
-  $ consul acl set-agent-token default 5f9e450a-f3cf-8116-c1c5-a437089699f9
+  $ consul acl set-agent-token default [token generated from vault from step 9]
   ```
 
-## Before Deploying please apply the following Terraform Scripts
+## Pre-requisits to have before deploying the services
 
-12.- Create Prepared Queries for DC1 and DC2
-13.- Create Intentions on Primary DC
+**12.- Create Prepared Queries for DC1 and DC2** - execute it outside the VM
+- **(requires consul_http_token)**
+- Terraform script (/provision/consul/prepared-queries/dc1 and /dc2) 
+- ```
+  $ CONSUL_HTTP_TOKEN=...  terraform apply -auto-approve
+  ```
 
-## Deployments
+**13.- Create Intentions on Primary DC** - execute it outside the VM \
+(Optional in this step or apply it when all services has been deployed)
+- **(requires consul_http_token)**
+- Terraform script (/provision/consul/intentions) 
+- ```
+  $ CONSUL_HTTP_TOKEN=...  terraform apply -auto-approve
 
-14.- Deploy Cinemas Database
+**14.- Deploy Cinemas Database** 
+- The microservices needs a MongoDB Cluster up and running in order to start
+so is required to have the MongoDB Cluster up and running and also the prepared queries to be created in consul, since the applications are pointing to the mongodb prepared queries url. To get the mongo cluster up running please followup. [Mongodb Deployment Process Document.](./documentation/mongodb.md)
 
-### Deployment Strategies
-[Connect]
-15.- Deploy Services with consul connect on single DC
 
-[Mesh Gateway - Failover]

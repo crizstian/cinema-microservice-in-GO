@@ -62,8 +62,8 @@ function unsealVault {
   keysCount=`echo $keys | jq '. | length'`
 
   if [ $keysCount > 0 ]; then
-    echo "curl -s http://172.20.20.11:8500/v1/catalog/service/vault"
-    servers=`curl -s http://172.20.20.11:8500/v1/catalog/service/vault`
+    echo "curl -s $consul_url/v1/catalog/service/vault"
+    servers=`curl -s $consul_url/v1/catalog/service/vault`
     serversCount=`echo $servers | jq '. | length'`
     echo $servers
     
@@ -133,26 +133,17 @@ function main {
   
   bash /vagrant/provision/consul/system/wait-consul-leader.sh "172.20.20.11"
 
-  echo "curl -s -X GET $consul_url/v1/kv/cluster/lock/vaultUnseal"
-  vaultStart=`curl -s -X GET $consul_url/v1/kv/cluster/lock/vaultUnseal | jq  -r '.[].Value'| base64 -d -`
+  echo "curl -s -X GET $consul_url/v1/kv/cluster/vault/vaultUnseal"
+  vaultStart=`curl -s -X GET $consul_url/v1/kv/cluster/vault/vaultUnseal | jq  -r '.[].Value'| base64 -d -`
   echo $vaultStart
 
   if [ -z "$vaultStart" ];  then
     echo "STARTING TO UNSEAL VAULT"
     vaultConfig
-    vaultConsulKV "true" "cluster/lock/vaultUnseal"
+    vaultConsulKV "true" "cluster/vault/vaultUnseal"
   else
     echo "Vault Already unsealed"
   fi
 }
 
 main
-
-# # automation to write some secrets only for testing purposes
-# export VAULT_TOKEN=`echo $rootToken | sed s/\"//g`
-# echo ""
-# echo "root token: $VAULT_TOKEN"
-# echo "vault address: $VAULT_ADDR"
-
-
-# bash /vagrant/provision/vault/secrets/secrets.sh $VAULT_TOKEN $VAULT_ADDR
