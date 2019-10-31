@@ -1,0 +1,19 @@
+datasources:
+- name: 'prometheus'
+  type: 'prometheus'
+  access: 'proxy'
+  org_id: 1
+  url: 'http://prometheus.service.consul:9990'
+  version: 1
+  editable: true
+
+- name: 'influxdb-telegraf'
+  type: 'influxdb'
+  access: 'proxy'
+  is_default: true
+  editable: true
+  version: 1
+  database: telegraf
+  user: admin
+  password: password
+  url: http://influxdb.service.consul:8086
