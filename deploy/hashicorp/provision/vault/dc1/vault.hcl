@@ -16,7 +16,7 @@ listener "tcp" {
     tls_disable = true
 }
 
-#telemetry {
-#  statsite_address = "127.0.0.1:8125"
-#  disable_hostname = true
-#}
+telemetry = {
+  dogstatsd_addr = "10.0.2.15:8125"
+  disable_hostname = true
+}
