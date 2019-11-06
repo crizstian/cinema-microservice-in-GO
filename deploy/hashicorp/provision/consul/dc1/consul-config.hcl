@@ -10,10 +10,15 @@ bootstrap_expect = 1
 ui = true
 
 bind_addr = "0.0.0.0"
-client_addr = "0.0.0.0"
+
+addresses = {
+  https = "0.0.0.0"
+}
 
 ports {
   grpc = 8502
+  https = 8501
+  http = -1
 }
 
 connect {
@@ -35,3 +40,11 @@ telemetry = {
   dogstatsd_addr = "10.0.2.15:8125"
   disable_hostname = true
 }
+
+key_file = "/var/vault/config/server.key.pem"
+cert_file = "/var/vault/config/server.crt.pem"
+ca_file = "/var/vault/config/ca.crt.pem"
+
+verify_incoming = true
+verify_outgoing = true
+verify_server_hostname = true

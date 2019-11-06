@@ -1,19 +1,26 @@
-cluster_name = "dc1"
+cluster_name = "dc2"
+ui = true
 
+# Advertise the non-loopback interface
+api_addr = "https://172.20.20.31:8200"
+cluster_addr = "https://172.20.20.31:8201"
+
+# Storage config
 storage "consul" {
   address = "172.20.20.31:8500"
-  path    = "vault"
+  path    = "vault/"
+	service = "vault"
 }
 
+# Listeners config
 listener "tcp" {
     address = "172.20.20.31:8200"
-    #tls_cert_file = "/var/vault/config/vault.crt"
-    #tls_key_file = "/var/vault/config/vault.key"
-    #tls_min_version = "tls12"
-    tls_disable = 1
+    tls_cert_file = "/var/vault/config/server.crt.pem"
+    tls_key_file = "/var/vault/config/server.key.pem"
 }
 
-#telemetry {
-#  statsite_address = "127.0.0.1:8125"
-#  disable_hostname = true
-#}
+# Telemetry
+# telemetry = {
+#   statsite_address = "10.0.2.15:8125"
+#   disable_hostname = true
+# }

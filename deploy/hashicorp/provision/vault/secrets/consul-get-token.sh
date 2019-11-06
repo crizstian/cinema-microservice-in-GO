@@ -1,5 +1,3 @@
-export VAULT_ADDR=http://172.20.20.11:8200
-
 echo "Get Consul Role Token from Vault"
 
 response=`vault read -format=json consul/creds/$1`

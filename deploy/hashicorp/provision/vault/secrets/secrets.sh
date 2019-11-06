@@ -1,5 +1,4 @@
 #!/bin/bash
-export VAULT_ADDR=http://172.20.20.11:8200
 
 # Enable KV Secrets Engine
 vault secrets enable -path=secret kv

@@ -7,6 +7,6 @@ export GOMAXPROCS=$(nproc)
 
 # consul-template -template "/var/vault/config/vault.hcl.template:/var/vault/config/vault.hcl" -once
 
-bash /vagrant/provision/consul/system/wait-consul-leader.sh "172.20.20.11"
+# bash /vagrant/provision/consul/system/wait-consul-leader.sh 
 
 exec vault server -config=/var/vault/config/vault.hcl >>/var/log/vault.log 2>&1

@@ -75,10 +75,18 @@ sudo mkdir -p /opt/cni/bin
 sudo tar -C /opt/cni/bin -xzf cni-plugins.tgz
 
 # Download vault
-export VAULT_VERSION=1.2.3
-curl https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip -o vault.zip
+if [ -z VAULT_ENTERPRISE ]; then
+    export VAULT_VERSION=1.2.3
+    curl https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip -o vault.zip
 
-# Install vault
-unzip vault.zip
-sudo chmod +x vault
-sudo mv vault /usr/bin/vault
+    # Install vault
+    unzip vault.zip
+    sudo chmod +x vault
+    sudo mv vault /usr/bin/vault
+else 
+    cp /vagrant/provision/vault/bin/vault-enterprise-1.0.2.zip .
+
+    unzip vault-enterprise-1.0.2.zip
+    sudo chmod +x vault
+    sudo mv vault /usr/bin/vault
+fi

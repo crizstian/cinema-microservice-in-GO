@@ -1,6 +1,4 @@
 #!/bin/bash
-export VAULT_ADDR=http://172.20.20.11:8200
-
 echo "Writing Consul Roles into Vault"
 
 # Consul roles

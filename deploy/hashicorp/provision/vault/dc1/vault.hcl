@@ -1,22 +1,30 @@
 cluster_name = "dc1"
 ui = true
-api_addr = "http://172.20.20.11:8200"
 
+# Advertise the non-loopback interface
+api_addr = "https://172.20.20.11:8200"
+cluster_addr = "https://172.20.20.11:8201"
+
+# Storage config
 storage "consul" {
-  address = "172.20.20.11:8500"
+  address = "172.20.20.11:8501"
   path    = "vault/"
-	service = "vault"
+  service = "vault"
+  scheme  = "https"
+  tls_ca_file="/var/vault/config/ca.crt.pem"
+  tls_cert_file="/var/vault/config/server.crt.pem"
+  tls_key_file="/var/vault/config/server.key.pem"
 }
 
+# Listeners config
 listener "tcp" {
     address = "172.20.20.11:8200"
-    #tls_cert_file = "/var/vault/config/vault.crt"
-    #tls_key_file = "/var/vault/config/vault.key"
-    #tls_min_version = "tls12"
-    tls_disable = true
+    tls_cert_file = "/var/vault/config/server.crt.pem"
+    tls_key_file = "/var/vault/config/server.key.pem"
 }
 
-telemetry = {
-  dogstatsd_addr = "10.0.2.15:8125"
-  disable_hostname = true
-}
+# Telemetry
+# telemetry = {
+#   statsite_address = "10.0.2.15:8125"
+#   disable_hostname = true
+# }
