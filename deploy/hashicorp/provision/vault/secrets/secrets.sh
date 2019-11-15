@@ -1,5 +1,7 @@
 #!/bin/bash
 
+. /etc/environment
+
 # Enable KV Secrets Engine
 vault secrets enable -path=secret kv
 
@@ -26,4 +28,4 @@ vault write secret/movie-service DB_ADMIN_USER=cristian DB_ADMIN_PASS=cristianPa
 vault secrets enable consul
 
 # Enable Consul Role Engine
-vault write consul/config/access address=172.20.20.11:8500 token=$CONSUL_HTTP_TOKEN
+vault write consul/config/access scheme=https address=172.20.20.11:8501 token=$CONSUL_HTTP_TOKEN

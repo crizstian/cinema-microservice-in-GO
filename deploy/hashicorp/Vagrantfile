@@ -6,18 +6,17 @@ Vagrant.configure("2") do |config|
   end
 
   config.vm.box = "ubuntu/xenial64"
-  config.vm.provision "shell", path: "provision/scripts/install.sh", privileged: false
+  config.vm.provision "shell", path: "provision/scripts/install.sh", args: "true true", privileged: false
   
-  ['dc1', 'dc2'].each do |dc|
+  ['dc1'].each do |dc|
   
     ip_prefix = dc == 'dc1' ? '172.20.20.11' : '172.20.20.31'
 
     config.vm.define "#{dc}-consul-server" do |cs|
       cs.vm.hostname = "#{dc}-consul-server"
-      #cs.vm.network "private_network", ip: "172.20.20.11"
       cs.vm.network "private_network", ip: "#{ip_prefix}"
-      cs.vm.provision "shell", path: "provision/scripts/install.dnsmasq.#{dc}.sh", privileged: false
-      cs.vm.provision "shell", path: "provision/scripts/init.hashi.#{dc}.sh", privileged: false
+      cs.vm.provision "shell", path: "provision/scripts/init.hashi.sh", args: "#{dc} #{ip_prefix}", privileged: false
+      cs.vm.provision "shell", path: "provision/scripts/install.dnsmasq.sh", privileged: false
 
       if dc == "dc1"
         # MongoDB Ports

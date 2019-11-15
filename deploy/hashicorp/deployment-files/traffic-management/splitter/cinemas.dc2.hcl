@@ -10,7 +10,7 @@ job "cinemas" {
     task "notification-api-v1" {
       driver = "docker"
       config {
-        image   = "crizstian/notification-service-go:v0.4"
+        image   = "crizstian/notification-service-go:v0.4-tls"
       }
 
       env {
@@ -50,7 +50,7 @@ job "cinemas" {
     task "notification-api-v2" {
       driver = "docker"
       config {
-        image   = "crizstian/notification-service-go:v0.3"
+        image   = "crizstian/notification-service-go:v0.3-tls"
       }
 
       env {

@@ -10,7 +10,7 @@ job "cinemas" {
     task "payment-api" {
       driver = "docker"
       config {
-        image = "crizstian/payment-service-go:v0.3"
+        image = "crizstian/payment-service-go:v0.3-tls"
       }
 
       env {
@@ -45,7 +45,7 @@ job "cinemas" {
     task "notification-api" {
       driver = "docker"
       config {
-        image   = "crizstian/notification-service-go:v0.3"
+        image   = "crizstian/notification-service-go:v0.3-tls"
       }
 
       env {

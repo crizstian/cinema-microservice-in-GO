@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+CONSUL_ENTERPRISE=$1
+VAULT_ENTERPRISE=$2
+
+echo "CONSUL_ENTERPRISE=$1"
+echo "VAULT_ENTERPRISE=$2"
 
 # Install Keys
 curl -s https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
@@ -36,6 +41,7 @@ BLUE="\[\e[34m\]"
 PS1="$DARKGRAY\u@$BOLD$BLUE\h$DARKGRAY:\w\$ $NORMAL"
 END
 
+if [ "$CONSUL_ENTERPRISE" != "true"]; then
 # Download consul
 CONSUL_VERSION=1.6.1
 curl https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip -o consul.zip
@@ -44,6 +50,11 @@ curl https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VER
 unzip consul.zip
 sudo chmod +x consul
 sudo mv consul /usr/bin/consul
+else 
+    cp /vagrant/bin/consul .
+    sudo chmod +x consul
+    sudo mv consul /usr/bin/consul
+fi
 
 # Download consul-template
 CONSUL_TEMPLATE_VERSION=0.22.0
@@ -55,14 +66,14 @@ sudo chmod +x consul-template
 sudo mv consul-template /usr/bin/consul-template
 
 export ENVCONSUL_VERSION=0.9.0
-curl "https://releases.hashicorp.com/envconsul/${ENVCONSUL_VERSION}/envconsul_${ENVCONSUL_VERSION}_linux_amd64.zip" -o envconsul.zip
+curl https://releases.hashicorp.com/envconsul/${ENVCONSUL_VERSION}/envconsul_${ENVCONSUL_VERSION}_linux_amd64.zip -o envconsul.zip
 unzip envconsul.zip
 mv envconsul /usr/bin/envconsul
 rm envconsul.zip
 
 # Download nomad
-export NOMAD_VERSION=0.10.0
-curl https://releases.hashicorp.com/nomad/${NOMAD_VERSION}-beta1/nomad_${NOMAD_VERSION}-beta1_linux_amd64.zip -o nomad.zip
+export NOMAD_VERSION=0.10.1
+curl https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip -o nomad.zip
 
 # Install nomad
 unzip nomad.zip
@@ -75,7 +86,7 @@ sudo mkdir -p /opt/cni/bin
 sudo tar -C /opt/cni/bin -xzf cni-plugins.tgz
 
 # Download vault
-if [ -z VAULT_ENTERPRISE ]; then
+if [ "$VAULT_ENTERPRISE" != "true" ]; then
     export VAULT_VERSION=1.2.3
     curl https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip -o vault.zip
 
@@ -84,9 +95,7 @@ if [ -z VAULT_ENTERPRISE ]; then
     sudo chmod +x vault
     sudo mv vault /usr/bin/vault
 else 
-    cp /vagrant/provision/vault/bin/vault-enterprise-1.0.2.zip .
-
-    unzip vault-enterprise-1.0.2.zip
+    cp /vagrant/bin/vault .
     sudo chmod +x vault
     sudo mv vault /usr/bin/vault
 fi

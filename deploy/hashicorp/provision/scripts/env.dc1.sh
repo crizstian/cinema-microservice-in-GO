@@ -1,4 +1,12 @@
 export VAULT_CACERT=/var/vault/config/ca.crt.pem
 export VAULT_ADDR=https://172.20.20.11:8200
-export NOMAD_ADDR=http://172.20.20.11:4646
-export CONSUL_URL=http://172.20.20.11:8500
+
+export NOMAD_ADDR=https://172.20.20.11:4646
+export NOMAD_CACERT=/var/vault/config/ca.crt.pem
+export NOMAD_CLIENT_CERT=/var/vault/config/server.crt.pem
+export NOMAD_CLIENT_KEY=/var/vault/config/server.key.pem
+
+export CONSUL_HTTP_ADDR=https://172.20.20.11:8501
+export CONSUL_CACERT=/var/vault/config/ca.crt.pem
+export CONSUL_CLIENT_CERT=/var/vault/config/server.crt.pem
+export CONSUL_CLIENT_KEY=/var/vault/config/server.key.pem

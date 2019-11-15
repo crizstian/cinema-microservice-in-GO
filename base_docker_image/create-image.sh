@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 
-docker rm -f cinemas-base-image:alpine-v0.1
+docker rm -f cinemas-base-image:alpine-v0.1-tls
 
-docker rmi cinemas-base-image:alpine-v0.1
+docker rmi cinemas-base-image:alpine-v0.1-tls
 
 docker image prune
 
 docker volume prune
 
-docker build -t cinemas-base-image:alpine-v0.1 .
+docker build -t cinemas-base-image:alpine-v0.1-tls .
 
-docker tag cinemas-base-image:alpine-v0.1 crizstian/cinemas-base-image:alpine-v0.1
+docker tag cinemas-base-image:alpine-v0.1-tls crizstian/cinemas-base-image:alpine-v0.1-tls
 
-docker push crizstian/cinemas-base-image:alpine-v0.1
+docker push crizstian/cinemas-base-image:alpine-v0.1-tls

@@ -21,6 +21,7 @@ type MongoReplicaSet struct {
 type MongoConnection struct {
 	DB      *mgo.Database
 	Session *mgo.Session
+	Err     error
 }
 
 // MongoDB ...
@@ -39,5 +40,6 @@ func MongoDB(options MongoReplicaSet, c chan *MongoConnection) {
 	c <- &MongoConnection{
 		Session: session,
 		DB:      session.DB(options.Db),
+		Err:     err,
 	}
 }

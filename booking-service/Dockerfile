@@ -7,7 +7,7 @@ COPY src /go/src/cinemas-microservices/booking-service/src
 RUN go mod init && \
     CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
-FROM crizstian/cinemas-base-image:alpine-v0.1
+FROM crizstian/cinemas-base-image:alpine-v0.1-tls
 
 WORKDIR /tmp
 

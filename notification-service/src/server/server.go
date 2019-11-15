@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"time"
 
-	"gopkg.in/mgo.v2"
-
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	log "github.com/sirupsen/logrus"
@@ -53,14 +51,12 @@ func Start(r map[string]interface{}, se chan error) {
 }
 
 // Shutdown ...
-func Shutdown(s *mgo.Session) {
+func Shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := e.Shutdown(ctx); err != nil {
 		e.Logger.Fatal(err)
 	}
-	s.Close()
-	log.Warn("Conection to DB Closed")
 	log.Warn("Server Shutdown")
 	os.Exit(1)
 }

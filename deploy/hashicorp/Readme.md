@@ -47,7 +47,7 @@ This project consist of the following components:
     ```
   - Then run the following script:
   - ```
-    $ bash /vagrant/provision/consul/acl/dc1/bootstrap.sh
+    $ bash /vagrant/provision/consul/acl/bootstrap.sh
     ```
 ---
 
@@ -61,7 +61,7 @@ This project consist of the following components:
 **4.- Create Consul Policies**
 
 - **(requires consul_http_token)** - execute it outside the VM
-- Terraform script (/provision/consul/acl/dc1) 
+- Terraform script (/provision/consul/acl) 
 - ```
   $ CONSUL_HTTP_TOKEN=... terraform apply -auto-approve
   ```

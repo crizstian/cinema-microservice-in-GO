@@ -1,10 +1,15 @@
 provider "vault" {
- skip_tls_verify = true
+  ca_cert_file = "../../certs/ca.crt.pem"
 }
 
 provider "consul" {
-  address    = "172.20.20.11:8500"
+  address    = "172.20.20.11:8501"
   datacenter = "dc1"
+  scheme     = "https"
+
+  ca_file    = "../../certs/ca.crt.pem"
+  cert_file  = "../../certs/server.crt.pem"
+  key_file   = "../../certs/server.key.pem"
 }
 
 variable "apps" {
@@ -50,7 +55,7 @@ resource "vault_approle_auth_backend_role" "apps-role" {
 
   backend        = vault_auth_backend.approle.path
   role_name      = "${var.apps[count.index]}-role"
-  token_policies = [vault_policy.apps-policy[count.index].name]
+  token_policies = ["${vault_policy.apps-policy[count.index].name}"]
   token_ttl      = 1440
   secret_id_ttl  = 0
 }

@@ -1,4 +1,6 @@
 #!/bin/bash
+. /etc/environment
+
 echo "Writing Consul Roles into Vault"
 
 # Consul roles

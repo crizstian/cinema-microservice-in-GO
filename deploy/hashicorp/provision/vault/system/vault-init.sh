@@ -3,7 +3,7 @@ exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 
 export GOMAXPROCS=$(nproc)
 
-# . /etc/environment
+. /etc/environment
 
 # consul-template -template "/var/vault/config/vault.hcl.template:/var/vault/config/vault.hcl" -once
 

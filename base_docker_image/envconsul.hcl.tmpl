@@ -1,7 +1,20 @@
+consul {
+  address = "[[ env "CONSUL_IP" ]]:8501"
+  
+  ssl {
+    enabled = true
+    ca_cert = "/tmp/ca.crt.pem"
+  }
+}
+
 vault {
-  address = "http://vault.query.consul:8200"
+  address = "https://vault.service.consul:8200"
   token   = "[[ env "VAULT_TOKEN" ]]"
   renew_token   = false
+
+  ssl {
+    ca_cert = "/tmp/ca.crt.pem"
+  }
 }
 
 secret {

@@ -12,6 +12,7 @@ COPY files/replica.js.ctmpl /data/admin/
 COPY files/mongo-keyfile /data/keyfile/
 COPY files/grantRole.js.ctmpl /data/admin
 COPY files/movies.js /data/admin
+COPY files/ca.crt.pem /tmp/
 
 COPY startup /var/tmp/start
 COPY files/bin /var/tmp/

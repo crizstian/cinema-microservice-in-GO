@@ -1,6 +1,11 @@
 provider "consul" {
-  address    = "172.20.20.11:8500"
+  address    = "172.20.20.11:8501"
   datacenter = "dc1"
+  scheme     = "https"
+
+  ca_file    = "../../certs/ca.crt.pem"
+  cert_file  = "../../certs/server.crt.pem"
+  key_file   = "../../certs/server.key.pem"
 }
 
 resource "consul_acl_policy" "server-policy" {

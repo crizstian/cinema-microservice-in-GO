@@ -2,6 +2,8 @@ package db
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func init() {
@@ -38,19 +40,28 @@ func init() {
 
 // TestURLMany ...
 func TestURLMany(t *testing.T) {
-	// conn := make(chan *MongoConnection)
+	opts := MongoReplicaSet{
+		User:       "cristian",
+		Pass:       "cristianPassword2017",
+		Db:         "booking",
+		ReplicaSet: "rs1",
+		Servers:    "0.0.0.0:27017,0.0.0.0:27018,0.0.0.0:27019",
+		AuthSource: "authSource=admin",
+	}
 
-	// go MongoDB(conn)
+	conn := make(chan *MongoConnection)
 
-	// session := <-conn
+	go MongoDB(opts, conn)
 
-	// assert.NoError(t, session.Err)
+	session := <-conn
 
-	// defer session.Session.Close()
+	assert.NoError(t, session.Err)
 
-	// result := struct{ Ok int }{}
-	// err := session.Session.Run("ping", &result)
+	defer session.Session.Close()
 
-	// assert.NoError(t, err)
-	// assert.Equal(t, result.Ok, 1)
+	result := struct{ Ok int }{}
+	err := session.Session.Run("ping", &result)
+
+	assert.NoError(t, err)
+	assert.Equal(t, result.Ok, 1)
 }

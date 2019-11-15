@@ -8,12 +8,8 @@ import (
 	"os"
 	"os/signal"
 
-	"gopkg.in/mgo.v2"
-
 	log "github.com/sirupsen/logrus"
 )
-
-var s *mgo.Session
 
 func main() {
 	log.Info("--- Notification Service ---")
@@ -31,16 +27,15 @@ func main() {
 			startServer(c, serverError)
 		case q := <-quit:
 			log.Warnf("Quiting service due to OS Signal = %s", q.String())
-			server.Shutdown(s)
+			server.Shutdown()
 		case se := <-serverError:
 			log.Errorf(fmt.Sprintf("An error happend in the server, %v", se))
-			server.Shutdown(s)
+			server.Shutdown()
 		}
 	}
 }
 
 func startServer(di *config.DI, se chan error) {
-	log.Info("Connected to Notification Service DB")
 	log.Info("Connecting to notification repository...")
 
 	r, err := api.Connect(di.SMTP)

@@ -1,22 +1,28 @@
+# General Settings 
 cluster_name = "dc2"
 ui = true
 
 # Advertise the non-loopback interface
-api_addr = "https://172.20.20.31:8200"
+api_addr     = "https://172.20.20.31:8200"
 cluster_addr = "https://172.20.20.31:8201"
 
 # Storage config
 storage "consul" {
-  address = "172.20.20.31:8500"
+  address = "172.20.20.31:8501"
   path    = "vault/"
-	service = "vault"
+  service = "vault"
+  scheme  = "https"
+
+  tls_ca_file   = "/var/vault/config/ca.crt.pem"
+  tls_cert_file = "/var/vault/config/server.crt.pem"
+  tls_key_file  = "/var/vault/config/server.key.pem"
 }
 
 # Listeners config
 listener "tcp" {
-    address = "172.20.20.31:8200"
+    address       = "172.20.20.31:8200"
     tls_cert_file = "/var/vault/config/server.crt.pem"
-    tls_key_file = "/var/vault/config/server.key.pem"
+    tls_key_file  = "/var/vault/config/server.key.pem"
 }
 
 # Telemetry
