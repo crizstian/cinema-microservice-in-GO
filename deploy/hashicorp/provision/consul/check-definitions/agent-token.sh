@@ -5,7 +5,7 @@
 id=`consul kv get cluster/nodes/node-1/id`
 type=`consul kv get cluster/nodes/node-1/token-type`
 
-response=`curl --cacert /var/vault/config/ca.crt.pem -o /dev/null -s -w "%{http_code}\n" $CONSUL_HTTP_ADDR/v1/acl/token/$id`
+response=`curl -o /dev/null -s -w "%{http_code}\n" $CONSUL_HTTP_ADDR/v1/acl/token/$id`
 
 echo "Response Token Status: $response"
 

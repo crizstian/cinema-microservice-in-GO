@@ -10,3 +10,6 @@ export CONSUL_HTTP_ADDR=https://172.20.20.11:8501
 export CONSUL_CACERT=/var/vault/config/ca.crt.pem
 export CONSUL_CLIENT_CERT=/var/vault/config/server.crt.pem
 export CONSUL_CLIENT_KEY=/var/vault/config/server.key.pem
+
+export HOST_IP=`echo $CONSUL_HTTP_ADDR | cut -c9-20`
+export DATACENTER=DC1

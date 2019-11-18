@@ -38,7 +38,7 @@ function vaultConfig {
 
   else
     echo "Already initialized"
-    keysFromConsul=`curl -s --cacert /var/vault/config/ca.crt.pem -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/unsealKeys | jq -r '.[].Value' | base64 -d -`
+    keysFromConsul=`curl -s -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/unsealKeys | jq -r '.[].Value' | base64 -d -`
     unsealVault "${keysFromConsul[@]}"
   fi
 }
@@ -121,16 +121,16 @@ function vaultConsulKV {
   path=$2
   url="$CONSUL_HTTP_ADDR/v1/kv/$path"
   if [ "$data" == "file" ]; then
-   curl -s --cacert /var/vault/config/ca.crt.pem --request PUT -H "Content-Type: application/json" --data @file.json $url
+   curl -s --request PUT -H "Content-Type: application/json" --data @file.json $url
   else
-   curl -s --cacert /var/vault/config/ca.crt.pem --request PUT -H "Content-Type: application/json" --data $data $url
+   curl -s --request PUT -H "Content-Type: application/json" --data $data $url
   fi
 }
 
 function main {
   
-  echo "curl -s --cacert /var/vault/config/ca.crt.pem -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal"
-  vaultStart=`curl -s --cacert /var/vault/config/ca.crt.pem -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal | jq  -r '.[].Value'| base64 -d -`
+  echo "curl -s -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal"
+  vaultStart=`curl -s -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal | jq  -r '.[].Value'| base64 -d -`
   echo $vaultStart
 
   if [ -z "$vaultStart" ];  then

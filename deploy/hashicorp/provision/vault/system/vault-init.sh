@@ -5,8 +5,6 @@ export GOMAXPROCS=$(nproc)
 
 . /etc/environment
 
-# consul-template -template "/var/vault/config/vault.hcl.template:/var/vault/config/vault.hcl" -once
-
-# bash /vagrant/provision/consul/system/wait-consul-leader.sh 
+consul-template -template "/var/vault/config/vault.hcl.tmpl:/var/vault/config/vault.hcl" -once
 
 exec vault server -config=/var/vault/config/vault.hcl >>/var/log/vault.log 2>&1

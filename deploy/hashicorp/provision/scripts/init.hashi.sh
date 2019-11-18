@@ -9,11 +9,11 @@ sudo cp /vagrant/provision/consul/system/consul.service /etc/systemd/system/cons
 sudo chmod +x /var/consul/config/*.sh
 sudo chmod +x /vagrant/provision/consul/system/*.sh
 
-sudo cp /vagrant/provision/nomad/$1/* /var/nomad/config/
+sudo cp /vagrant/provision/nomad/config/* /var/nomad/config/
 sudo cp /vagrant/provision/nomad/system/nomad.service /etc/systemd/system/nomad.service
 sudo chmod +x /vagrant/provision/nomad/system/*.sh
 
-sudo cp /vagrant/provision/vault/$1/* /var/vault/config/
+sudo cp /vagrant/provision/vault/config/* /var/vault/config/
 sudo cp /vagrant/provision/vault/system/vault.service /etc/systemd/system/vault.service
 sudo cp /vagrant/provision/certs/* /var/vault/config
 sudo chmod +x /vagrant/provision/vault/system/*.sh
