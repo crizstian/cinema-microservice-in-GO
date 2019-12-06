@@ -9,7 +9,7 @@
 set -e
 
 readonly DEFAULT_CONSUL_DOMAIN="consul"
-readonly DEFAULT_CONSUL_IP=`echo $CONSUL_HTTP_ADDR | cut -c9-20`
+readonly DEFAULT_CONSUL_IP=$HOST_IP
 readonly DEFAULT_CONSUL_DNS_PORT=8600
 
 readonly DNS_MASQ_CONFIG_DIR="/etc/dnsmasq.d"

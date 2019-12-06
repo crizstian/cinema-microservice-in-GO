@@ -25,12 +25,14 @@ function vaultConfig {
     fi
 
     keys=`echo $initVaultResponse | jq .keys`
-    rootToken=`echo $initVaultResponse | jq .root_token`
+    rootToken=`echo $initVaultResponse | jq .root_token | sed s/\"//g`
 
     echo $keys > file.json
 
     vaultConsulKV "file" "cluster/vault/unsealKeys"
     vaultConsulKV $rootToken "cluster/vault/rootToken"
+
+    echo "export VAULT_TOKEN=$rootToken" >> /etc/environment
 
     rm file.json
 
