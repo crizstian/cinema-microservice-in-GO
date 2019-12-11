@@ -1,9 +1,10 @@
-# Cinemas Microservice in Go (Project) (You are in Step-4)
+# Cinemas Microservice in Go (Project) (You are in Step-5)
 
 This project consist of the following components:
 
 ```
 .
+├── booking-service
 ├── cinemas-db
 ├── deploy
 │   ├── docker-compose
@@ -11,7 +12,7 @@ This project consist of the following components:
 │   │   ├── deployment-files
 │   └── readme.md
 ├── movie-service
-├── notification-service (new)
+├── notification-service
 └── payment-service
 ```
 
