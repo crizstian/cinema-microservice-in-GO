@@ -1,4 +1,4 @@
-# Cinemas Microservice in Go (Project) (You are in Step-2)
+# Cinemas Microservice in Go (Project) (You are in Step-3)
 
 This project consist of the following components:
 
@@ -10,7 +10,8 @@ This project consist of the following components:
 │   ├── hashicorp
 │   │   ├── deployment-files
 │   └── readme.md
-└── movie-service
+├── movie-service
+└── payment-service (new)
 ```
 
 # How to use this project
