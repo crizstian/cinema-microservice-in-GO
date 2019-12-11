@@ -1,19 +1,6 @@
 version: '3'
 
 services:
-  consul-dc1:
-    image: consul:1.6.0
-    command: ["consul","agent","-config-dir=/config"]
-    volumes:
-      - "../consul_config_dc1:/config"
-    ports:
-      - 8500:8500
-    networks:
-      dc1:
-        ipv4_address: 10.7.0.10
-      # wan:
-      #   ipv4_address: 192.169.7.2
-
   mongo1:
     image: crizstian/cinemas-db:v0.1
     ports:

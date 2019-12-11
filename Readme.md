@@ -1,10 +1,10 @@
-# Cinemas Microservice in Go (Project) (You are in Step-1)
+# Cinemas Microservice in Go (Project) (You are in Step-2)
 
 This project consist of the following components:
 
 ```
 .
-├── base_docker_image
+├── cinemas-db
 ├── deploy
 │   ├── docker-compose
 │   ├── hashicorp
