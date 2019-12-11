@@ -1,7 +1,6 @@
 package db
 
 import (
-	"fmt"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -18,56 +17,27 @@ type MongoReplicaSet struct {
 	AuthSource string
 }
 
-var conn MongoReplicaSet
-
-func init() {
-	conn = MongoReplicaSet{}
-	u, uok := os.LookupEnv("DB_USER")
-	p, pok := os.LookupEnv("DB_PASS")
-	s, sok := os.LookupEnv("DB_SERVERS")
-	n, nok := os.LookupEnv("DB_NAME")
-	r, rok := os.LookupEnv("DB_REPLICA")
-
-	if !uok {
-		fmt.Println("No DB user specified")
-	}
-	if !pok {
-		fmt.Println("No DB pass specified")
-	}
-	if !sok {
-		fmt.Println("No DB url specified")
-	}
-	if !nok {
-		fmt.Println("No DB name specified")
-	}
-	if !rok {
-		fmt.Println("No DB replica specified")
-	}
-
-	conn.User = u
-	conn.Pass = p
-	conn.Servers = s
-	conn.Db = n
-	conn.ReplicaSet = r
-	conn.AuthSource = "authSource=admin"
-}
-
 // MongoConnection ...
 type MongoConnection struct {
 	DB      *mgo.Database
 	Session *mgo.Session
-	Err     error
 }
 
 // MongoDB ...
-func MongoDB(c chan *MongoConnection) {
-	log.Info("connecting to db ....")
+func MongoDB(options MongoReplicaSet, c chan *MongoConnection) {
+	log.Info("Connecting to Booking Service DB ....")
 
-	session, err := mgo.Dial("mongodb://" + conn.User + ":" + conn.Pass + "@" + conn.Servers + "/" + conn.Db + "?replicaSet=" + conn.ReplicaSet + "&" + conn.AuthSource)
+	url := "mongodb://" + options.User + ":" + options.Pass + "@" + options.Servers + "/" + options.Db + "?replicaSet=" + options.ReplicaSet + "&" + options.AuthSource
+
+	session, err := mgo.Dial(url)
+
+	if err != nil {
+		log.Errorf("An error occured connecting to Booking Service DB: %s", err.Error())
+		os.Exit(1)
+	}
 
 	c <- &MongoConnection{
 		Session: session,
-		DB:      session.DB(conn.Db),
-		Err:     err,
+		DB:      session.DB(options.Db),
 	}
 }
