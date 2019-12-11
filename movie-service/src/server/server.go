@@ -64,8 +64,3 @@ func Shutdown(s *mgo.Session) {
 	log.Warn("Server shutdown")
 	os.Exit(1)
 }
-
-// GetServer ...
-func GetServer() *echo.Echo {
-	return e
-}
