@@ -1,17 +1,6 @@
 version: "3.3"
 services:
 
-  consul-dc1:
-    image: consul:1.6.0
-    command: ["consul","agent","-config-dir=/config"]
-    volumes:
-      - "./consul_config/dc1:/config"
-    ports:
-      - 18500:8500
-    networks:
-      dc1:
-        ipv4_address: 10.10.0.2
-
   mongo1:
     image: crizstian/cinemas-db:v0.1
     environment:
@@ -83,18 +72,6 @@ services:
     networks:
       dc1:
         ipv4_address: 10.10.0.7
-  payment_envoy_dc1:
-    image: nicholasjackson/consul-envoy:v1.6.0-v0.10.0
-    environment:
-      CONSUL_HTTP_ADDR: 10.10.0.2:8500
-      CONSUL_GRPC_ADDR: 10.10.0.2:8502
-      SERVICE_CONFIG: /config/payment-dc1.hcl
-    volumes:
-      - "./consul_config/service_config:/config"
-    command: ["consul", "connect", "envoy","-sidecar-for", "payment-dc1"]
-    network_mode: "service:payment_dc1"
-    depends_on:
-      - payment_dc1
 
   notification_dc1:
     image: crizstian/notification-service-go:v0.1
@@ -106,19 +83,6 @@ services:
     networks:
       dc1:
         ipv4_address: 10.10.0.8
-
-  notification_envoy_dc1:
-    image: nicholasjackson/consul-envoy:v1.6.0-v0.10.0
-    environment:
-      CONSUL_HTTP_ADDR: 10.10.0.2:8500
-      CONSUL_GRPC_ADDR: 10.10.0.2:8502
-      SERVICE_CONFIG: /config/notification-dc1.hcl
-    volumes:
-      - "./consul_config/service_config:/config"
-    command: ["consul", "connect", "envoy","-sidecar-for", "notification-dc1"]
-    network_mode: "service:notification_dc1"
-    depends_on:
-      - consul-dc1
 
   booking:
     image: crizstian/booking-service-go:v0.1
@@ -132,29 +96,14 @@ services:
       DB_NAME: "booking"
       DB_REPLICA: "rs1"
       SERVICE_PORT: "8000"
-      PAYMENT_URL: "http://localhost:9091"
-      NOTIFICATION_URL: "http://localhost:9092"
+      PAYMENT_URL: "http://10.10.0.7:9091"
+      NOTIFICATION_URL: "http://10.10.0.8:9092"
     networks:
       dc1:
         ipv4_address: 10.10.0.9
     depends_on:
       - mongo3
 
-  booking_envoy:
-    image: nicholasjackson/consul-envoy:v1.6.0-v0.10.0
-    environment:
-      CONSUL_HTTP_ADDR: 10.10.0.2:8500
-      CONSUL_GRPC_ADDR: 10.10.0.2:8502
-      SERVICE_CONFIG: /config/booking-service.hcl
-      CENTRAL_CONFIG_DIR: "/central_config"
-    volumes:
-      - "./consul_config/service_config:/config"
-      - "./consul_config/central_config:/central_config"
-    command: ["consul", "connect", "envoy","-sidecar-for", "booking-dc1"]
-    network_mode: "service:booking"
-    depends_on:
-      - consul-dc1
-      
 networks:
   dc1:
     driver: bridge
