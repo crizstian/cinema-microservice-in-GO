@@ -2,12 +2,10 @@ package main
 
 import (
 	"cinemas-microservices/movie-service/src/api"
-	"cinemas-microservices/movie-service/src/db"
+	"cinemas-microservices/movie-service/src/config"
 	"cinemas-microservices/movie-service/src/server"
-	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
 
 	"gopkg.in/mgo.v2"
 
@@ -20,58 +18,44 @@ func main() {
 	log.Info("--- Movies Service ---")
 	log.Info("Connecting to movies repository...")
 
-	conn := make(chan *db.MongoConnection)
+	di := make(chan *config.DI)
 	quit := make(chan os.Signal)
 	serverError := make(chan error)
 	signal.Notify(quit, os.Interrupt)
 
-	go db.MongoDB(conn)
+	go config.InitDI(di)
 
 	for i := 0; i < 3; i++ {
 		select {
-		case c := <-conn:
+		case c := <-di:
 			startServer(c, serverError)
 		case q := <-quit:
-			fmt.Println(q)
+			log.Infof("Signal Interruption Received: %v", q)
 			server.Shutdown(s)
 		case se := <-serverError:
-			log.Infof(fmt.Sprintf("[ERROR] an error happend in the server, %v", se))
+			log.Errorf("An error occured in the server, %v", se)
 			server.Shutdown(s)
 		}
 	}
 }
 
-func startServer(session *db.MongoConnection, se chan error) {
-	if session.Err != nil {
-		mainErrorHandler(fmt.Sprintf("An error occured connecting to the DB, [ERROR] -> %s", session.Err.Error()))
-	} else {
-		log.Info("Connected to DB")
-		log.Info("Starting Movie Service now ...")
+func startServer(di *config.DI, se chan error) {
+	log.Info("Connected to Booking Service DB")
 
-		s = session.Session
-		r, err := api.Connect(session.DB)
+	s = di.Database.Session
 
-		if err != nil {
-			mainErrorHandler(fmt.Sprintf("Main error: [ERROR] -> %s", err))
-		}
+	log.Info("Initializaing API Repository Configuration")
+	r, err := api.Connect(di.Database.DB)
 
-		port, pok := os.LookupEnv("SERVICE_PORT")
-
-		if !pok {
-			mainErrorHandler(fmt.Sprintf("Main error: No SERVICE_PORT found"))
-		}
-
-		p, err := strconv.Atoi(port)
-
-		if err != nil {
-			mainErrorHandler(fmt.Sprintf("Main error: SERVICE_PORT is not a number"))
-		}
-
-		server.Start(map[string]interface{}{
-			"port": p,
-			"repo": r,
-		}, se)
+	if err != nil {
+		mainErrorHandler("An error occured initializing the API Repository: " + err.Error())
 	}
+
+	log.Info("API Repository configuration completed")
+	server.Start(map[string]interface{}{
+		"ss":   di.ServerSettings,
+		"repo": r,
+	}, se)
 }
 
 func mainErrorHandler(msg string) {

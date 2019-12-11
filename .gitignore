@@ -1,0 +1,9 @@
+**/test_env.sh
+.DS_STORE
+
+**/.terraform
+**/ubuntu*
+**/.vagrant
+
+**/terraform.tfstate
+**/terraform.tfstate.backup
