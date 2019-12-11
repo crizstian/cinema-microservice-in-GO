@@ -1,23 +1,18 @@
-FROM golang:1.10
+FROM golang:1.13.1
 
-# Install go dependencies
-RUN go get -u github.com/labstack/echo && \
-    go get github.com/dgrijalva/jwt-go && \
-    go get github.com/sirupsen/logrus && \
-    go get gopkg.in/mgo.v2 && \
-    go get github.com/stripe/stripe-go
+WORKDIR /go/src/cinemas-notification/payment-service/src
 
-WORKDIR /go/src/cinemas-microservices/notification-service/src
+COPY src /go/src/cinemas-notification/payment-service/src
 
-COPY src /go/src/cinemas-microservices/notification-service/src
+RUN go mod init && \
+    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+FROM crizstian/cinemas-base-image:alpine-v0.1
 
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates curl
+WORKDIR /tmp
 
-WORKDIR /
+ENV APP_NAME payment-service
 
-COPY --from=0 /go/src/cinemas-microservices/notification-service/src/main .
+COPY --from=0 /go/src/cinemas-notification/payment-service/src/main .
 
-CMD ["./main"]
+CMD ["/tmp/main"]
