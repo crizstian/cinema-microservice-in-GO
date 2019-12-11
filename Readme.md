@@ -4,7 +4,7 @@ This project consist of the following components:
 
 ```
 .
-├── booking-service
+├── booking-service (new)
 ├── cinemas-db
 ├── deploy
 │   ├── docker-compose
