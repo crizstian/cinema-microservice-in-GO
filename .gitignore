@@ -4,3 +4,4 @@
 **/.terraform
 **/ubuntu*
 **/.vagrant
+**/hashicorp/bin
