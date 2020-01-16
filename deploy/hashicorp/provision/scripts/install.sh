@@ -6,13 +6,13 @@ echo "CONSUL_ENTERPRISE=$1"
 echo "VAULT_ENTERPRISE=$2"
 
 # Install Keys
-curl -s https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+curl -sL -s https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
 sudo add-apt-repository \
    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
    $(lsb_release -cs) \
    stable"
 
-curl -sL 'https://getenvoy.io/gpg' | sudo apt-key add -
+curl -sL -sL 'https://getenvoy.io/gpg' | sudo apt-key add -
 sudo add-apt-repository \
 "deb [arch=amd64] https://dl.bintray.com/tetrate/getenvoy-deb \
 $(lsb_release -cs) \
@@ -44,7 +44,7 @@ END
 if [ "$CONSUL_ENTERPRISE" != "true"]; then
 # Download consul
 CONSUL_VERSION=1.6.1
-curl https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip -o consul.zip
+curl -sL https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip -o consul.zip
 
 # Install consul
 unzip consul.zip
@@ -58,7 +58,7 @@ fi
 
 # Download consul-template
 CONSUL_TEMPLATE_VERSION=0.22.0
-curl https://releases.hashicorp.com/consul-template/${CONSUL_TEMPLATE_VERSION}/consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip -o consul-template.zip
+curl -sL https://releases.hashicorp.com/consul-template/${CONSUL_TEMPLATE_VERSION}/consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip -o consul-template.zip
 
 # Install consul-template
 unzip consul-template.zip
@@ -66,14 +66,14 @@ sudo chmod +x consul-template
 sudo mv consul-template /usr/bin/consul-template
 
 export ENVCONSUL_VERSION=0.9.0
-curl https://releases.hashicorp.com/envconsul/${ENVCONSUL_VERSION}/envconsul_${ENVCONSUL_VERSION}_linux_amd64.zip -o envconsul.zip
+curl -sL https://releases.hashicorp.com/envconsul/${ENVCONSUL_VERSION}/envconsul_${ENVCONSUL_VERSION}_linux_amd64.zip -o envconsul.zip
 unzip envconsul.zip
 mv envconsul /usr/bin/envconsul
 rm envconsul.zip
 
 # Download nomad
 export NOMAD_VERSION=0.10.1
-curl https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip -o nomad.zip
+curl -sL https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip -o nomad.zip
 
 # Install nomad
 unzip nomad.zip
@@ -81,14 +81,14 @@ sudo chmod +x nomad
 sudo mv nomad /usr/bin/nomad
 
 # Install CNI Plugin for Nomad
-curl -L -o cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v0.8.1/cni-plugins-linux-amd64-v0.8.1.tgz
+curl -sL -L -o cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v0.8.1/cni-plugins-linux-amd64-v0.8.1.tgz
 sudo mkdir -p /opt/cni/bin
 sudo tar -C /opt/cni/bin -xzf cni-plugins.tgz
 
 # Download vault
 if [ "$VAULT_ENTERPRISE" != "true" ]; then
     export VAULT_VERSION=1.2.3
-    curl https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip -o vault.zip
+    curl -sL https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip -o vault.zip
 
     # Install vault
     unzip vault.zip

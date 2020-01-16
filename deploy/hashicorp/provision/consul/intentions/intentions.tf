@@ -1,11 +1,11 @@
 provider "consul" {
-  address    = "172.20.20.11:8501"
+  address    = "172.20.20.11:8500"
   datacenter = "dc1"
-  scheme     = "https"
+  scheme     = "http"
 
-  ca_file    = "../../certs/ca.crt.pem"
-  cert_file  = "../../certs/server.crt.pem"
-  key_file   = "../../certs/server.key.pem"
+  # ca_file    = "../../certs/ca.crt.pem"
+  # cert_file  = "../../certs/server.crt.pem"
+  # key_file   = "../../certs/server.key.pem"
 }
 
 resource "consul_intention" "allow-booking-to-payment" {

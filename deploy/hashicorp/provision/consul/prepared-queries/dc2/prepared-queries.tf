@@ -12,13 +12,13 @@ variable "dbs" {
 }
 
 provider "consul" {
-  address    = "172.20.20.31:8501"
+  address    = "172.20.20.31:8500"
   datacenter = "dc2"
-  scheme     = "https"
+  scheme     = "http"
 
-  ca_file    = "../../../certs/ca.crt.pem"
-  cert_file  = "../../../certs/server.crt.pem"
-  key_file   = "../../../certs/server.key.pem"
+  # ca_file    = "../../../certs/ca.crt.pem"
+  # cert_file  = "../../../certs/server.crt.pem"
+  # key_file   = "../../../certs/server.key.pem"
 }
 
 resource "consul_keys" "cluster_status" {

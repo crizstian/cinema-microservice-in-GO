@@ -44,6 +44,9 @@ This project consist of the following components:
   - Note: This step should be run inside the VM
     ```
     $ vagrant ssh dc1-consul-server
+
+    # change to root user
+    $ sudo su
     ```
   - Then run the following script:
   - ```
@@ -51,7 +54,7 @@ This project consist of the following components:
     ```
 ---
 
-**3.- Set Root Token to agent -  (embbeded in prev step)**
+**3.- How to set the Root Token to an agent - (embbeded in prev step)** Optional*
 - To set tokens in consul you can run the following command:
   ```
   $ consul acl set-agent-token default [token]
@@ -69,7 +72,7 @@ This project consist of the following components:
 **5.- Unseal Vault**
 
 - ```
-  $ bash /vagrant/provision/vault/system/vault-config.sh
+  $ bash /vagrant/provision/vault/system/unseal.sh
   ```
 - inside the VM
 ---

@@ -14,4 +14,4 @@ export CONSUL_HTTP_ADDR=http://172.20.20.31:8500
 # export CONSUL_CLIENT_KEY=/var/vault/config/server.key.pem
 
 export HOST_IP=`echo $CONSUL_HTTP_ADDR | cut -c8-19`
-export DATACENTER=DC2
+export DATACENTER=dc2

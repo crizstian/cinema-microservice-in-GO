@@ -83,3 +83,5 @@ echo ">>>>>>>>>>> MongoInit.sh Loaded"
 sleep 10
 echo ">>>>>>>>>>> STARTING MONGODB REPLICA TO INIT"
 init
+
+# mongo -u $DB_REPLICA_ADMIN -p $DB_REPLICA_ADMIN_PASS --eval "rs.status()" --authenticationDatabase "admin"

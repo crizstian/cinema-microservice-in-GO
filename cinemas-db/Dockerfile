@@ -22,4 +22,10 @@ RUN chmod -R +x /var/tmp
 
 RUN /var/tmp/installhashi.sh
 
+ENV CONSUL_SCHEME http
+ENV CONSUL_PORT 8500
+ENV CONSUL_HTTP_SSL false
+ENV CA_CERT_FILE /tmp/ca.crt.pem
+ENV ENABLE_CA_CERT false
+
 ENTRYPOINT [ "/var/tmp/start/startProcess.sh" ]

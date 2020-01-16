@@ -10,7 +10,7 @@ job "cinemas-db" {
     task "mongodb1" {
       driver = "docker"
       config {
-        image   = "crizstian/cinemas-db:v0.2-tls"
+        image   = "crizstian/cinemas-db:v0.3"
         port_map {
           service_port = 27017
         }
@@ -52,7 +52,7 @@ job "cinemas-db" {
     task "mongodb2" {
       driver = "docker"
       config {
-        image   = "crizstian/cinemas-db:v0.2-tls"
+        image   = "crizstian/cinemas-db:v0.3"
         port_map {
           service_port = 27017
         }
@@ -94,7 +94,7 @@ job "cinemas-db" {
     task "mongodb3" {
       driver = "docker"
       config {
-        image   = "crizstian/cinemas-db:v0.2-tls"
+        image   = "crizstian/cinemas-db:v0.3"
         port_map {
           service_port = 27017
         }
