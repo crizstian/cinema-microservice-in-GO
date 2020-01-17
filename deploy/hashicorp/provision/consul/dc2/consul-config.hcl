@@ -27,11 +27,11 @@ connect {
   enabled = true
 }
 
-acl = {
-  enabled        = true
-  default_policy = "allow"
-  down_policy    = "extend-cache"
-}
+// acl = {
+//   enabled        = true
+//   default_policy = "allow"
+//   down_policy    = "extend-cache"
+// }
 
 # verify_incoming        = false
 # verify_incoming_rpc    = true

@@ -35,11 +35,8 @@ This project consist of the following components:
 
 # Steps to initialize the environment
 
-**1.- Initialize VMs** by positioning in the terminal where the `Vagrantfile` is located, the start the vm's by the following command:
-- ```
-  $ vagrant up
-  ```
----
+**1.- Initialize VMs** by positioning in the terminal where the `Vagrantfile` is located, start the vm's by the following command: `$ vagrant up`
+  
 **2.- Bootstrap Consul ACL**
   - Note: This step should be run inside the VM
     ```

@@ -2,10 +2,13 @@ provider "consul" {
   address    = "172.20.20.11:8500"
   datacenter = "dc1"
   scheme     = "http"
+}
 
-  # ca_file    = "../../../certs/ca.crt.pem"
-  # cert_file  = "../../../certs/server.crt.pem"
-  # key_file   = "../../../certs/server.key.pem"
+terraform {
+  backend "consul" {
+    address = "172.20.20.11:8500"
+    path    = "terraform/consul/prepared-queries/state"
+  }
 }
 
 resource "consul_keys" "cluster_status" {

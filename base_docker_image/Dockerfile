@@ -8,4 +8,10 @@ COPY ca.crt.pem /tmp/
 
 RUN chmod +x /tmp/*.sh && sh /tmp/install-tools.sh
 
+ENV CONSUL_SCHEME http
+ENV CONSUL_PORT 8500
+ENV CONSUL_HTTP_SSL false
+ENV CA_CERT_FILE /tmp/ca.crt.pem
+ENV ENABLE_CA_CERT false
+
 ENTRYPOINT [ "/tmp/pre-start.sh" ]

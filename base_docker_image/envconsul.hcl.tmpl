@@ -1,19 +1,19 @@
 consul {
-  address = "[[ env "CONSUL_IP" ]]:8501"
+  address = "[[ env "CONSUL_IP" ]]:[[ env "CONSUL_PORT" ]]"
   
   ssl {
-    enabled = true
-    ca_cert = "/tmp/ca.crt.pem"
+    enabled = [[ env "ENABLE_CA_CERT" ]]
+    ca_cert = "[[ env "CA_CERT_FILE" ]]"
   }
 }
 
 vault {
-  address = "https://vault.service.consul:8200"
-  token   = "[[ env "VAULT_TOKEN" ]]"
-  renew_token   = false
+  address     = "https://vault.service.consul:8200"
+  token       = "[[ env "VAULT_TOKEN" ]]"
+  renew_token = false
 
   ssl {
-    ca_cert = "/tmp/ca.crt.pem"
+    ca_cert = "[[ env "CA_CERT_FILE" ]]"
   }
 }
 

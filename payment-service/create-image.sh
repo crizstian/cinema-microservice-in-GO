@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 
-docker rm -f payment-service-go:v0.3-tls
+docker rm -f payment-service-go:v0.4
 
-docker rmi payment-service-go:v0.3-tls
+docker rmi payment-service-go:v0.4
 
 docker image prune
 
 docker volume prune
 
-docker build -t payment-service-go:v0.3-tls .
+docker build -t payment-service-go:v0.4 .
 
-docker tag payment-service-go:v0.3-tls crizstian/payment-service-go:v0.3-tls
+docker tag payment-service-go:v0.4 crizstian/payment-service-go:v0.4
 
-docker push crizstian/payment-service-go:v0.3-tls
+docker push crizstian/payment-service-go:v0.4

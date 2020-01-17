@@ -3,6 +3,10 @@ set -e
 
 export CUSTOM_CMD="$@"
 
+if [ "$ENABLE_CA_CERT" == "true" ]; then
+  curl_ssl="--cacert ${CA_CERT_FILE}"
+fi
+
 if [ -z $START_CMD ]; then
 	echo "Setting custom command as the startup command"
 	export START_CMD=${CUSTOM_CMD}
@@ -15,19 +19,19 @@ if [ -n "$APP_NAME" ]; then
 	#Get vault token if APP_NAME is specified by the application
 	echo "Fetching role and secrets..."
 
-	role_id=`curl --cacert /tmp/ca.crt.pem -s -X GET https://$CONSUL_IP:8501/v1/kv/cluster/vault/$APP_NAME/role_id | jq  -r '.[].Value'| base64 -d -`
-	secret_id=`curl --cacert /tmp/ca.crt.pem -s -X GET https://$CONSUL_IP:8501/v1/kv/cluster/vault/$APP_NAME/secret_id | jq  -r '.[].Value'| base64 -d -`
+	role_id=`curl $curl_ssl -s -X GET $CONSUL_SCHEME://$CONSUL_IP:$CONSUL_PORT/v1/kv/cluster/vault/$APP_NAME/role_id | jq  -r '.[].Value'| base64 -d -`
+	secret_id=`curl $curl_ssl -s -X GET $CONSUL_SCHEME://$CONSUL_IP:$CONSUL_PORT/v1/kv/cluster/vault/$APP_NAME/secret_id | jq  -r '.[].Value'| base64 -d -`
 
 	if [ -n "$role_id" ] && [ -n "$secret_id" ]; then
 		echo "Exporting VAULT_TOKEN"
 
-		export VAULT_TOKEN=`curl --cacert /tmp/ca.crt.pem -s -X POST -d '{"role_id":"'$role_id'","secret_id":"'$secret_id'"}' https://vault.service.consul:8200/v1/auth/approle/login | jq -r .auth.client_token`
+		export VAULT_TOKEN=`curl --cacert ${CA_CERT_FILE} -s -X POST -d '{"role_id":"'$role_id'","secret_id":"'$secret_id'"}' https://vault.service.consul:8200/v1/auth/approle/login | jq -r .auth.client_token`
 		if [ -z "$VAULT_TOKEN" ]; then
 			echo "Unable to get a vault token, exiting..."
 			exit 3
 		fi
 
-	# 	response=$(curl --cacert /tmp/ca.crt.pem -s -X GET --header "X-Vault-Token: ${VAULT_TOKEN}" https://vault.service.consul:8200/v1/secret/$APP_NAME | jq .data)
+		#response=$(curl $curl_ssl -s -X GET --header "X-Vault-Token: ${VAULT_TOKEN}" https://vault.service.consul:8200/v1/secret/$APP_NAME | jq .data)
 	fi
 
   #Generating config file for envconsul

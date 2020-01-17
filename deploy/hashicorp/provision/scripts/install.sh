@@ -43,7 +43,7 @@ END
 
 if [ "$CONSUL_ENTERPRISE" != "true"]; then
 # Download consul
-CONSUL_VERSION=1.6.1
+export CONSUL_VERSION=1.6.1
 curl -sL https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip -o consul.zip
 
 # Install consul
@@ -57,7 +57,7 @@ else
 fi
 
 # Download consul-template
-CONSUL_TEMPLATE_VERSION=0.22.0
+export CONSUL_TEMPLATE_VERSION=0.22.0
 curl -sL https://releases.hashicorp.com/consul-template/${CONSUL_TEMPLATE_VERSION}/consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip -o consul-template.zip
 
 # Install consul-template
@@ -68,8 +68,8 @@ sudo mv consul-template /usr/bin/consul-template
 export ENVCONSUL_VERSION=0.9.0
 curl -sL https://releases.hashicorp.com/envconsul/${ENVCONSUL_VERSION}/envconsul_${ENVCONSUL_VERSION}_linux_amd64.zip -o envconsul.zip
 unzip envconsul.zip
-mv envconsul /usr/bin/envconsul
-rm envconsul.zip
+sudo chmod +x consul-template
+sudo mv envconsul /usr/bin/envconsul
 
 # Download nomad
 export NOMAD_VERSION=0.10.1

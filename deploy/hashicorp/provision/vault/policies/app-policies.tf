@@ -1,32 +1,3 @@
-provider "vault" {
-  ca_cert_file = "../../certs/ca.crt.pem"
-}
-
-provider "consul" {
-  address    = "172.20.20.11:8500"
-  datacenter = "dc1"
-  scheme     = "http"
-
-  # ca_file    = "../../certs/ca.crt.pem"
-  # cert_file  = "../../certs/server.crt.pem"
-  # key_file   = "../../certs/server.key.pem"
-}
-
-variable "apps" {
-  default = [
-    "mongo-db",
-    "booking-service",
-    "payment-service",
-    "notification-service",
-    "movie-service"
-  ]
-}
-
-# Enable approle auth method
-resource "vault_auth_backend" "approle" {
-  type = "approle"
-}
-
 # Application Policies
 resource "vault_policy" "apps-policy" {
   count = length(var.apps)
@@ -34,15 +5,10 @@ resource "vault_policy" "apps-policy" {
   name = "${var.apps[count.index]}-policy"
 
   policy = <<EOT
-    path "auth/token/lookup-self" {
-      policy = "read" 
-    }
-    path "sys/*" {
-      policy = "deny"
-    }
     path "secret/${var.apps[count.index]}/*" {
       capabilities = ["create", "read", "update", "delete", "list"]
     }
+
     path "secret/${var.apps[count.index]}" {
       capabilities = ["create", "read", "update", "delete", "list"]
     }
