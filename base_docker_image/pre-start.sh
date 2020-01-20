@@ -19,8 +19,8 @@ if [ -n "$APP_NAME" ]; then
 	#Get vault token if APP_NAME is specified by the application
 	echo "Fetching role and secrets..."
 
-	role_id=`curl $curl_ssl -s -X GET $CONSUL_SCHEME://$CONSUL_IP:$CONSUL_PORT/v1/kv/cluster/vault/$APP_NAME/role_id | jq  -r '.[].Value'| base64 -d -`
-	secret_id=`curl $curl_ssl -s -X GET $CONSUL_SCHEME://$CONSUL_IP:$CONSUL_PORT/v1/kv/cluster/vault/$APP_NAME/secret_id | jq  -r '.[].Value'| base64 -d -`
+	role_id=`curl $curl_ssl -s -X GET $CONSUL_SCHEME://$CONSUL_IP:$CONSUL_PORT/v1/kv/cluster/apps/$APP_NAME/auth/role_id | jq  -r '.[].Value'| base64 -d -`
+	secret_id=`curl $curl_ssl -s -X GET $CONSUL_SCHEME://$CONSUL_IP:$CONSUL_PORT/v1/kv/cluster/apps/$APP_NAME/auth/secret_id | jq  -r '.[].Value'| base64 -d -`
 
 	if [ -n "$role_id" ] && [ -n "$secret_id" ]; then
 		echo "Exporting VAULT_TOKEN"

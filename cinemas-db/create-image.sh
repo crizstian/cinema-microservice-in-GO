@@ -11,9 +11,9 @@ docker rm -f cinemas-db:v0.3
 
 docker rmi cinemas-db:v0.3
 
-docker image prune
+docker image prune -f
 
-docker volume prune
+docker volume prune -f
 
 docker build -t cinemas-db:v0.3 .
 

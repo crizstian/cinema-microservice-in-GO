@@ -10,7 +10,7 @@ job "cinemas" {
     task "booking-service" {
       driver = "docker"
       config {
-        image   = "crizstian/booking-service-go:v0.3-tls"
+        image   = "crizstian/booking-service-go:v0.4"
       }
 
       env {

@@ -4,9 +4,9 @@ docker rm -f movies-service-go:v0.4
 
 docker rmi movies-service-go:v0.4
 
-docker image prune
+docker image prune -f
 
-docker volume prune
+docker volume prune -f
 
 docker build -t movies-service-go:v0.4 .
 

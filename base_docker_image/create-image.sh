@@ -4,9 +4,9 @@ docker rm -f cinemas-base-image:alpine-v0.2
 
 docker rmi cinemas-base-image:alpine-v0.2
 
-docker image prune
+docker image prune -f
 
-docker volume prune
+docker volume prune -f
 
 docker build -t cinemas-base-image:alpine-v0.2 .
 

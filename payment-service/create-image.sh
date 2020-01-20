@@ -4,9 +4,9 @@ docker rm -f payment-service-go:v0.4
 
 docker rmi payment-service-go:v0.4
 
-docker image prune
+docker image prune -f
 
-docker volume prune
+docker volume prune -f
 
 docker build -t payment-service-go:v0.4 .
 

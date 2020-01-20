@@ -7,7 +7,7 @@ provider "consul" {
 terraform {
   backend "consul" {
     address = "172.20.20.11:8500"
-    path    = "terraform/consul/state"
+    path    = "terraform/dc1/consul/acl/state"
   }
 }
 

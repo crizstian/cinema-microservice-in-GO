@@ -41,13 +41,25 @@ variable "common_name" {
 variable "dns_names" {
   description = "List of DNS names for which the certificate will be valid (e.g. vault.service.consul, foo.example.com)."
   type        = list(string)
-  default = ["vault.service.consul", "server.dc1.consul", "server.dc2.consul", "server.dc1-region.nomad", "server.dc2-region.nomad"]
+  default = [
+    "vault.service.consul",
+    "server.dc1.consul",
+    "server.dc2.consul",
+    "server.dc1-region.nomad",
+    "server.dc2-region.nomad",
+    "dc1-consul-server",
+    "dc2-consul-server",
+    "*"
+  ]
 }
 
 variable "ip_addresses" {
   description = "List of IP addresses for which the certificate will be valid (e.g. 127.0.0.1)."
   type        = list(string)
-  default = ["172.20.20.11", "127.0.0.1", "172.20.20.31", "0.0.0.0"]
+  default = [
+    "172.20.20.11", 
+    "172.20.20.31"
+  ]
 }
 
 variable "validity_period_hours" {
@@ -85,7 +97,7 @@ variable "allowed_uses" {
 
 variable "permissions" {
   description = "The Unix file permission to assign to the cert files (e.g. 0600)."
-  default     = "0600"
+  default     = "0644"
 }
 
 variable "private_key_algorithm" {

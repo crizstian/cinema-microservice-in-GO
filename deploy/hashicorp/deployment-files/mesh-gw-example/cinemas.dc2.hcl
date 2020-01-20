@@ -10,13 +10,13 @@ job "cinemas" {
     task "payment-api" {
       driver = "docker"
       config {
-        image = "crizstian/payment-service-go:v0.3-tls"
+        image = "crizstian/payment-service-go:v0.4"
       }
 
       env {
         DB_SERVERS   = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
         SERVICE_PORT = "3000"
-        CONSUL_IP    = "172.20.20.11"
+        CONSUL_IP    = "172.20.20.31"
       }
 
       resources {
@@ -45,12 +45,12 @@ job "cinemas" {
     task "notification-api" {
       driver = "docker"
       config {
-        image   = "crizstian/notification-service-go:v0.3-tls"
+        image   = "crizstian/notification-service-go:v0.4"
       }
 
       env {
         SERVICE_PORT = "3001"
-        CONSUL_IP    = "172.20.20.11"
+        CONSUL_IP    = "172.20.20.31"
       }
 
       resources {

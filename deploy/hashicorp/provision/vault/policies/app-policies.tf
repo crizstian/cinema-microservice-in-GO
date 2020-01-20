@@ -41,7 +41,7 @@ resource "consul_keys" "apps-role-id" {
   datacenter = "dc1"
 
   key {
-    path  = "cluster/vault/${var.apps[count.index]}/role_id"
+    path  = "cluster/apps/${var.apps[count.index]}/auth/role_id"
     value = vault_approle_auth_backend_role.apps-role[count.index].role_id
   }
 }
@@ -53,7 +53,7 @@ resource "consul_keys" "app-secret-id" {
   datacenter = "dc1"
 
   key {
-    path  = "cluster/vault/${var.apps[count.index]}/secret_id"
+    path  = "cluster/apps/${var.apps[count.index]}/auth/secret_id"
     value = vault_approle_auth_backend_role_secret_id.apps-secret[count.index].secret_id
   }
 }

@@ -7,6 +7,7 @@ sudo cp /vagrant/provision/consul/$1/* /var/consul/config/
 # sudo cp /vagrant/provision/consul/watches/* /var/consul/config/
 # sudo cp /vagrant/provision/consul/check-definitions/* /var/consul/config/
 sudo cp /vagrant/provision/consul/system/consul.service /etc/systemd/system/consul.service
+sudo cp /vagrant/provision/consul/system/csreplicate.service /etc/systemd/system/csreplicate.service
 sudo chmod -R +x /var/consul/config/
 sudo chmod -R +x /vagrant/provision/consul/system/
 
@@ -31,3 +32,4 @@ sudo service consul restart
 sudo service vault restart
 sudo service nomad restart
 sudo service docker restart
+sudo service csreplicate restart

@@ -7,7 +7,7 @@ provider "consul" {
 terraform {
   backend "consul" {
     address = "172.20.20.11:8500"
-    path    = "terraform/consul/prepared-queries/state"
+    path    = "terraform/dc1/consul/prepared-queries/state"
   }
 }
 
@@ -44,17 +44,6 @@ resource "consul_prepared_query" "mongodb3" {
   name         = "mongodb3"
   near         = "_agent"
   service      = "mongodb3"
-
-  failover {
-    nearest_n   = 3
-    datacenters = ["dc1"]
-  }
-}
-
-resource "consul_prepared_query" "vault" {
-  name         = "vault"
-  near         = "_agent"
-  service      = "vault"
 
   failover {
     nearest_n   = 3

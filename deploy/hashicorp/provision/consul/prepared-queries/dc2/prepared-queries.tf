@@ -1,12 +1,12 @@
 variable "dbs" {
   default = [{
-    ip = "192.168.15.3"
+    ip = "192.168.15.10"
     port = 27017
   },{
-    ip = "192.168.15.3"
+    ip = "192.168.15.10"
     port = 27018
   },{
-    ip = "192.168.15.3"
+    ip = "192.168.15.10"
     port = 27019
   }]
 }
@@ -15,10 +15,13 @@ provider "consul" {
   address    = "172.20.20.31:8500"
   datacenter = "dc2"
   scheme     = "http"
+}
 
-  # ca_file    = "../../../certs/ca.crt.pem"
-  # cert_file  = "../../../certs/server.crt.pem"
-  # key_file   = "../../../certs/server.key.pem"
+terraform {
+  backend "consul" {
+    address = "172.20.20.11:8500"
+    path    = "terraform/dc2/consul/prepared-queries/state"
+  }
 }
 
 resource "consul_keys" "cluster_status" {
@@ -41,47 +44,18 @@ resource "consul_service" "mongodb_service" {
   count = length(var.dbs)
 
   name = "mongodb${count.index+1}"
-  node = "${consul_node.mongodb_node[count.index].name}"
+  node = consul_node.mongodb_node[count.index].name
   port = var.dbs[count.index].port
   tags = ["external-services", "external-database"]
   datacenter = "dc2"
 }
 
-resource "consul_prepared_query" "mongodb1" {
-  name         = "mongodb1"
-  near         = "_agent"
-  service      = "mongodb1"
+resource "consul_prepared_query" "mongodb_prepared_query" {
+  count = length(var.dbs)
 
-  failover {
-    nearest_n   = 3
-    datacenters = ["dc1"]
-  }
-}
-resource "consul_prepared_query" "mongodb2" {
-  name         = "mongodb2"
+  name         = "mongodb${count.index+1}"
   near         = "_agent"
-  service      = "mongodb2"
-
-  failover {
-    nearest_n   = 3
-    datacenters = ["dc1"]
-  }
-}
-resource "consul_prepared_query" "mongodb3" {
-  name         = "mongodb3"
-  near         = "_agent"
-  service      = "mongodb3"
-
-  failover {
-    nearest_n   = 3
-    datacenters = ["dc1"]
-  }
-}
-
-resource "consul_prepared_query" "vault" {
-  name         = "vault"
-  near         = "_agent"
-  service      = "vault"
+  service      = "mongodb${count.index+1}"
 
   failover {
     nearest_n   = 3

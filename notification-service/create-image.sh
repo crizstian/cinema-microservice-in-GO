@@ -4,9 +4,9 @@ docker rm -f notification-service-go:v0.4
 
 docker rmi notification-service-go:v0.4
 
-docker image prune
+docker image prune -f
 
-docker volume prune
+docker volume prune -f
 
 docker build -t notification-service-go:v0.4 .
 

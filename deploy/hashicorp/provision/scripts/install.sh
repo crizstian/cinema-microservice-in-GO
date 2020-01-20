@@ -47,7 +47,7 @@ export CONSUL_VERSION=1.6.1
 curl -sL https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip -o consul.zip
 
 # Install consul
-unzip consul.zip
+sudo unzip consul.zip
 sudo chmod +x consul
 sudo mv consul /usr/bin/consul
 else 
@@ -57,28 +57,43 @@ else
 fi
 
 # Download consul-template
-export CONSUL_TEMPLATE_VERSION=0.22.0
+export CONSUL_TEMPLATE_VERSION=0.24.0
 curl -sL https://releases.hashicorp.com/consul-template/${CONSUL_TEMPLATE_VERSION}/consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip -o consul-template.zip
 
 # Install consul-template
-unzip consul-template.zip
+sudo unzip consul-template.zip
 sudo chmod +x consul-template
 sudo mv consul-template /usr/bin/consul-template
 
 export ENVCONSUL_VERSION=0.9.0
 curl -sL https://releases.hashicorp.com/envconsul/${ENVCONSUL_VERSION}/envconsul_${ENVCONSUL_VERSION}_linux_amd64.zip -o envconsul.zip
-unzip envconsul.zip
-sudo chmod +x consul-template
+sudo unzip envconsul.zip
+sudo chmod +x envconsul
 sudo mv envconsul /usr/bin/envconsul
+
+export CONSUL_REPLICATE_VERSION=0.4.0
+curl -sL https://releases.hashicorp.com/consul-replicate/${CONSUL_REPLICATE_VERSION}/consul-replicate_${CONSUL_REPLICATE_VERSION}_linux_amd64.zip -o consul-replicate.zip
+sudo unzip consul-replicate.zip
+sudo chmod +x consul-replicate
+sudo mv consul-replicate /usr/bin/consul-replicate
 
 # Download nomad
 export NOMAD_VERSION=0.10.1
 curl -sL https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip -o nomad.zip
 
 # Install nomad
-unzip nomad.zip
+sudo unzip nomad.zip
 sudo chmod +x nomad
 sudo mv nomad /usr/bin/nomad
+
+# Download nomad
+export TERRAFORM_VERSION=0.12.19
+curl -sL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
+
+# Install terraform
+sudo unzip terraform.zip
+sudo chmod +x terraform
+sudo mv terraform /usr/bin/terraform
 
 # Install CNI Plugin for Nomad
 curl -sL -L -o cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v0.8.1/cni-plugins-linux-amd64-v0.8.1.tgz
@@ -91,7 +106,7 @@ if [ "$VAULT_ENTERPRISE" != "true" ]; then
     curl -sL https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip -o vault.zip
 
     # Install vault
-    unzip vault.zip
+    sudo unzip vault.zip
     sudo chmod +x vault
     sudo mv vault /usr/bin/vault
 else 
