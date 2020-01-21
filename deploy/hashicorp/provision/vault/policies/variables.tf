@@ -1,6 +1,5 @@
-variable "consul_token" {
-  default = ""
-}
+// variable "consul_token" {
+// }
 
 variable "consul_ip" {
   default = "172.20.20.11:8500"
@@ -20,5 +19,5 @@ variable "dbs" {
 }
 
 variable "infrastructure" {
-  default = ["consul"]
+  default = ["vault-agent"]
 }

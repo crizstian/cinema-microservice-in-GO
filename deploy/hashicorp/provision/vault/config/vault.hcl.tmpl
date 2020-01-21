@@ -11,18 +11,13 @@ storage "consul" {
   address = "{{ env "HOST_IP" }}:8500"
   path    = "vault/"
   service = "vault"
-  #scheme  = "https"
-
-  #tls_ca_file   = "/var/vault/config/ca.crt.pem"
-  #tls_cert_file = "/var/vault/config/server.crt.pem"
-  #tls_key_file  = "/var/vault/config/server.key.pem"
 }
 
 # Listeners config
 listener "tcp" {
     address       = "{{ env "HOST_IP" }}:8200"
-    tls_cert_file = "/var/vault/config/server.crt.pem"
-    tls_key_file  = "/var/vault/config/server.key.pem"
+    tls_cert_file = "{{ env "VAULT_CLIENT_CERT" }}"
+    tls_key_file  = "{{ env "VAULT_CLIENT_KEY" }}"
 }
 
 # Telemetry

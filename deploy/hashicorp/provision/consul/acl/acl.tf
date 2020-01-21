@@ -11,49 +11,49 @@ terraform {
   }
 }
 
-resource "consul_acl_policy" "server-policy" {
-  name        = "server-policy"
-  datacenters = ["dc1", "dc2"]
-  description = "Policy to use for Server capabilities"
-  rules       = <<-RULE
-    node "" {
-      policy = "write"
-    }
-    key_prefix "vault/" { 
-      policy = "write"
-    } 
-    RULE
-}
-
-// resource "consul_acl_policy" "agent-policy" {
-//   name        = "agent-policy"
+// resource "consul_acl_policy" "server-policy" {
+//   name        = "server-policy"
 //   datacenters = ["dc1", "dc2"]
-//   description = "Policy to use for Agent capabilities"
+//   description = "Policy to use for Server capabilities"
 //   rules       = <<-RULE
-//     node "" { 
-//       policy = "write"
-//     } 
-//     agent "" { 
-//       policy = "write"
-//     } 
-//     event "" { 
-//       policy = "write"
-//     } 
-//     key "" { 
-//       policy = "write"
-//     } 
-//     query "" { 
-//       policy = "write"
-//     } 
-//     service "" { 
-//       policy     = "write"
-//       intentions = "write"
-//     } 
-//     session "" { 
+//     node "" {
 //       policy = "write"
 //     }
+//     key_prefix "vault/" { 
+//       policy = "write"
+//     } 
 //     RULE
 // }
+
+resource "consul_acl_policy" "agent-policy" {
+  name        = "agent-policy"
+  datacenters = ["dc1", "dc2"]
+  description = "Policy to use for Agent capabilities"
+  rules       = <<-RULE
+    node "" { 
+      policy = "write"
+    } 
+    agent "" { 
+      policy = "write"
+    } 
+    event "" { 
+      policy = "write"
+    } 
+    key "" { 
+      policy = "write"
+    } 
+    query "" { 
+      policy = "write"
+    } 
+    service "" { 
+      policy     = "write"
+      intentions = "write"
+    } 
+    session "" { 
+      policy = "write"
+    }
+  RULE
+}
 
 // resource "consul_acl_policy" "anonymous-policy" {
 //   name        = "anonymous-policy"
@@ -85,22 +85,22 @@ resource "consul_acl_policy" "server-policy" {
 //   RULE
 // }
 
-// resource "consul_acl_policy" "sensitve-policy" {
-//   name        = "sensitve-policy"
-//   datacenters = ["dc1", "dc2"]
-//   description = "Policy to use to get access to sensitve capabilities"
-//   rules       = <<-RULE
-//     key_prefix "cluster/consul/" {
-//       policy = "write"
-//     }
-//     key_prefix "vault/" {
-//       policy = "write"
-//     }
-//     acl      = "write"
-//     keyring  = "write"
-//     operator = "write"
-//     RULE
-// }
+resource "consul_acl_policy" "sensitve-policy" {
+  name        = "sensitve-policy"
+  datacenters = ["dc1", "dc2"]
+  description = "Policy to use to get access to sensitve capabilities"
+  rules       = <<-RULE
+    key_prefix "cluster/consul/" {
+      policy = "write"
+    }
+    key_prefix "vault/" {
+      policy = "write"
+    }
+    acl      = "write"
+    keyring  = "write"
+    operator = "write"
+  RULE
+}
 
 // resource "consul_acl_policy" "blocking-policy" {
 //   name        = "blocking-policy"
