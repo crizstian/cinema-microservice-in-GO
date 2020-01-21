@@ -427,7 +427,7 @@ root@dc1-consul-server:/vagrant/provision/vault/policies# cat /var/log/vault-age
 
 and since we are running the `vault agent` in the same vm where the `vault server` is running, we have set the vault agent address to `8007` so it doesnt collide with `8200`.
 
-With all the vault configurations already in place we can now start reviewing the Consul Configurations.
+With all vault configurations already in place we can now start reviewing the Consul Configurations.
 
 
 ## Hashicorp Consul Configuration
