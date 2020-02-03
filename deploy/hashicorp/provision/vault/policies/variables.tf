@@ -1,6 +1,3 @@
-// variable "consul_token" {
-// }
-
 variable "consul_ip" {
   default = "172.20.20.11:8500"
 }

@@ -8,9 +8,10 @@ cluster_addr = "https://{{ env "HOST_IP" }}:8201"
 
 # Storage config
 storage "consul" {
-  address = "{{ env "HOST_IP" }}:8500"
+  address = "{{ env "HOST_IP" }}:{{ env "CONSUL_PORT" }}"
   path    = "vault/"
   service = "vault"
+  scheme  = "{{ env "CONSUL_SCHEME" }}"
 }
 
 # Listeners config

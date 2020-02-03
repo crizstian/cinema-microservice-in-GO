@@ -21,16 +21,6 @@ resource "vault_policy" "infrastructure-policy" {
 
   name = "${var.infrastructure[count.index]}-policy"
 
-  policy = <<EOT
-    # Permits token creation
-    path "auth/token/create" {
-      capabilities = ["update"]
-    }
-    
-    # Permits consul token creation
-    path "consul/creds/*" {
-      capabilities = ["read"]
-    }
-  EOT
+  policy = vault_policy.provisioner-policy.policy
 }
 

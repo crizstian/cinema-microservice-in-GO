@@ -81,6 +81,11 @@ resource "vault_policy" "provisioner-policy" {
     {
       capabilities = ["read"]
     }
+    # List auth methods
+    path "sys/mounts"
+    {
+      capabilities = ["read"]
+    }
 
     # List existing policies
     path "sys/policies/acl"
@@ -90,6 +95,11 @@ resource "vault_policy" "provisioner-policy" {
 
     # Create and manage ACL policies via API & UI
     path "sys/policies/acl/*"
+    {
+      capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+    }
+    
+    path "consul/*"
     {
       capabilities = ["create", "read", "update", "delete", "list", "sudo"]
     }

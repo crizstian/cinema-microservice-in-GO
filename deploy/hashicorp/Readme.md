@@ -1,7 +1,5 @@
 # Cinemas Microservice in Go (Project)
 
-
-
 This project consist on the following components:
 
 ```
@@ -432,6 +430,224 @@ With all vault configurations already in place we can now start reviewing the Co
 
 ## Hashicorp Consul Configuration
 
+Now is the turn to setup consul, what we are going to do with consul are the following actions:
+
+- enable Consul ACL System
+  - bootstrap the acl system
+  - create acl policies
+  - consul token vault integration
+- Review Consul Checks
+- Review Consul Watches
+- Review Consul KV Store
+  - Consul Replicate
+  - Consul Template
+  - Consul EnvConsul
+- Review Consul Federation
+- Create Consul Prepared Queries
+- Create Consul Intentions
+- Review and implement Consul Central Configurations (Service Mesh)
+  - Consul Failover
+  - Consul Mesh Gateway
+  - Consul Traffic Management
+    - Traffic Resolver
+    - Traffic Splitter
+    - Traffic Shifting
+  - Consul Metrics
+
+### **Step 5** Enable Consul ACL System
+
+Consul provides an optional Access Control List (ACL) system which can be used to control access to data and APIs. The ACL is Capability-based, relying on tokens which are associated with policies to determine which fine grained rules can be applied.
+
+In order to bootstrap the Consul ACL we need to execute the following command:
+```
+root@dc1-consul-server:/vagrant/provision/vault/policies# bash /vagrant/provision/consul/acl/bootstrap.sh
+
+Bootstrap Consul ACL System
+...
+Setting Consul Root Token
+CONSUL_HTTP_TOKEN=85e90298-3038-fa68-1c3c-1adbd80f0fc4 consul acl set-agent-token default 85e90298-3038-fa68-1c3c-1adbd80f0fc4
+...
+ACL token "default" set successfully
+Success! Data written to: cluster/consul/rootToken
+```
+
+So now that we have the ACL system enabled we can create the consul policies and then generate the required tokens. For the token consul token creation, we are going to make use of the vault and its vault agent. 
+
+First we need to execute the terraform code to create the consul policies:
+
+```
+root@dc1-consul-server:/vagrant/provision/vault/policies# cd ../../consul/acl/
+
+root@dc1-consul-server:/vagrant/provision/consul/acl# terraform init
+
+Initializing the backend...
+
+Initializing provider plugins...
+
+* provider.consul: version = "~> 2.6"
+
+Terraform has been successfully initialized!
+```
+
+```
+root@dc1-consul-server:/vagrant/provision/consul/acl# terraform plan
+...
+
+Plan: 2 to add, 0 to change, 0 to destroy.
+
+root@dc1-consul-server:/vagrant/provision/consul/acl# terraform apply -auto-approve
+
+consul_acl_policy.agent-policy: Creating...
+consul_acl_policy.sensitve-policy: Creating...
+consul_acl_policy.sensitve-policy: Creation complete after 0s [id=a05d20c1-68b6-1dda-415e-7c7bb15488d6]
+consul_acl_policy.agent-policy: Creation complete after 0s [id=eb5da368-0b0a-cdd6-e544-115e93397230]
+
+Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
+```
+
+Now we can verify the generated consul policies by executing the following command:
+
+```
+root@dc1-consul-server:/vagrant/provision/consul/acl# consul acl policy list
+global-management:
+   ID:           00000000-0000-0000-0000-000000000001
+   Description:  Builtin Policy that grants unlimited access
+   Datacenters:
+sensitve-policy:
+   ID:           a05d20c1-68b6-1dda-415e-7c7bb15488d6
+   Description:  Policy to use to get access to sensitve capabilities
+   Datacenters:  dc2, dc1
+agent-policy:
+   ID:           eb5da368-0b0a-cdd6-e544-115e93397230
+   Description:  Policy to use for Agent capabilities
+   Datacenters:  dc2, dc1
+```
+
+### **Step 6** Integrate Consul ACL Token generation with Vault
+
+Next we need to create the consul token and attach the consul policies to it, and we are going to do it with `terraform vault provider` with this we are going to leverage the token management to vault and then we are going to use vault agent to rotate this consul tokens. Since every token in vault has ttl and max ttl and consul has the ability to implement health checks, so consul will be checking its own token with this by reading the token accessor information so when the token is going to expire soon we will change the token status in the consul kv store where it has the information of the consul token, and the a consul watch will trigger this token rotation by calling the vault agent, the vault agent will be smart enough when this rotation will be executed.
+
+So now we need to add the consul configuration for the vault-terraform provider that looks like the following:
+
+```
+variable "consul_token" {}
+
+resource "vault_consul_secret_backend" "consul" {
+  path        = "consul"
+  description = "Manages the Consul backend"
+
+  address = var.consul_ip
+  token   = var.consul_token
+  scheme  = "http"
+}
+
+resource "vault_generic_endpoint" "server-consul-token" {
+  depends_on           = [vault_consul_secret_backend.consul]
+  path                 = "consul/roles/server"
+  ignore_absent_fields = true
+
+  data_json = <<EOT
+{
+  "token_type": "client",
+  "policies": ["server-role"]
+}
+EOT
+}
+```
+
+for full file details please check `deploy/hashicorp/provision/vault/policies/consul.tf`
+
+when we do the `terraform plan` and `terraform apply` terraform is going to ask for the consul-token value, we need to provide the consul root token in order that vault can generate consul tokens; the consul token was generated and stored in the acl bootstrap step; so we can get the root token from the consul kv store under the path `cluster/consul/rootToken` and use it in this terraform step and you will see something like the following:
+
+```
+root@dc1-consul-server:/vagrant/provision/vault/policies# terraform plan
+var.consul_token
+  Enter a value: 85e90298-3038-fa68-1c3c-1adbd80f0fc4
+
+Refreshing Terraform state in-memory prior to plan...
+The refreshed state will be used to calculate this plan, but will not be
+persisted to local or remote state storage.
+
+vault_policy.apps-policy[1]: Refreshing state... [id=payment-service-policy]
+vault_policy.apps-policy[0]: Refreshing state... [id=booking-service-policy]
+vault_policy.admin-policy: Refreshing state... [id=admin-policy]
+...
+...
+vault_approle_auth_backend_role_secret_id.apps-secret[1]: Refreshing state... [id=backend=approle::role=payment-service-role::accessor=0bcd4e4d-2cd2-dbac-b2c0-a4926d578b58]
+vault_approle_auth_backend_role_secret_id.apps-secret[0]: Refreshing state... [id=backend=approle::role=booking-service-role::accessor=19946585-ea7e-384a-26ff-2ed1788b2af5]
+...
+...
+consul_keys.apps-secret-id[3]: Refreshing state... [id=consul]
+consul_keys.apps-secret-id[2]: Refreshing state... [id=consul]
+
+------------------------------------------------------------------------
+
+An execution plan has been generated and is shown below.
+Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # vault_consul_secret_backend.consul will be created
+  + resource "vault_consul_secret_backend" "consul" {
+      + address                   = "172.20.20.11:8500"
+      + default_lease_ttl_seconds = 0
+      + description               = "Manages the Consul backend"
+      + id                        = (known after apply)
+      + max_lease_ttl_seconds     = 0
+      + path                      = "consul"
+      + scheme                    = "http"
+      + token                     = (sensitive value)
+    }
+
+  # vault_generic_endpoint.server-consul-token will be created
+  + resource "vault_generic_endpoint" "server-consul-token" {
+      + data_json            = (sensitive value)
+      + disable_delete       = false
+      + disable_read         = false
+      + id                   = (known after apply)
+      + ignore_absent_fields = true
+      + path                 = "consul/roles/server"
+      + write_data           = (known after apply)
+      + write_data_json      = (known after apply)
+    }
+
+Plan: 2 to add, 0 to change, 0 to destroy.
+```
+
+and once applied you will see the following message:
+
+```
+root@dc1-consul-server:/vagrant/provision/vault/policies# terraform apply -auto-approve
+...
+...
+vault_consul_secret_backend.consul: Creating...
+vault_consul_secret_backend.consul: Creation complete after 0s [id=consul]
+vault_generic_endpoint.server-consul-token: Creating...
+vault_generic_endpoint.server-consul-token: Creation complete after 0s [id=consul/roles/server]
+
+null_resource.set-consul-token: Refreshing state... [id=5616405690610556659]
+null_resource.set-consul-token: Destroying... [id=5616405690610556659]
+vault_generic_endpoint.server-consul-token: Modifying... [id=consul/roles/server]
+vault_generic_endpoint.server-consul-token: Modifications complete after 0s [id=consul/roles/server]
+null_resource.set-consul-token: Destruction complete after 0s
+data.vault_generic_secret.server-consul-token: Refreshing state...
+consul_keys.server-consul-token: Modifying... [id=consul]
+consul_keys.server-consul-token: Modifications complete after 0s [id=consul]
+null_resource.set-consul-token: Creating...
+null_resource.set-consul-token: Provisioning with 'local-exec'...
+null_resource.set-consul-token (local-exec): Executing: ["/bin/sh" "-c" "CONSUL_HTTP_TOKEN=9b360af7-bc84-3a7b-4a4e-84461930a52b consul acl set-agent-token default 9b360af7-bc84-3a7b-4a4e-84461930a52b"]
+null_resource.set-consul-token (local-exec): ACL token "default" set successfully
+
+Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
+```
+
+Note: *remember to load env vars into current bash session: `source /etc/environment` in order to have vault token loaded in the shell session, becuase terraform will need it to configure this vault-consul implementation.*
+
+With this terraform code we have stored all consul-token information necessary so that the health check implement for the consul token can be constantly looking if a renewal process is needed; once the health check mark that the token is going to expire soon; a consul watch event is triggered and executes the same terraform code that we execute in step-6 but this time consul is calling the vault-agent which is the responsible to re-generate the consul token; and this vault-agent has only read privileges for all vault actions and all privileges for consul token creation.
+
+
+### **Step 7** Consul Health Checks / Consul Watches (informative only)
 
 ## Hashicorp Nomad Configuration
 

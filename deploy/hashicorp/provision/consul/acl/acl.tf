@@ -11,20 +11,6 @@ terraform {
   }
 }
 
-// resource "consul_acl_policy" "server-policy" {
-//   name        = "server-policy"
-//   datacenters = ["dc1", "dc2"]
-//   description = "Policy to use for Server capabilities"
-//   rules       = <<-RULE
-//     node "" {
-//       policy = "write"
-//     }
-//     key_prefix "vault/" { 
-//       policy = "write"
-//     } 
-//     RULE
-// }
-
 resource "consul_acl_policy" "agent-policy" {
   name        = "agent-policy"
   datacenters = ["dc1", "dc2"]
@@ -55,42 +41,45 @@ resource "consul_acl_policy" "agent-policy" {
   RULE
 }
 
-// resource "consul_acl_policy" "anonymous-policy" {
-//   name        = "anonymous-policy"
-//   datacenters = ["dc1", "dc2"]
-//   description = "Policy to use for read only capabilities"
-//   rules       = <<-RULE
-//     node "" { 
-//       policy = "read"
-//     } 
-//     agent "" { 
-//       policy = "read"
-//     } 
-//     event "" { 
-//       policy = "read"
-//     } 
-//     key "" { 
-//       policy = "read"
-//     } 
-//     query "" { 
-//       policy = "read"
-//     } 
-//     service "" { 
-//       policy     = "read"
-//       intentions = "deny"
-//     } 
-//     session "" { 
-//       policy = "read"
-//     }
-//   RULE
-// }
-
-resource "consul_acl_policy" "sensitve-policy" {
-  name        = "sensitve-policy"
+resource "consul_acl_policy" "anonymous-policy" {
+  name        = "anonymous-policy"
   datacenters = ["dc1", "dc2"]
-  description = "Policy to use to get access to sensitve capabilities"
+  description = "Policy to use for read only capabilities"
+  rules       = <<-RULE
+    node "" { 
+      policy = "read"
+    } 
+    agent "" { 
+      policy = "read"
+    } 
+    event "" { 
+      policy = "read"
+    } 
+    key "" { 
+      policy = "read"
+    } 
+    query "" { 
+      policy = "read"
+    } 
+    service "" { 
+      policy     = "read"
+      intentions = "deny"
+    } 
+    session "" { 
+      policy = "read"
+    }
+  RULE
+}
+
+resource "consul_acl_policy" "sensitive-policy" {
+  name        = "sensitive-policy"
+  datacenters = ["dc1", "dc2"]
+  description = "Policy to use to get access to sensitive capabilities"
   rules       = <<-RULE
     key_prefix "cluster/consul/" {
+      policy = "write"
+    }
+    key_prefix "cluster/vault/" {
       policy = "write"
     }
     key_prefix "vault/" {
@@ -102,51 +91,22 @@ resource "consul_acl_policy" "sensitve-policy" {
   RULE
 }
 
-// resource "consul_acl_policy" "blocking-policy" {
-//   name        = "blocking-policy"
-//   datacenters = ["dc1", "dc2"]
-//   description = "Policy to use for blocking access to restricted operations"
-//   rules       = <<-RULE
-//     key_prefix "cluster/consul/" {
-//       policy = "deny"
-//     }
-//     key_prefix "vault/" {
-//       policy = "deny"
-//     }
-//     acl      = "deny"
-//     keyring  = "deny"
-//     operator = "deny"
-//     RULE
-// }
-
-
-
-// resource "consul_acl_policy" "agent-prefix-policy" {
-//   name        = "agent-prefix-policy"
-//   datacenters = ["dc1", "dc2"]
-//   description = "Policy to use for Agent capabilities"
-//   rules       = <<-RULE
-//     node_prefix "" { 
-//       policy = "write"
-//     } 
-//     agent_prefix "" { 
-//       policy = "write"
-//     } 
-//     event_prefix "" { 
-//       policy = "write"
-//     } 
-//     key_prefix "" { 
-//       policy = "write"
-//     } 
-//     query_prefix "" { 
-//       policy = "write"
-//     } 
-//     service_prefix "" { 
-//       policy     = "write"
-//       intentions = "write"
-//     } 
-//     session_prefix "" { 
-//       policy = "write"
-//     }
-//     RULE
-// }
+resource "consul_acl_policy" "blocking-policy" {
+  name        = "blocking-policy"
+  datacenters = ["dc1", "dc2"]
+  description = "Policy to use for blocking access to restricted operations"
+  rules       = <<-RULE
+    key_prefix "cluster/consul/" {
+      policy = "deny"
+    }
+    key_prefix "cluster/vault/" {
+      policy = "deny"
+    }
+    key_prefix "vault/" {
+      policy = "deny"
+    }
+    acl      = "deny"
+    keyring  = "deny"
+    operator = "deny"
+    RULE
+}
