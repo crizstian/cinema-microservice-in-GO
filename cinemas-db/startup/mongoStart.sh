@@ -1,7 +1,8 @@
 #!bin/bash
 
-if [ "$ENABLE_CA_CERT" == "true" ]; then
+if [ "$CONSUL_HTTP_SSL" == "true" ]; then
   curl_ssl="--cacert ${CA_CERT_FILE}"
+  ctmpl_ssl="-ca-file=${CA_CERT_FILE}"
 fi
 
 status=`curl $curl_ssl -s -X GET $CONSUL_SCHEME://${CONSUL_IP}:$CONSUL_PORT/v1/kv/cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/initMongo | jq  -r '.[].Value'| base64 -d -`
@@ -12,7 +13,7 @@ if [ -z "$status" ];  then
   echo "Init Mongo Replica"
 
 
-  for server in "mongodb1" "mongodb2"
+  for server in "mongodb1" "mongodb2" "mongodb3"
   do
     echo "Checking status of mongo cluster members"
     until curl -s $curl_ssl $CONSUL_SCHEME://${CONSUL_IP}:$CONSUL_PORT/v1/kv/cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/${server} | jq -r '.[].Value' | base64 -d - | grep -q started; do

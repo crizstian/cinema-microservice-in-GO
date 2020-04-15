@@ -31,9 +31,24 @@ sudo cp /vagrant/provision/scripts/env.$1.sh /etc/environment
 
 # Setup Restart daemons
 sudo systemctl daemon-reload
+echo "Restarting Consul"
 sudo service consul restart
+sudo service consul status
+sudo cat /var/log/consul.log
+
+echo "Waiting for Consul leader to bootstrap ACL System"
+sudo bash /vagrant/provision/consul/system/wait-consul-leader.sh
+
+# echo "Bootstraping ACL System"
+sudo bash /vagrant/provision/consul/acl/bootstrap.sh
+
+echo "Restarting Nomad and Vault"
 sudo service vault restart
 sudo service nomad restart
+
+echo "Unsealing Vault ..."
+sudo bash /vagrant/provision/vault/system/unseal.sh
+
 sudo service docker restart
-sudo service csreplicate restart
+sudo service csreplicate stop
 sudo service vaultagent stop

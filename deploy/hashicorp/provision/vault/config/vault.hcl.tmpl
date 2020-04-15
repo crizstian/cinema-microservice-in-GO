@@ -12,6 +12,9 @@ storage "consul" {
   path    = "vault/"
   service = "vault"
   scheme  = "{{ env "CONSUL_SCHEME" }}"
+  tls_ca_file  = "{{ env "CONSUL_CACERT" }}"
+
+  token   = "{{ env "CONSUL_HTTP_TOKEN" }}"
 }
 
 # Listeners config

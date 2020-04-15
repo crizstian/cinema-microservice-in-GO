@@ -43,7 +43,7 @@ END
 
 if [ "$CONSUL_ENTERPRISE" != "true"]; then
 # Download consul
-export CONSUL_VERSION=1.6.1
+export CONSUL_VERSION=1.7.2
 curl -sL https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip -o consul.zip
 
 # Install consul
@@ -78,7 +78,7 @@ sudo chmod +x consul-replicate
 sudo mv consul-replicate /usr/bin/consul-replicate
 
 # Download nomad
-export NOMAD_VERSION=0.10.1
+export NOMAD_VERSION=0.11.0
 curl -sL https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip -o nomad.zip
 
 # Install nomad
@@ -95,10 +95,15 @@ sudo unzip terraform.zip
 sudo chmod +x terraform
 sudo mv terraform /usr/bin/terraform
 
-# Install CNI Plugin for Nomad
+# Download CNI Plugin
 curl -sL -L -o cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v0.8.1/cni-plugins-linux-amd64-v0.8.1.tgz
+
+# Install CNI Plugin
 sudo mkdir -p /opt/cni/bin
 sudo tar -C /opt/cni/bin -xzf cni-plugins.tgz
+sudo echo 1 > /proc/sys/net/bridge/bridge-nf-call-arptables
+sudo echo 1 > /proc/sys/net/bridge/bridge-nf-call-ip6tables
+sudo echo 1 > /proc/sys/net/bridge/bridge-nf-call-iptables
 
 # Download vault
 if [ "$VAULT_ENTERPRISE" != "true" ]; then

@@ -17,6 +17,8 @@ job "cinemas" {
         DB_SERVERS   = "mongodb1.service.consul:27017,mongodb2.service.consul:27018,mongodb3.service.consul:27019"
         SERVICE_PORT = "3000"
         CONSUL_IP    = "172.20.20.11"
+        CONSUL_SCHEME = "http"
+        CONSUL_HTTP_SSL = "false"
       }
 
       resources {
@@ -27,11 +29,23 @@ job "cinemas" {
 
     network {
       mode = "bridge"
+      port "http" {
+        to = 3000
+      }
     }
 
     service {
       name = "payment-api"
-      port = "3000"
+      port = "http"
+      tags = ["cinemas-project"]
+
+      check {
+        type     = "http"
+        port     = "http"
+        path     = "/ping"
+        interval = "5s"
+        timeout  = "2s"
+      }
 
       connect {
         sidecar_service {}
@@ -51,6 +65,8 @@ job "cinemas" {
       env {
         SERVICE_PORT = "3001"
         CONSUL_IP    = "172.20.20.11"
+        CONSUL_SCHEME = "http"
+        CONSUL_HTTP_SSL = "false"
       }
 
       resources {
@@ -61,11 +77,23 @@ job "cinemas" {
 
     network {
       mode = "bridge"
+      port "http" {
+        to = 3001
+      }
     }
 
     service {
       name = "notification-api"
-      port = "3001"
+      port = "http"
+      tags = ["cinemas-project"]
+
+      check {
+        type     = "http"
+        port     = "http"
+        path     = "/ping"
+        interval = "5s"
+        timeout  = "2s"
+      }
 
       connect {
         sidecar_service {}
@@ -89,6 +117,8 @@ job "cinemas" {
         DB_SERVERS       = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
         PAYMENT_URL      = "http://${NOMAD_UPSTREAM_ADDR_payment_api}"
         NOTIFICATION_URL = "http://${NOMAD_UPSTREAM_ADDR_notification_api}"
+        CONSUL_SCHEME = "http"
+        CONSUL_HTTP_SSL = "false"
       }
 
       resources {
@@ -107,7 +137,16 @@ job "cinemas" {
 
     service {
       name = "booking-api"
-      port = "3002"
+      port = "http"
+      tags = ["cinemas-project"]
+
+      check {
+        type     = "http"
+        port     = "http"
+        path     = "/ping"
+        interval = "5s"
+        timeout  = "2s"
+      }
 
       connect {
         sidecar_service {

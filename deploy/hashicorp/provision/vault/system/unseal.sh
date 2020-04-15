@@ -5,18 +5,22 @@ set -e
 
 . /etc/environment
 
+if [ "$CONSUL_HTTP_SSL" == "true" ]; then
+  curl_ssl="--cacert ${CONSUL_CACERT}"
+fi
+
 vault_url="$VAULT_ADDR/v1/sys"
 rootToken=""
 
 function vaultConfig {
-  echo "curl -s --cacert /var/vault/config/ca.crt.pem $vault_url/init"
-  isInitialized=`curl -s --cacert /var/vault/config/ca.crt.pem $vault_url/init | jq .initialized`
-  echo $isInitialized
+  echo "curl -s --cacert $VAULT_CACERT $vault_url/init"
+  isInitialized=`curl -s --cacert $VAULT_CACERT $vault_url/init | jq .initialized`
+  echo "Response of initialization: $isInitialized"
 
   if [ "$isInitialized" == "false" ];  then
 
-    echo "curl -s --cacert /var/vault/config/ca.crt.pem -X PUT -H Content-Type: application/json -d {secret_shares:5,secret_threshold:5} $vault_url/init"
-    initVaultResponse=`curl -s --cacert /var/vault/config/ca.crt.pem -X PUT -H "Content-Type: application/json" -d '{"secret_shares":5,"secret_threshold":5}' $vault_url/init`
+    echo "curl -s --cacert $VAULT_CACERT -X PUT -H Content-Type: application/json -d {secret_shares:5,secret_threshold:5} $vault_url/init"
+    initVaultResponse=`curl -s --cacert $VAULT_CACERT -X PUT -H "Content-Type: application/json" -d '{"secret_shares":5,"secret_threshold":5}' $vault_url/init`
     echo $initVaultResponse
     error=`echo $initVaultResponse | jq .errors`
 
@@ -32,23 +36,29 @@ function vaultConfig {
     vaultConsulKV "file" "cluster/vault/unsealKeys"
     vaultConsulKV $rootToken "cluster/vault/rootToken"
 
-    echo "export VAULT_TOKEN=$rootToken" >> /etc/environment
-
     rm file.json
 
     unsealVault "${keys[@]}"
 
-  else
+  elif [ "$isInitialized" == "true" ]; then
     echo "Already initialized"
-    keysFromConsul=`curl -s -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/unsealKeys | jq -r '.[].Value' | base64 -d -`
+    keysFromConsul=`curl -s $curl_ssl -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/unsealKeys | jq -r '.[].Value' | base64 -d -`
+    rootToken=`curl -s $curl_ssl -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/rootToken | jq -r '.[].Value' | base64 -d -`
     unsealVault "${keysFromConsul[@]}"
+  else 
+    echo "an unexpected error happened"
+    exit -1
   fi
+
+  sed -i '/VAULT_TOKEN/d' /etc/environment
+  echo "export VAULT_TOKEN=$rootToken" >> /etc/environment
+
 }
 
 function isSealed {
     echo "https://$1:8200/v1/sys"
     vault_url="https://$1:8200/v1/sys"
-    response=`curl -s --cacert /var/vault/config/ca.crt.pem $vault_url/seal-status | jq .sealed`
+    response=`curl -s --cacert $VAULT_CACERT $vault_url/seal-status | jq .sealed`
     echo $response
     if [ "$response" == "true" ]; then
       return 1
@@ -62,8 +72,8 @@ function unsealVault {
   keysCount=`echo $keys | jq '. | length'`
 
   if [ $keysCount > 0 ]; then
-    echo "curl -s --cacert /var/vault/config/ca.crt.pem $CONSUL_HTTP_ADDR/v1/catalog/service/vault"
-    servers=`curl -s --cacert /var/vault/config/ca.crt.pem $CONSUL_HTTP_ADDR/v1/catalog/service/vault`
+    echo "curl -s $curl_ssl -H X-Consul-Token: $CONSUL_HTTP_TOKEN $CONSUL_HTTP_ADDR/v1/catalog/service/vault"
+    servers=`curl -s $curl_ssl -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" $CONSUL_HTTP_ADDR/v1/catalog/service/vault`
     serversCount=`echo $servers | jq '. | length'`
     echo $servers
     
@@ -74,13 +84,13 @@ function unsealVault {
       while true; do
         echo "https://$server:8200/v1/sys"
         vault_url="https://$server:8200/v1/sys"
-        r=`curl -s --cacert /var/vault/config/ca.crt.pem $vault_url/seal-status | jq .sealed`
+        r=`curl -s --cacert $VAULT_CACERT $vault_url/seal-status | jq .sealed`
         echo $r
         if [ "$r" == "true" ];  then
           for j in in $(seq 1 $keysCount); do
             key=`echo $keys | jq .[$((j-1))]`
             
-            command="curl -s --cacert /var/vault/config/ca.crt.pem -X PUT -H 'Content-Type: application/json' -d '{\"key\":$key}' https://${server}:8200/v1/sys/unseal"
+            command="curl -s --cacert $VAULT_CACERT -X PUT -H 'Content-Type: application/json' -d '{\"key\":$key}' https://${server}:8200/v1/sys/unseal"
             request=`eval $command`
             ur=`echo $request | jq .sealed`
             if [ "$ur" == "true" ];  then
@@ -105,7 +115,7 @@ function unsealVault {
 function unsealServer {
   server=$1
   key=$2
-  command="curl -s --cacert /var/vault/config/ca.crt.pem -X PUT -H 'Content-Type: application/json' -d '{\"key\":$key}' https://${server}:8200/v1/sys/unseal"
+  command="curl -s --cacert $VAULT_CACERT -X PUT -H 'Content-Type: application/json' -d '{\"key\":$key}' https://${server}:8200/v1/sys/unseal"
   request=`eval $command`
   response=`echo $request | jq .sealed`
   if [ "$response" == "true" ]; then
@@ -123,16 +133,16 @@ function vaultConsulKV {
   path=$2
   url="$CONSUL_HTTP_ADDR/v1/kv/$path"
   if [ "$data" == "file" ]; then
-   curl -s --request PUT -H "Content-Type: application/json" --data @file.json $url
+   curl -s $curl_ssl --request PUT -H "Content-Type: application/json" -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" --data @file.json $url
   else
-   curl -s --request PUT -H "Content-Type: application/json" --data $data $url
+   curl -s $curl_ssl --request PUT -H "Content-Type: application/json" -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" --data $data $url
   fi
 }
 
 function main {
   
-  echo "curl -s -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal"
-  vaultStart=`curl -s -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal | jq  -r '.[].Value'| base64 -d -`
+  echo "curl -s $curl_ssl -H X-Consul-Token: $CONSUL_HTTP_TOKEN -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal"
+  vaultStart=`curl -s $curl_ssl -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal | jq  -r '.[].Value'| base64 -d -`
   echo $vaultStart
 
   if [ -z "$vaultStart" ];  then

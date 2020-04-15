@@ -30,6 +30,11 @@ consul {
     auto_advertise      = true
     server_auto_join    = true
     client_auto_join    = true
+
+    ca_file = "{{ env "CONSUL_CACERT" }}"
+    ssl     = {{ env "CONSUL_SSL" }}
+    
+    token   = "{{ env "CONSUL_HTTP_TOKEN" }}"
 }
 
 server {
@@ -41,10 +46,10 @@ tls {
     http = true
     rpc  = true
 
-    ca_file    = "/var/vault/config/ca.crt.pem"
-    cert_file  = "/var/vault/config/server.crt.pem"
-    key_file   = "/var/vault/config/server.key.pem"
+    ca_file    = "{{ env "NOMAD_CACERT" }}"
+    cert_file  = "{{ env "NOMAD_CLIENT_CERT" }}"
+    key_file   = "{{ env "NOMAD_CLIENT_KEY" }}"
 
-    verify_https_client    = true
+    verify_https_client    = false
     verify_server_hostname = true
 }

@@ -7,9 +7,9 @@ ctmpl_ssl=
 echo "Proceeding with startup..."
 /var/tmp/start/startWithConfig.sh & 
 
-echo "is ENABLE_CA_CERT = $ENABLE_CA_CERT"
+echo "is CONSUL_HTTP_SSL = $CONSUL_HTTP_SSL"
 
-if [ "$ENABLE_CA_CERT" == "true" ]; then
+if [ "$CONSUL_HTTP_SSL" == "true" ]; then
   curl_ssl="--cacert ${CA_CERT_FILE}"
   ctmpl_ssl="-ca-file=${CA_CERT_FILE}"
 fi

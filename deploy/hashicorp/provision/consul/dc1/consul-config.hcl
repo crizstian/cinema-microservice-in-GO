@@ -13,8 +13,8 @@ client_addr = "0.0.0.0"
 
 ports {
   grpc  = 8502
-  https = -1
-  http  = 8500
+  https = 8500
+  http  = -1
 }
 
 advertise_addr     = "172.20.20.11"
@@ -28,26 +28,26 @@ connect {
 
 acl = {
   enabled        = true
-  default_policy = "allow"
+  default_policy = "deny"
   down_policy    = "extend-cache"
 }
 
-# verify_incoming        = false
-# verify_incoming_rpc    = true
-# verify_outgoing        = true
-# verify_server_hostname = true
+verify_incoming        = false
+verify_incoming_rpc    = false
+verify_outgoing        = true
+verify_server_hostname = true
 
-# auto_encrypt = {
-#   allow_tls = true
-# }
+// auto_encrypt = {
+//   allow_tls = true
+// }
 
-# ca_file    = "/var/vault/config/ca.crt.pem"
-# cert_file  = "/var/vault/config/server.crt.pem"
-# key_file   = "/var/vault/config/server.key.pem"
+ca_file    = "/var/vault/config/ca.crt.pem"
+cert_file  = "/var/vault/config/server.crt.pem"
+key_file   = "/var/vault/config/server.key.pem"
 
 encrypt = "apEfb4TxRk3zGtrxxAjIkwUOgnVkaD88uFyMGHqKjIw="
-# encrypt_verify_incoming = true
-# encrypt_verify_outgoing = true
+encrypt_verify_incoming = true
+encrypt_verify_outgoing = true
 
 telemetry = {
   dogstatsd_addr   = "10.0.2.15:8125"
