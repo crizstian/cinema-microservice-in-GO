@@ -14,9 +14,10 @@ rootToken=""
 
 function vaultConfig {
   echo "curl -s --cacert $VAULT_CACERT $vault_url/init"
-  isInitialized=`curl -s --cacert $VAULT_CACERT $vault_url/init | jq .initialized`
-  echo "Response of initialization: $isInitialized"
+  initResponse=`curl -s --cacert $VAULT_CACERT $vault_url/init`
+  echo "Response of initialization: $initResponse"
 
+  isInitialized=`echo $initResponse | jq .initialized`
   if [ "$isInitialized" == "false" ];  then
 
     echo "curl -s --cacert $VAULT_CACERT -X PUT -H Content-Type: application/json -d {secret_shares:5,secret_threshold:5} $vault_url/init"
@@ -143,7 +144,7 @@ function main {
   
   echo "curl -s $curl_ssl -H X-Consul-Token: $CONSUL_HTTP_TOKEN -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal"
   vaultStart=`curl -s $curl_ssl -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal | jq  -r '.[].Value'| base64 -d -`
-  echo $vaultStart
+  echo "Response from consul kv / unsealVault value: $vaultStart"
 
   if [ -z "$vaultStart" ];  then
     echo "STARTING TO UNSEAL VAULT"

@@ -45,9 +45,13 @@ sudo bash /vagrant/provision/consul/acl/bootstrap.sh
 echo "Restarting Nomad and Vault"
 sudo service vault restart
 sudo service nomad restart
+sudo service vault status
+sudo cat /var/log/vault.log
 
 echo "Waiting for Consul leader to unseal Vault"
 sudo bash /vagrant/provision/consul/system/wait-consul-leader.sh
+echo "Waiting for Vault leader to unseal the cluster"
+sudo bash /vagrant/provision/vault/system/wait-vault-leader.sh
 
 echo "Unsealing Vault ..."
 sudo bash /vagrant/provision/vault/system/unseal.sh

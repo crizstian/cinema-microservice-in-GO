@@ -14,6 +14,6 @@ while true; do
     echo "Consul leader already selected [$LEADER_IP]."
     break
   fi
-  echo "Waiting for cluster leader..."
+  echo "Waiting for consul cluster leader..."
   sleep 10
 done
