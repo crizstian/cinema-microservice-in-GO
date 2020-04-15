@@ -13,13 +13,6 @@ SuccessExitStatus=0 SIGINT
 KillSignal=SIGINT
 ExecStart=/bin/bash /vagrant/provision/nomad/system/nomad-service.sh
 ExecStopPost=/bin/sleep 15
-Environment="CONSUL_SCHEME=https"
-Environment="CONSUL_PORT=8500"
-Environment="CONSUL_HTTP_ADDR=${CONSUL_SCHEME}://${HOST_IP}:${CONSUL_PORT}"
-Environment="CONSUL_CACERT=/var/vault/config/ca.crt.pem"
-Environment="CONSUL_CLIENT_CERT=/var/vault/config/server.crt.pem"
-Environment="CONSUL_CLIENT_KEY=/var/vault/config/server.key.pem"
-Environment="CONSUL_HTTP_SSL=true"
 
 [Install]
 WantedBy=multi-user.target

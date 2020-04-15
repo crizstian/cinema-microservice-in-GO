@@ -13,8 +13,8 @@ client_addr = "0.0.0.0"
 
 ports {
   grpc  = 8502
-  https = 8500
-  http  = -1
+  https = -1
+  http  = 8500
 }
 
 advertise_addr     = "172.20.20.11"
@@ -33,13 +33,13 @@ acl = {
 }
 
 verify_incoming        = false
-verify_incoming_rpc    = false
+verify_incoming_rpc    = true
 verify_outgoing        = true
 verify_server_hostname = true
 
-// auto_encrypt = {
-//   allow_tls = true
-// }
+auto_encrypt = {
+  allow_tls = true
+}
 
 ca_file    = "/var/vault/config/ca.crt.pem"
 cert_file  = "/var/vault/config/server.crt.pem"

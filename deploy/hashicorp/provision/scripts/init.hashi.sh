@@ -39,12 +39,15 @@ sudo cat /var/log/consul.log
 echo "Waiting for Consul leader to bootstrap ACL System"
 sudo bash /vagrant/provision/consul/system/wait-consul-leader.sh
 
-# echo "Bootstraping ACL System"
+echo "Bootstraping ACL System"
 sudo bash /vagrant/provision/consul/acl/bootstrap.sh
 
 echo "Restarting Nomad and Vault"
 sudo service vault restart
 sudo service nomad restart
+
+echo "Waiting for Consul leader to unseal Vault"
+sudo bash /vagrant/provision/consul/system/wait-consul-leader.sh
 
 echo "Unsealing Vault ..."
 sudo bash /vagrant/provision/vault/system/unseal.sh
