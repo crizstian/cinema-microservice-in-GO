@@ -4,7 +4,7 @@ sudo mkdir -p /var/vault/config
 sudo mkdir -p /var/vault/config/agent
 
 # Setup Consul Files
-sudo cp /vagrant/provision/consul/$1/* /var/consul/config/
+sudo cp /vagrant/provision/consul/config/* /var/consul/config/
 sudo cp /vagrant/provision/consul/watches/* /var/consul/config/
 sudo cp /vagrant/provision/consul/check-definitions/* /var/consul/config/
 sudo cp /vagrant/provision/consul/system/consul.service /etc/systemd/system/consul.service
@@ -40,7 +40,7 @@ echo "Waiting for Consul leader to bootstrap ACL System"
 sudo bash /vagrant/provision/consul/system/wait-consul-leader.sh
 
 echo "Bootstraping ACL System"
-sudo bash /vagrant/provision/consul/acl/bootstrap.sh
+sudo bash /vagrant/provision/consul/system/bootstrap.sh
 
 echo "Restarting Nomad and Vault"
 sudo service vault restart
@@ -59,3 +59,7 @@ sudo bash /vagrant/provision/vault/system/unseal.sh
 sudo service docker restart
 sudo service csreplicate stop
 sudo service vaultagent stop
+
+# sudo echo 1 > /proc/sys/net/bridge/bridge-nf-call-arptables
+# sudo echo 1 > /proc/sys/net/bridge/bridge-nf-call-ip6tables
+# sudo echo 1 > /proc/sys/net/bridge/bridge-nf-call-iptables

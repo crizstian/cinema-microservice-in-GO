@@ -2,8 +2,8 @@
 CONSUL_ENTERPRISE=$1
 VAULT_ENTERPRISE=$2
 
-echo "CONSUL_ENTERPRISE=$1"
-echo "VAULT_ENTERPRISE=$2"
+echo "CONSUL_ENTERPRISE=$CONSUL_ENTERPRISE"
+echo "VAULT_ENTERPRISE=$VAULT_ENTERPRISE"
 
 # Install Keys
 curl -sL -s https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
@@ -87,7 +87,7 @@ sudo chmod +x nomad
 sudo mv nomad /usr/bin/nomad
 
 # Download nomad
-export TERRAFORM_VERSION=0.12.19
+export TERRAFORM_VERSION=0.12.23
 curl -sL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
 
 # Install terraform
@@ -101,9 +101,7 @@ curl -sL -L -o cni-plugins.tgz https://github.com/containernetworking/plugins/re
 # Install CNI Plugin
 sudo mkdir -p /opt/cni/bin
 sudo tar -C /opt/cni/bin -xzf cni-plugins.tgz
-sudo echo 1 > /proc/sys/net/bridge/bridge-nf-call-arptables
-sudo echo 1 > /proc/sys/net/bridge/bridge-nf-call-ip6tables
-sudo echo 1 > /proc/sys/net/bridge/bridge-nf-call-iptables
+
 
 # Download vault
 if [ "$VAULT_ENTERPRISE" != "true" ]; then

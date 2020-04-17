@@ -1,0 +1,61 @@
+data_dir = "/var/consul/config/"
+log_level = "DEBUG"
+
+datacenter         = "{{ env "DATACENTER" }}"
+primary_datacenter = "{{ env "PRIMARY_DATACENTER" }}"
+
+ui     = true
+server = true
+bootstrap_expect = 1
+
+bind_addr   = "0.0.0.0"
+client_addr = "0.0.0.0"
+
+ports {
+  grpc  = 8502
+  https = {{ if eq (env "CONSUL_SSL") "true" }}{{ env "CONSUL_PORT" }}{{ else }}-1{{end}}
+  http  = {{ if eq (env "CONSUL_SSL") "true" }}-1{{ else }}{{ env "CONSUL_PORT" }}{{end}}
+}
+
+advertise_addr     = "{{ env "HOST_IP" }}"
+advertise_addr_wan = "{{ env "HOST_IP" }}"
+{{ if eq (env "DATACENTER") (env "PRIMARY_DATACENTER") }}
+{{else}}
+retry_join_wan = ["{{ env "PRIMARY_HOST_IP" }}"]
+{{end}}
+
+enable_central_service_config = true
+
+connect {
+  enabled = true
+}
+
+acl = {
+  enabled        = true
+  default_policy = "deny"
+  down_policy    = "extend-cache"
+}
+
+verify_incoming        = false
+verify_incoming_rpc    = {{ if eq (env "CONSUL_SSL") "true" }}true{{ else }}false{{end}}
+verify_outgoing        = {{ if eq (env "CONSUL_SSL") "true" }}true{{ else }}false{{end}}
+verify_server_hostname = {{ if eq (env "CONSUL_SSL") "true" }}true{{ else }}false{{end}}
+
+auto_encrypt = {
+  allow_tls = {{ if eq (env "CONSUL_SSL") "true" }}true{{ else }}false{{end}}
+}
+
+{{ if eq (env "CONSUL_SSL") "true" }}
+ca_file    = "{{ env "CONSUL_CACERT" }}"
+cert_file  = "{{ env "CONSUL_CLIENT_CERT" }}"
+key_file   = "{{ env "CONSUL_CLIENT_KEY" }}"
+{{end}}
+
+encrypt = "{{ env "CONSUL_ENCRYPT_KEY" }}"
+encrypt_verify_incoming = true
+encrypt_verify_outgoing = true
+
+telemetry = {
+  dogstatsd_addr   = "10.0.2.15:8125"
+  disable_hostname = true
+}

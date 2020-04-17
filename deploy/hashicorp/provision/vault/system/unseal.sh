@@ -52,7 +52,7 @@ function vaultConfig {
   fi
 
   sed -i '/VAULT_TOKEN/d' /etc/environment
-  echo "export VAULT_TOKEN=$rootToken" >> /etc/environment
+  echo -e "export VAULT_TOKEN=$rootToken\n" >> /etc/environment
 
 }
 

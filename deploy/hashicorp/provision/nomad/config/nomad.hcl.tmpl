@@ -2,7 +2,7 @@ bind_addr  = "{{ env "HOST_IP" }}"
 datacenter =  "{{ env "DATACENTER" }}-ncv"
 region     =  "{{ env "DATACENTER" }}-region"
 data_dir   = "/var/nomad/data"
-log_level  = "INFO"
+log_level  = "DEBUG"
 
 leave_on_terminate   = true
 leave_on_interrupt   = true
@@ -31,9 +31,12 @@ consul {
     server_auto_join    = true
     client_auto_join    = true
 
-    ca_file = "{{ env "CONSUL_CACERT" }}"
-    ssl     = {{ env "CONSUL_SSL" }}
-    
+    ca_file    = "{{ env "CONSUL_CACERT" }}"
+    cert_file  = "{{ env "CONSUL_CLIENT_CERT" }}"
+    key_file   = "{{ env "CONSUL_CLIENT_KEY" }}"
+    ssl        = {{ env "CONSUL_SSL" }}
+    verify_ssl = {{ env "CONSUL_SSL" }}
+
     token   = "{{ env "CONSUL_HTTP_TOKEN" }}"
 }
 
