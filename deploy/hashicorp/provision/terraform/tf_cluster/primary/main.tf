@@ -20,6 +20,10 @@ module "tf_consul" {
     path  = "cluster/info/status"
     value = "active"
   }]
+
+  consul_central_config = var.service_defaults_apps
+  proxy_defaults        = var.proxy_defaults
+  enable_proxy_defaults = false
 }
 
 module "tf_vault" {

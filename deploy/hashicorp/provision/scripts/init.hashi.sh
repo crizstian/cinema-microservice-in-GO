@@ -26,7 +26,7 @@ sudo cp /vagrant/provision/certs/* /var/vault/config
 sudo chmod -R +x /vagrant/provision/vault/system/
 
 # Setup Other Files
-sudo cp /vagrant/provision/docker-config/$1/daemon.json /etc/docker/daemon.json
+sudo cp /vagrant/provision/docker/daemon.json.tmpl /etc/docker/daemon.json.tmpl
 sudo cp /vagrant/provision/scripts/env.$1.sh /etc/environment
 
 # Setup Restart daemons
@@ -55,6 +55,9 @@ sudo bash /vagrant/provision/vault/system/wait-vault-leader.sh
 
 echo "Unsealing Vault ..."
 sudo bash /vagrant/provision/vault/system/unseal.sh
+
+sudo source /etc/environment
+sudo consul-template -template "/etc/docker/daemon.json.tmpl:/etc/docker/daemon.json" -once
 
 sudo service docker restart
 sudo service csreplicate stop

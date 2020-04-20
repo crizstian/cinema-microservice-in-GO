@@ -50,3 +50,109 @@ variable "dbs" {
 variable "infrastructure" {
   default = ["vault-agent"]
 }
+
+variable "service_defaults_apps" {
+  default = [
+    {
+      name           = "booking-service"
+      mesh_resolver  = "local"
+    },
+    {
+      name             = "notification-api"
+      mesh_resolver    = "local"
+      service_resolver = {
+        DefaultSubset = "v1"
+        Subsets = {
+          "v1" = {
+            Filter = "Service.Meta.version == v1"
+          }
+          "v2" = {
+            Filter = "Service.Meta.version == v2"
+          }
+        }
+        Failover = {
+          "*" = {
+            datacenters = ["dc2"]
+          }
+        }
+      }
+    },
+    {
+      name             = "payment-api"
+      mesh_resolver    = "local"
+      service_resolver = {
+        Failover = {
+          "*" = {
+            datacenters = ["dc2"]
+          }
+        }
+      }
+      service_splitter = {
+        Splits = [
+          {
+            Weight        = 0
+            ServiceSubset = "v1"
+          },
+          {
+            Weight        = 100
+            ServiceSubset = "v2"
+          }
+        ]
+      }
+    }
+  ]
+}
+
+variable "proxy_defaults" {
+  default = {
+    Config = {
+envoy_prometheus_bind_addr = "0.0.0.0:9102"
+
+envoy_extra_static_clusters_json = <<EOL
+{
+"connect_timeout": "3.000s",
+"dns_lookup_family": "V4_ONLY",
+"lb_policy": "ROUND_ROBIN",
+"load_assignment": {
+"cluster_name": "jaeger",
+"endpoints": [
+    {
+        "lb_endpoints": [
+            {
+                "endpoint": {
+                    "address": {
+                        "socket_address": {
+                            "address": "10.0.2.15",
+                            "port_value": 6831,
+                            "protocol": "TCP"
+                        }
+                    }
+                }
+            }
+        ]
+    }
+]
+},
+"name": "jaeger",
+"type": "STRICT_DNS"
+}
+EOL
+
+envoy_tracing_json = <<EOL
+{
+"http": {
+  "config": {
+      "collector_cluster": "jaeger",
+      "collector_endpoint": "/api/v1/spans",
+      "shared_span_context": false
+  },
+  "name": "envoy.zipkin"
+}
+}
+EOL
+}
+  }
+}
+variable "enable_proxy_defaults" {
+  default = false
+}

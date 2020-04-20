@@ -32,3 +32,11 @@ module "kv" {
   kv         = var.store_kv
   datacenter = var.datacenters[0]
 }
+
+module "central-config" {
+  source = "./central-config"
+
+  consul_central_config = var.consul_central_config
+  proxy_defaults        = var.proxy_defaults
+  enable_proxy_defaults = var.enable_proxy_defaults
+}

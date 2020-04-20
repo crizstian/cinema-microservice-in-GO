@@ -41,3 +41,13 @@ variable "enabled_prepared_queries" {
 variable "store_kv" {
   default = []
 }
+
+variable "consul_central_config" {
+  default = []
+}
+variable "proxy_defaults" {
+  default = ""
+}
+variable "enable_proxy_defaults" {
+  default = false
+}
