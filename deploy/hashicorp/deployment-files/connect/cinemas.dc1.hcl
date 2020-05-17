@@ -16,7 +16,7 @@ job "cinemas" {
       env {
         DB_SERVERS      = "mongodb1.service.consul:27017,mongodb2.service.consul:27018,mongodb3.service.consul:27019"
         SERVICE_PORT    = "3000"
-        CONSUL_IP       = "consul.service.consul"
+        CONSUL_IP       = "172.20.20.11"
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
       }
@@ -64,7 +64,7 @@ job "cinemas" {
 
       env {
         SERVICE_PORT    = "3001"
-        CONSUL_IP       = "consul.service.consul"
+        CONSUL_IP       = "172.20.20.11"
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
       }
@@ -113,7 +113,7 @@ job "cinemas" {
 
       env {
         SERVICE_PORT     = "3002"
-        CONSUL_IP        = "consul.service.consul"
+        CONSUL_IP        = "172.20.20.11"
         DB_SERVERS       = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
         PAYMENT_URL      = "http://${NOMAD_UPSTREAM_ADDR_payment_api}"
         NOTIFICATION_URL = "http://${NOMAD_UPSTREAM_ADDR_notification_api}"

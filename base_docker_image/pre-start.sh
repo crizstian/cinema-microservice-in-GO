@@ -1,11 +1,14 @@
 #!/bin/bash
 set -e
 
+env | grep CONSUL
+
 export CUSTOM_CMD="$@"
 
 echo "is CONSUL_HTTP_SSL = $CONSUL_HTTP_SSL"
 
-if [ "$CONSUL_HTTP_SSL" == "true" ]; then
+if [ $CONSUL_HTTP_SSL == "true" ]; then
+	echo "SSL IS ENABLED"
   curl_ssl="--cacert ${CA_CERT_FILE}"
 fi
 
@@ -21,8 +24,13 @@ if [ -n "$APP_NAME" ]; then
 	#Get vault token if APP_NAME is specified by the application
 	echo "Fetching role and secrets..."
 
+	echo "consul request: curl $curl_ssl -s -X GET ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/apps/${APP_NAME}/auth/"
+
 	role_id=`curl $curl_ssl -s -X GET ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/apps/${APP_NAME}/auth/role_id | jq  -r '.[].Value'| base64 -d -`
 	secret_id=`curl $curl_ssl -s -X GET ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/apps/${APP_NAME}/auth/secret_id | jq  -r '.[].Value'| base64 -d -`
+
+	echo "role_id = $role_id"
+	echo "secret_id = $secret_id"
 
 	if [ -n "$role_id" ] && [ -n "$secret_id" ]; then
 		echo "Exporting VAULT_TOKEN"
@@ -35,13 +43,15 @@ if [ -n "$APP_NAME" ]; then
 
 		#response=$(curl $curl_ssl -s -X GET --header "X-Vault-Token: ${VAULT_TOKEN}" https://vault.service.consul:8200/v1/secret/$APP_NAME | jq .data)
 	fi
-
+	
   #Generating config file for envconsul
   echo "Generating secrets template file..."
-  /usr/bin/consul-template -config /tmp/ct.hcl -once
+  CONSUL_HTTP_SSL=$CONSUL_HTTP_SSL consul-template -config /tmp/ct.hcl -once
+
+	cat /tmp/envconsul.hcl
 
   echo "Continuing with envconsul based startup..."
-  exec /usr/bin/envconsul -config=/tmp/envconsul.hcl /tmp/start-process.sh $START_CMD
+  exec envconsul -config=/tmp/envconsul.hcl /tmp/start-process.sh $START_CMD
 else
 	echo "Application is not envconsul enabled; Continuing with standard startup..."
 	exec $START_CMD

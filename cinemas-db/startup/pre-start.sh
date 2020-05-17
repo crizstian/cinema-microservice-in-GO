@@ -44,14 +44,16 @@ if [ -n "$APP_NAME" ]; then
 		#response=$(curl $curl_ssl -s -X GET --header "X-Vault-Token: ${VAULT_TOKEN}" https://vault.service.consul:8200/v1/secret/$APP_NAME | jq .data)
 	fi
 	
+	env | grep CONSUL
+
   #Generating config file for envconsul
   echo "Generating secrets template file..."
-  /usr/bin/consul-template -config /tmp/ct.hcl -once
+  CONSUL_HTTP_SSL=$CONSUL_HTTP_SSL consul-template -config /tmp/ct.hcl -once
 
 	cat /tmp/envconsul.hcl
 
   echo "Continuing with envconsul based startup..."
-  exec /usr/bin/envconsul -config=/tmp/envconsul.hcl /tmp/startProcess.sh $START_CMD
+  exec envconsul -config=/tmp/envconsul.hcl /tmp/startProcess.sh $START_CMD
 else
 	echo "Application is not envconsul enabled; Continuing with standard startup..."
 	exec $START_CMD

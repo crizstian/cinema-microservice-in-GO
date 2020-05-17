@@ -1,4 +1,5 @@
 #!/bin/bash
+
 set -e
 
 echo "is CONSUL_HTTP_SSL = $CONSUL_HTTP_SSL"

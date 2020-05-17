@@ -43,6 +43,7 @@ variable "dns_names" {
   type        = list(string)
   default = [
     "vault.service.consul",
+    "consul.service.consul",
     "server.sfo.consul",
     "server.nyc.consul",
     "server.sfo-region.nomad",

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Download consul-template
 export CONSUL_TEMPLATE_VERSION=0.22.0
