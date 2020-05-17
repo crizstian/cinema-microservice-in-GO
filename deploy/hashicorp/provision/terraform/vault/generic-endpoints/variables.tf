@@ -26,3 +26,6 @@ variable "enable_admin_user" {
 variable "enable_userpass_engine" {
   default = false
 }
+variable "deploy_mongodb_secrets" {
+  default = false
+}

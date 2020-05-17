@@ -9,15 +9,16 @@ terraform {
 }
 
 module "tf_consul" {
-  source = "./consul"
+  source = "../../consul"
 
-  datacenters = ["dc2", "dc1"]
+  datacenters = ["nyc", "sfo"]
+  datacenter  = var.consul_datacenter
   
   enabled_prepared_queries = true
   prepared_queries         = var.prepared_queries
   external_services        = var.external_services
 
-  kv = [{
+  store_kv = [{
     path  = "cluster/info/status"
     value = "standby"
   }]

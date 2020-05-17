@@ -1,7 +1,12 @@
 job "countdash" {
-  datacenters = ["dc1-ncv"]
-  region      = "dc1-region"
+  datacenters = ["sfo-ncv"]
+  region      = "sfo-region"
   type        = "service"
+
+  constraint {
+    attribute = "${node.class}"
+    value     = "server"
+  }
 
   group "api" {
     network {

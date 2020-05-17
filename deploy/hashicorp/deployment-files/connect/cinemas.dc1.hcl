@@ -1,7 +1,7 @@
 job "cinemas" {
 
-  datacenters = ["dc1-ncv"]
-  region      = "dc1-region"
+  datacenters = ["sfo-ncv"]
+  region      = "sfo-region"
   type        = "service"
 
   group "payment-api" {
@@ -14,11 +14,11 @@ job "cinemas" {
       }
 
       env {
-        DB_SERVERS   = "mongodb1.service.consul:27017,mongodb2.service.consul:27018,mongodb3.service.consul:27019"
-        SERVICE_PORT = "3000"
-        CONSUL_IP    = "172.20.20.11"
-        CONSUL_SCHEME = "http"
-        CONSUL_HTTP_SSL = "false"
+        DB_SERVERS      = "mongodb1.service.consul:27017,mongodb2.service.consul:27018,mongodb3.service.consul:27019"
+        SERVICE_PORT    = "3000"
+        CONSUL_IP       = "consul.service.consul"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
       }
 
       resources {
@@ -63,10 +63,10 @@ job "cinemas" {
       }
 
       env {
-        SERVICE_PORT = "3001"
-        CONSUL_IP    = "172.20.20.11"
-        CONSUL_SCHEME = "http"
-        CONSUL_HTTP_SSL = "false"
+        SERVICE_PORT    = "3001"
+        CONSUL_IP       = "consul.service.consul"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
       }
 
       resources {
@@ -113,12 +113,12 @@ job "cinemas" {
 
       env {
         SERVICE_PORT     = "3002"
-        CONSUL_IP        = "172.20.20.11"
+        CONSUL_IP        = "consul.service.consul"
         DB_SERVERS       = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
         PAYMENT_URL      = "http://${NOMAD_UPSTREAM_ADDR_payment_api}"
         NOTIFICATION_URL = "http://${NOMAD_UPSTREAM_ADDR_notification_api}"
-        CONSUL_SCHEME = "http"
-        CONSUL_HTTP_SSL = "false"
+        CONSUL_SCHEME    = "https"
+        CONSUL_HTTP_SSL  = "true"
       }
 
       resources {

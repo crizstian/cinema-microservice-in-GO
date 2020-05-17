@@ -1,3 +1,10 @@
+variable "consul_address" {}
+variable "consul_datacenter" {}
+variable "consul_datacenters" {
+  type = (list)
+}
+variable "consul_scheme" {}
+
 variable "prepared_queries" {
   default = [{
     service      = "mongodb1"
@@ -13,17 +20,17 @@ variable "prepared_queries" {
 
 variable "external_services" {
   default = [{
-    name    = mongodb1
+    name    = "mongodb1"
     address = "192.168.15.10"
     port    = 27017
     tags    = ["external-service", "external-db"]
   },{
-    name    = mongodb2
+    name    = "mongodb2"
     address = "192.168.15.10"
     port    = 27018
     tags    = ["external-service", "external-db"]
   },{
-    name    = mongodb3
+    name    = "mongodb3"
     address = "192.168.15.10"
     port    = 27019
     tags    = ["external-service", "external-db"]

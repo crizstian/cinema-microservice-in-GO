@@ -1,4 +1,8 @@
-cd base_docker_image
+cd cinemas-db
+
+bash create-image.sh
+
+cd ../base_docker_image
 
 bash create-image.sh
 

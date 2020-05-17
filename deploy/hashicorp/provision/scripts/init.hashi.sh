@@ -22,44 +22,56 @@ sudo cp /vagrant/provision/vault/config/* /var/vault/config/
 sudo cp /vagrant/provision/vault/agent/* /var/vault/config/agent/
 sudo cp /vagrant/provision/vault/agent/vaultagent.service /etc/systemd/system/vaultagent.service
 sudo cp /vagrant/provision/vault/system/vault.service /etc/systemd/system/vault.service
-sudo cp /vagrant/provision/certs/* /var/vault/config
+sudo cp /vagrant/provision/certs/*.pem /var/vault/config
 sudo chmod -R +x /vagrant/provision/vault/system/
 
 # Setup Other Files
 sudo cp /vagrant/provision/docker/daemon.json.tmpl /etc/docker/daemon.json.tmpl
-sudo cp /vagrant/provision/scripts/env.$1.sh /etc/environment
+sudo cp /vagrant/provision/scripts/env.sh /etc/environment
+
+sudo sed -i "s/@local_ip/$2/" /etc/environment
+sudo sed -i "s/@primary_ip/$2/" /etc/environment
+sudo sed -i "s/@dc/$1/" /etc/environment
+sudo sed -i "s/@primary/sfo/" /etc/environment
+sudo sed -i "s/@secondary/nyc/" /etc/environment
+sudo sed -i "s/@list_ips/'[\"172.20.20.11\",\"172.20.20.31\"]'/" /etc/environment
+
+sudo cat /etc/environment
+sudo source /etc/environment
 
 # Setup Restart daemons
 sudo systemctl daemon-reload
 echo "Restarting Consul"
 sudo service consul restart
 sudo service consul status
-sudo cat /var/log/consul.log
 
-echo "Waiting for Consul leader to bootstrap ACL System"
-sudo bash /vagrant/provision/consul/system/wait-consul-leader.sh
+if [ "$1" == "sfo" ]; then 
+  echo "Waiting for Consul leader to bootstrap ACL System"
+  sudo bash /vagrant/provision/consul/system/wait-consul-leader.sh
 
-echo "Bootstraping ACL System"
-sudo bash /vagrant/provision/consul/system/bootstrap.sh
+  echo "Bootstraping ACL System"
+  sudo bash /vagrant/provision/consul/system/bootstrap.sh
+fi
 
 echo "Restarting Nomad and Vault"
 sudo service vault restart
-sudo service nomad restart
 sudo service vault status
-sudo cat /var/log/vault.log
+sudo service nomad restart
+sudo service nomad status
 
-echo "Waiting for Consul leader to unseal Vault"
-sudo bash /vagrant/provision/consul/system/wait-consul-leader.sh
-echo "Waiting for Vault leader to unseal the cluster"
-sudo bash /vagrant/provision/vault/system/wait-vault-leader.sh
+if [ "$1" == "sfo" ]; then 
+  echo "Waiting for Consul leader to unseal Vault"
+  sudo bash /vagrant/provision/consul/system/wait-consul-leader.sh
+  echo "Waiting for Vault leader to unseal the cluster"
+  sudo bash /vagrant/provision/vault/system/wait-vault-leader.sh
 
-echo "Unsealing Vault ..."
-sudo bash /vagrant/provision/vault/system/unseal.sh
+  echo "Unsealing Vault ..."
+  sudo bash /vagrant/provision/vault/system/unseal.sh
+fi
 
-sudo source /etc/environment
 sudo consul-template -template "/etc/docker/daemon.json.tmpl:/etc/docker/daemon.json" -once
-
 sudo service docker restart
+
 sudo service csreplicate stop
 sudo service vaultagent stop
 

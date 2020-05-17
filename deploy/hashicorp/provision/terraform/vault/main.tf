@@ -35,5 +35,6 @@ module "generic-endpoints" {
   depends_on_userpass_mount = module.auth-methods.depends_on_userpass_mount
 
   deploy_cinema_microservice_secrets = var.deploy_cinema_microservice_secrets
+  deploy_mongodb_secrets             = var.deploy_mongodb_secrets
   enable_admin_user                  = var.enable_admin_user
 }

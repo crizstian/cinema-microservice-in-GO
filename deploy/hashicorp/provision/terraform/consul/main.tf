@@ -33,10 +33,20 @@ module "kv" {
   datacenter = var.datacenters[0]
 }
 
+module "external-services" {
+  source = "./external-services"
+
+  external_services  = var.external_services
+  datacenter         = var.datacenters[0]
+}
+
 module "central-config" {
   source = "./central-config"
 
-  consul_central_config = var.consul_central_config
-  proxy_defaults        = var.proxy_defaults
-  enable_proxy_defaults = var.enable_proxy_defaults
+  consul_central_config   = var.consul_central_config
+  proxy_defaults          = var.proxy_defaults
+  enable_proxy_defaults   = var.enable_proxy_defaults
+  enable_service_splitter = var.enable_service_splitter
+  enable_service_resolver = var.enable_service_resolver
+  enable_service_defaults = var.enable_service_defaults
 }

@@ -21,4 +21,11 @@ module "userpass" {
   enable_admin_user         = var.enable_admin_user
 }
 
+module "mongo-secrets" {
+  source = "./mongo-secrets"
+
+  depends_on_kv_mount    = var.depends_on_kv_mount
+  deploy_mongodb_secrets = var.deploy_mongodb_secrets
+}
+
 

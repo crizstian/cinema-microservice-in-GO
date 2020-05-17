@@ -24,5 +24,5 @@ echo "consul kv put cluster/consul/rootToken $rootToken"
 CONSUL_HTTP_TOKEN=$rootToken consul kv put cluster/consul/rootToken $rootToken
 
 sed -i '/CONSUL_HTTP_TOKEN/d' /etc/environment
-echo -e "export CONSUL_HTTP_TOKEN=$rootToken\n" >> /etc/environment
+echo -e "\nexport CONSUL_HTTP_TOKEN=$rootToken\n" >> /etc/environment
 

@@ -43,12 +43,12 @@ variable "dns_names" {
   type        = list(string)
   default = [
     "vault.service.consul",
-    "server.dc1.consul",
-    "server.dc2.consul",
-    "server.dc1-region.nomad",
-    "server.dc2-region.nomad",
-    "dc1-consul-server",
-    "dc2-consul-server",
+    "server.sfo.consul",
+    "server.nyc.consul",
+    "server.sfo-region.nomad",
+    "server.nyc-region.nomad",
+    "sfo-consul-server",
+    "nyc-consul-server",
     "*"
   ]
 }
@@ -57,8 +57,23 @@ variable "ip_addresses" {
   description = "List of IP addresses for which the certificate will be valid (e.g. 127.0.0.1)."
   type        = list(string)
   default = [
-    "172.20.20.11", 
-    "172.20.20.31"
+    "172.20.20.11",
+    "172.20.20.12",
+    "172.20.20.13",
+    "172.20.20.31",
+    "172.20.20.32",
+    "172.20.20.33",
+    "172.20.20.131",
+    "172.20.20.132",
+    "172.20.20.133",
+    "172.20.20.21",
+    "172.20.20.22",
+    "172.20.20.23",
+    "172.20.20.231",
+    "172.20.20.232",
+    "172.20.20.233",
+    "127.0.0.1",
+    "0.0.0.0",
   ]
 }
 

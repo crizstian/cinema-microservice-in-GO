@@ -1,22 +1,15 @@
 #!/usr/bin/env bash
 
-function createKeyFile {
-  openssl rand -base64 741 > $1
-  chmod 600 $1
-}
+docker rm -f cinemas-db:v0.4
 
-createKeyFile files/mongo-keyfile
-
-docker rm -f cinemas-db:v0.3
-
-docker rmi cinemas-db:v0.3
+docker rmi cinemas-db:v0.4
 
 docker image prune -f
 
 docker volume prune -f
 
-docker build -t cinemas-db:v0.3 .
+docker build -t cinemas-db:v0.4 .
 
-docker tag cinemas-db:v0.3 crizstian/cinemas-db:v0.3
+docker tag cinemas-db:v0.4 crizstian/cinemas-db:v0.4
 
-docker push crizstian/cinemas-db:v0.3
+docker push crizstian/cinemas-db:v0.4

@@ -27,11 +27,11 @@ if [ -z "$status" ];  then
 
   export ip4_add=`hostname -i`
 
-  consul-template -template "/data/admin/admin.js.ctmpl:/data/admin/admin.js" -once
-  consul-template -template "/data/admin/grantRole.js.ctmpl:/data/admin/grantRole.js" -once
-  consul-template -template "/data/admin/replica.js.ctmpl:/data/admin/replica.js" -once
+  /usr/bin/consul-template -template "/data/admin/admin.js.ctmpl:/data/admin/admin.js" -once
+  /usr/bin/consul-template -template "/data/admin/grantRole.js.ctmpl:/data/admin/grantRole.js" -once
+  /usr/bin/consul-template -template "/data/admin/replica.js.ctmpl:/data/admin/replica.js" -once
 
-  /var/tmp/start/initMongo.sh &
+  /var/tmp/initMongo.sh &
 
   curl $curl_ssl -s \
       --request PUT \

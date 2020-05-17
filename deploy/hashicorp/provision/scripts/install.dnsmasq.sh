@@ -164,4 +164,5 @@ function install {
 
 install "$@"
 
+sudo systemctl daemon-reload
 sudo /etc/init.d/dnsmasq restart

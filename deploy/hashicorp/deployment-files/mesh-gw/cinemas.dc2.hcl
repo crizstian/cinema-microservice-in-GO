@@ -1,7 +1,7 @@
 job "cinemas" {
 
-  datacenters = ["dc2-ncv"]
-  region      = "dc2-region"
+  datacenters = ["nyc-ncv"]
+  region      = "nyc-region"
   type        = "service"
 
   group "payment-api" {
@@ -16,7 +16,7 @@ job "cinemas" {
       env {
         DB_SERVERS   = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
         SERVICE_PORT = "3000"
-        CONSUL_IP    = "172.20.20.31"
+        CONSUL_IP    = "consul.service.consul"
       }
 
       resources {
@@ -50,7 +50,7 @@ job "cinemas" {
 
       env {
         SERVICE_PORT = "3001"
-        CONSUL_IP    = "172.20.20.31"
+        CONSUL_IP    = "consul.service.consul"
       }
 
       resources {

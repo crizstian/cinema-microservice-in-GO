@@ -7,23 +7,35 @@ variable "proxy_defaults" {
 variable "enable_proxy_defaults" {
   default = false
 }
+variable "enable_service_splitter" {
+  default = false
+}
+variable "enable_service_resolver" {
+  default = false
+}
+variable "enable_service_defaults" {
+  default = false
+}
 
 module "service-defaults" {
   source = "./service-defaults"
 
-  app_config_services = var.consul_central_config
+  enable_service_defaults = var.enable_service_defaults
+  app_config_services     = var.consul_central_config
 }
 
 module "service-resolver" {
   source = "./service-resolver"
 
-  app_config_services = var.consul_central_config
+  enable_service_resolver = var.enable_service_resolver
+  app_config_services     = var.consul_central_config
 }
 
 module "service-splitter" {
   source = "./service-splitter"
 
-  app_config_services = var.consul_central_config
+  enable_service_splitter = var.enable_service_splitter
+  app_config_services     = var.consul_central_config
 }
 
 module "proxy-defaults" {

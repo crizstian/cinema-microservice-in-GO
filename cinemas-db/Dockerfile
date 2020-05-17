@@ -9,22 +9,26 @@ RUN mkdir /data/keyfile /data/admin /var/tmp/start
 
 COPY files/admin.js.ctmpl /data/admin/
 COPY files/replica.js.ctmpl /data/admin/
-COPY files/mongo-keyfile /data/keyfile/
+# COPY files/mongo-keyfile /data/keyfile/
 COPY files/grantRole.js.ctmpl /data/admin
 COPY files/movies.js /data/admin
 COPY files/ca.crt.pem /tmp/
+COPY files/ct.hcl /tmp/
+COPY files/envconsul.hcl.tmpl /tmp/
 
-COPY startup /var/tmp/start
-COPY files/bin /var/tmp/
+COPY startup /tmp/
+COPY files/bin /tmp/
 
 RUN chown -R mongodb:mongodb /data
-RUN chmod -R +x /var/tmp
+RUN chmod -R +x /tmp
 
-RUN /var/tmp/installhashi.sh
+RUN /tmp/installhashi.sh
 
 ENV CONSUL_SCHEME http
 ENV CONSUL_PORT 8500
 ENV CONSUL_HTTP_SSL false
 ENV CA_CERT_FILE /tmp/ca.crt.pem
 
-ENTRYPOINT [ "/var/tmp/start/startProcess.sh" ]
+ENV APP_NAME mongo-db
+
+ENTRYPOINT [ "/tmp/pre-start.sh" ]

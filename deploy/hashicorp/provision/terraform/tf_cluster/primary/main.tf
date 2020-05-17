@@ -1,7 +1,7 @@
 module "tf_consul" {
   source = "../../consul"
 
-  datacenters = ["dc1", "dc2"]
+  datacenters = var.consul_datacenters
   
   enable_agent_policy     = true
   enable_anonymous_policy = true
@@ -21,9 +21,12 @@ module "tf_consul" {
     value = "active"
   }]
 
-  consul_central_config = var.service_defaults_apps
-  proxy_defaults        = var.proxy_defaults
-  enable_proxy_defaults = false
+  consul_central_config   = var.service_defaults_apps
+  proxy_defaults          = var.proxy_defaults
+  enable_proxy_defaults   = true
+  enable_service_splitter = true
+  enable_service_resolver = true
+  enable_service_defaults = true # currently not working https://github.com/terraform-providers/terraform-provider-consul/issues/191 # works with 1.7
 }
 
 module "tf_vault" {
@@ -34,7 +37,7 @@ module "tf_vault" {
   enable_store_approle_in_consul = true
   
   roles                          = concat(var.apps, var.infrastructure, var.dbs)
-  consul_datacenter              = "dc1"
+  consul_datacenter              = var.consul_datacenter
   
   enable_admin_policy            = true
   enable_infrastructure_policy   = true
@@ -47,4 +50,5 @@ module "tf_vault" {
   enable_admin_user              = true
   
   deploy_cinema_microservice_secrets = true
+  deploy_mongodb_secrets             = true
 }

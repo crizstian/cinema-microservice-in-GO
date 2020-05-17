@@ -41,7 +41,7 @@ BLUE="\[\e[34m\]"
 PS1="$DARKGRAY\u@$BOLD$BLUE\h$DARKGRAY:\w\$ $NORMAL"
 END
 
-if [ "$CONSUL_ENTERPRISE" != "true"]; then
+# if [ "$CONSUL_ENTERPRISE" != "true"]; then
 # Download consul
 export CONSUL_VERSION=1.7.2
 curl -sL https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip -o consul.zip
@@ -50,11 +50,11 @@ curl -sL https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL
 sudo unzip consul.zip
 sudo chmod +x consul
 sudo mv consul /usr/bin/consul
-else 
-    cp /vagrant/bin/consul .
-    sudo chmod +x consul
-    sudo mv consul /usr/bin/consul
-fi
+# else 
+#     cp /vagrant/bin/consul .
+#     sudo chmod +x consul
+#     sudo mv consul /usr/bin/consul
+# fi
 
 # Download consul-template
 export CONSUL_TEMPLATE_VERSION=0.24.0
@@ -87,7 +87,7 @@ sudo chmod +x nomad
 sudo mv nomad /usr/bin/nomad
 
 # Download nomad
-export TERRAFORM_VERSION=0.12.23
+export TERRAFORM_VERSION=0.12.24
 curl -sL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
 
 # Install terraform

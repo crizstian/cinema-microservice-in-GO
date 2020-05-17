@@ -1,5 +1,8 @@
 variable "consul_address" {}
 variable "consul_datacenter" {}
+variable "consul_datacenters" {
+  type = (list)
+}
 variable "consul_scheme" {}
 
 variable "service_to_service_intentions" {
@@ -24,13 +27,13 @@ variable "service_to_service_intentions" {
 variable "prepared_queries" {
   default = [{
     service      = "mongodb1"
-    failover_dcs = ["dc1"]
+    failover_dcs = ["sfo"]
   },{
     service      = "mongodb2"
-    failover_dcs = ["dc1"]
+    failover_dcs = ["sfo"]
   },{
     service      = "mongodb3"
-    failover_dcs = ["dc1"]
+    failover_dcs = ["sfo"]
   }]
 }
 
@@ -72,7 +75,7 @@ variable "service_defaults_apps" {
         }
         Failover = {
           "*" = {
-            datacenters = ["dc2"]
+            datacenters = ["nyc"]
           }
         }
       }
@@ -83,21 +86,9 @@ variable "service_defaults_apps" {
       service_resolver = {
         Failover = {
           "*" = {
-            datacenters = ["dc2"]
+            datacenters = ["nyc"]
           }
         }
-      }
-      service_splitter = {
-        Splits = [
-          {
-            Weight        = 0
-            ServiceSubset = "v1"
-          },
-          {
-            Weight        = 100
-            ServiceSubset = "v2"
-          }
-        ]
       }
     }
   ]

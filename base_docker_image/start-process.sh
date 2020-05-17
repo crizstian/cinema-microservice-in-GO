@@ -1,9 +1,9 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
-echo "is ENABLE_CA_CERT = $ENABLE_CA_CERT"
+echo "is CONSUL_HTTP_SSL = $CONSUL_HTTP_SSL"
 
-if [ "$ENABLE_CA_CERT" == "true" ]; then
+if [ "$CONSUL_HTTP_SSL" == "true" ]; then
   curl_ssl="--cacert ${CA_CERT_FILE}"
 fi
 
