@@ -8,7 +8,7 @@ Vagrant.configure("2") do |config|
   config.vm.box = "ubuntu/xenial64"
   config.vm.provision "shell", path: "provision/scripts/install.sh", args: "false true", privileged: false
   
-  ['sfo', 'nyc'].each do |dc|
+  ['sfo'].each do |dc|
   
     ip_prefix = dc == 'sfo' ? '172.20.20.11' : '172.20.20.31'
 

@@ -43,7 +43,7 @@ END
 
 # if [ "$CONSUL_ENTERPRISE" != "true"]; then
 # Download consul
-export CONSUL_VERSION=1.7.2
+export CONSUL_VERSION=1.7.3
 curl -sL https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip -o consul.zip
 
 # Install consul
@@ -78,7 +78,7 @@ sudo chmod +x consul-replicate
 sudo mv consul-replicate /usr/bin/consul-replicate
 
 # Download nomad
-export NOMAD_VERSION=0.11.0
+export NOMAD_VERSION=0.11.2
 curl -sL https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip -o nomad.zip
 
 # Install nomad

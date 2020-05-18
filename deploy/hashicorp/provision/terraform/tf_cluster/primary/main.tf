@@ -9,7 +9,7 @@ module "tf_consul" {
   enable_blocking_policy  = true
   enable_server_role      = true
 
-  enable_intentions             = true
+  enable_intentions             = false
   enable_deny_all               = false
   service_to_service_intentions = var.service_to_service_intentions
 

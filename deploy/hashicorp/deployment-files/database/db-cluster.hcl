@@ -17,13 +17,11 @@ job "cinemas-db" {
       }
 
       env {
-        DB_PORT = "27017"
-        DB1 = "${NOMAD_ADDR_mongodb1_service_port}"
-        DB2 = "${NOMAD_ADDR_mongodb2_service_port}"
-        DB3 = "${NOMAD_ADDR_mongodb3_service_port}"        
-        CONSUL_IP       = "172.20.20.11"
-        CONSUL_SCHEME   = "https"
-        CONSUL_HTTP_SSL = "true"
+        DB_PORT         = "27017"
+        DB1             = "${NOMAD_ADDR_mongodb1_service_port}"
+        DB2             = "${NOMAD_ADDR_mongodb2_service_port}"
+        DB3             = "${NOMAD_ADDR_mongodb3_service_port}"        
+        CONSUL_IP       = "consul.service.consul"
       }
 
       resources {
@@ -56,13 +54,11 @@ job "cinemas-db" {
       }
 
       env {
-        DB_PORT = "27017"
-        DB1 = "${NOMAD_ADDR_mongodb1_service_port}"
-        DB2 = "${NOMAD_ADDR_mongodb2_service_port}"
-        DB3 = "${NOMAD_ADDR_mongodb3_service_port}"        
-        CONSUL_IP       = "172.20.20.11"
-        CONSUL_SCHEME   = "https"
-        CONSUL_HTTP_SSL = "true"
+        DB_PORT         = "27017"
+        DB1             = "${NOMAD_ADDR_mongodb1_service_port}"
+        DB2             = "${NOMAD_ADDR_mongodb2_service_port}"
+        DB3             = "${NOMAD_ADDR_mongodb3_service_port}"        
+        CONSUL_IP       = "consul.service.consul"
       }
 
       resources {
@@ -95,13 +91,11 @@ job "cinemas-db" {
       }
 
       env {
-        DB_PORT = "27017"
-        DB1 = "${NOMAD_ADDR_mongodb1_service_port}"
-        DB2 = "${NOMAD_ADDR_mongodb2_service_port}"
-        DB3 = "${NOMAD_ADDR_mongodb3_service_port}"        
-        CONSUL_IP       = "172.20.20.11"
-        CONSUL_SCHEME   = "https"
-        CONSUL_HTTP_SSL = "true"
+        DB_PORT         = "27017"
+        DB1             = "${NOMAD_ADDR_mongodb1_service_port}"
+        DB2             = "${NOMAD_ADDR_mongodb2_service_port}"
+        DB3             = "${NOMAD_ADDR_mongodb3_service_port}"        
+        CONSUL_IP       = "consul.service.consul"
       }
 
       resources {

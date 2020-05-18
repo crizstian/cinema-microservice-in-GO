@@ -72,9 +72,7 @@ fi
 sudo consul-template -template "/etc/docker/daemon.json.tmpl:/etc/docker/daemon.json" -once
 sudo service docker restart
 
-sudo service csreplicate stop
-sudo service vaultagent stop
-
-# sudo echo 1 > /proc/sys/net/bridge/bridge-nf-call-arptables
-# sudo echo 1 > /proc/sys/net/bridge/bridge-nf-call-ip6tables
-# sudo echo 1 > /proc/sys/net/bridge/bridge-nf-call-iptables
+if [ "$1" == "nyc" ]; then 
+  sudo service csreplicate restart
+  sudo service vaultagent stop
+fi
