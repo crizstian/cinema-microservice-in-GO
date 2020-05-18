@@ -3,11 +3,6 @@ job "countdash" {
   region      = "sfo-region"
   type        = "service"
 
-  constraint {
-    attribute = "${node.class}"
-    value     = "server"
-  }
-
   group "api" {
     network {
       mode = "bridge"

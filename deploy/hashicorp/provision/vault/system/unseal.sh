@@ -9,6 +9,11 @@ if [ "$CONSUL_HTTP_SSL" == "true" ]; then
   curl_ssl="--cacert ${CONSUL_CACERT}"
 fi
 
+if [ -n $CONSUL_HTTP_TOKEN ]; then
+	echo "Setting consul token"
+	header="--header \"X-Consul-Token: ${CONSUL_HTTP_TOKEN}\""
+fi
+
 vault_url="$VAULT_ADDR/v1/sys"
 rootToken=""
 
@@ -43,8 +48,8 @@ function vaultConfig {
 
   elif [ "$isInitialized" == "true" ]; then
     echo "Already initialized"
-    keysFromConsul=`curl -s $curl_ssl -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/unsealKeys | jq -r '.[].Value' | base64 -d -`
-    rootToken=`curl -s $curl_ssl -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/rootToken | jq -r '.[].Value' | base64 -d -`
+    keysFromConsul=`curl -s $curl_ssl $header  -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/unsealKeys | jq -r '.[].Value' | base64 -d -`
+    rootToken=`curl -s $curl_ssl $header  -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/rootToken | jq -r '.[].Value' | base64 -d -`
     unsealVault "${keysFromConsul[@]}"
   else 
     echo "an unexpected error happened"
@@ -73,8 +78,8 @@ function unsealVault {
   keysCount=`echo $keys | jq '. | length'`
 
   if [ $keysCount > 0 ]; then
-    echo "curl -s $curl_ssl -H X-Consul-Token: $CONSUL_HTTP_TOKEN $CONSUL_HTTP_ADDR/v1/catalog/service/vault"
-    servers=`curl -s $curl_ssl -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" $CONSUL_HTTP_ADDR/v1/catalog/service/vault`
+    echo "curl -s $curl_ssl $header  -H X-Consul-Token: $CONSUL_HTTP_TOKEN $CONSUL_HTTP_ADDR/v1/catalog/service/vault"
+    servers=`curl -s $curl_ssl $header  -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" $CONSUL_HTTP_ADDR/v1/catalog/service/vault`
     serversCount=`echo $servers | jq '. | length'`
     echo $servers
     
@@ -134,16 +139,16 @@ function vaultConsulKV {
   path=$2
   url="$CONSUL_HTTP_ADDR/v1/kv/$path"
   if [ "$data" == "file" ]; then
-   curl -s $curl_ssl --request PUT -H "Content-Type: application/json" -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" --data @file.json $url
+   curl -s $curl_ssl $header  --request PUT -H "Content-Type: application/json" -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" --data @file.json $url
   else
-   curl -s $curl_ssl --request PUT -H "Content-Type: application/json" -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" --data $data $url
+   curl -s $curl_ssl $header  --request PUT -H "Content-Type: application/json" -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" --data $data $url
   fi
 }
 
 function main {
   
-  echo "curl -s $curl_ssl -H X-Consul-Token: $CONSUL_HTTP_TOKEN -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal"
-  vaultStart=`curl -s $curl_ssl -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal | jq  -r '.[].Value'| base64 -d -`
+  echo "curl -s $curl_ssl $header  -H X-Consul-Token: $CONSUL_HTTP_TOKEN -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal"
+  vaultStart=`curl -s $curl_ssl $header  -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" -X GET $CONSUL_HTTP_ADDR/v1/kv/cluster/vault/vaultUnseal | jq  -r '.[].Value'| base64 -d -`
   echo "Response from consul kv / unsealVault value: $vaultStart"
 
   if [ -z "$vaultStart" ];  then

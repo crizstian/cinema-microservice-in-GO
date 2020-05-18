@@ -10,7 +10,7 @@ module "tf_consul" {
   enable_server_role      = true
 
   enable_intentions             = true
-  enable_deny_all               = true
+  enable_deny_all               = false
   service_to_service_intentions = var.service_to_service_intentions
 
   enabled_prepared_queries = true
@@ -23,10 +23,10 @@ module "tf_consul" {
 
   consul_central_config   = var.service_defaults_apps
   proxy_defaults          = var.proxy_defaults
-  enable_proxy_defaults   = true
-  enable_service_splitter = true
-  enable_service_resolver = true
-  enable_service_defaults = true # currently not working https://github.com/terraform-providers/terraform-provider-consul/issues/191 # works with 1.7
+  enable_proxy_defaults   = false
+  enable_service_splitter = false
+  enable_service_resolver = false
+  enable_service_defaults = true
 }
 
 module "tf_vault" {

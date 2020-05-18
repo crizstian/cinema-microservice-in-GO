@@ -5,11 +5,14 @@ env | grep CONSUL
 
 export CUSTOM_CMD="$@"
 
-echo "is CONSUL_HTTP_SSL = $CONSUL_HTTP_SSL"
-
 if [ $CONSUL_HTTP_SSL == "true" ]; then
 	echo "SSL IS ENABLED"
   curl_ssl="--cacert ${CA_CERT_FILE}"
+fi
+
+if [ -n $CONSUL_HTTP_TOKEN ]; then
+	echo "Setting consul token"
+	header="--header \"X-Consul-Token: $CONSUL_HTTP_TOKEN\""
 fi
 
 if [ -z $START_CMD ]; then
@@ -24,10 +27,14 @@ if [ -n "$APP_NAME" ]; then
 	#Get vault token if APP_NAME is specified by the application
 	echo "Fetching role and secrets..."
 
-	echo "consul request: curl $curl_ssl -s -X GET ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/apps/${APP_NAME}/auth/"
+	r_role_id="curl -s $curl_ssl $header ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/apps/${APP_NAME}/auth/role_id"
+	r_secret_id="curl -s $curl_ssl $header ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/apps/${APP_NAME}/auth/secret_id"
 
-	role_id=`curl $curl_ssl -s -X GET ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/apps/${APP_NAME}/auth/role_id | jq  -r '.[].Value'| base64 -d -`
-	secret_id=`curl $curl_ssl -s -X GET ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/apps/${APP_NAME}/auth/secret_id | jq  -r '.[].Value'| base64 -d -`
+	echo $r_role_id
+	echo $r_secret_id
+
+	role_id=$(eval $r_role_id  | jq  -r '.[].Value'| base64 -d -)
+	secret_id=$(eval $r_secret_id  | jq  -r '.[].Value'| base64 -d -)
 
 	echo "role_id = $role_id"
 	echo "secret_id = $secret_id"
@@ -41,12 +48,12 @@ if [ -n "$APP_NAME" ]; then
 			exit 3
 		fi
 
-		#response=$(curl $curl_ssl -s -X GET --header "X-Vault-Token: ${VAULT_TOKEN}" https://vault.service.consul:8200/v1/secret/$APP_NAME | jq .data)
+		#response=$(curl $curl_ssl -s $header --header "X-Vault-Token: ${VAULT_TOKEN}" https://vault.service.consul:8200/v1/secret/$APP_NAME | jq .data)
 	fi
 	
   #Generating config file for envconsul
   echo "Generating secrets template file..."
-  CONSUL_HTTP_SSL=$CONSUL_HTTP_SSL consul-template -config /tmp/ct.hcl -once
+	CONSUL_SSL=$CONSUL_HTTP_SSL consul-template -config /tmp/ct.hcl -once
 
 	cat /tmp/envconsul.hcl
 

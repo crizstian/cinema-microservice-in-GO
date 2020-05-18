@@ -2,7 +2,7 @@ consul {
   address = "[[ env "CONSUL_IP" ]]:[[ env "CONSUL_PORT" ]]"
   
   ssl {
-    enabled = [[ env "CONSUL_HTTP_SSL" ]]
+    enabled = [[ if eq (env "CONSUL_SSL") "true" ]]true[[ else ]]false[[end]]
     ca_cert = "[[ env "CA_CERT_FILE" ]]"
   }
 }

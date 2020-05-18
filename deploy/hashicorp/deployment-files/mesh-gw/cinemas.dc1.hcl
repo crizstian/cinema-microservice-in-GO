@@ -17,6 +17,7 @@ job "cinemas" {
         SERVICE_PORT     = "3002"
         DB_SERVERS       = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
         CONSUL_IP        = "172.20.20.11"
+        CONSUL_HTTP_TOKEN = "734bccc0-14ee-3da8-22ae-9e6398be54e7"
         PAYMENT_URL      = "http://${NOMAD_UPSTREAM_ADDR_payment_api}"
         NOTIFICATION_URL = "http://${NOMAD_UPSTREAM_ADDR_notification_api}"
       }
@@ -60,7 +61,7 @@ job "cinemas" {
     count = 1
 
     task "mesh-gateway" {
-      driver = "exec"
+      driver = "raw_exec"
 
       config {
         command = "consul"
@@ -73,6 +74,7 @@ job "cinemas" {
           "-wan-address", "172.20.20.11:${NOMAD_PORT_proxy}",
           "-address", "172.20.20.11:${NOMAD_PORT_proxy}",
           "-bind-address", "default=172.20.20.11:${NOMAD_PORT_proxy}",
+          "-token", "734bccc0-14ee-3da8-22ae-9e6398be54e7",
           "--",
           "-l", "debug"
         ]

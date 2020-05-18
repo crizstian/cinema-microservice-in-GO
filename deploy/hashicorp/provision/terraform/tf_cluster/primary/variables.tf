@@ -14,7 +14,7 @@ variable "service_to_service_intentions" {
     destination = ["booking-service", "mongodb1", "mongodb2", "mongodb3"]
   },{
     source      = "notification-api"
-    destination = ["booking-service", "mongodb1", "mongodb2", "mongodb3"]
+    destination = ["booking-service"]
   },{
     source      = "count-dashboard"
     destination = ["count-api"]
@@ -90,6 +90,14 @@ variable "service_defaults_apps" {
           }
         }
       }
+    },
+    {
+      name             = "count-dashboard"
+      mesh_resolver    = "local"
+    },
+    {
+      name             = "count-api"
+      mesh_resolver    = "local"
     }
   ]
 }

@@ -37,7 +37,7 @@ acl = {
 }
 
 verify_incoming        = false
-verify_incoming_rpc    = {{ if eq (env "CONSUL_SSL") "true" }}true{{ else }}false{{end}}
+verify_incoming_rpc    = false
 verify_outgoing        = {{ if eq (env "CONSUL_SSL") "true" }}true{{ else }}false{{end}}
 verify_server_hostname = {{ if eq (env "CONSUL_SSL") "true" }}true{{ else }}false{{end}}
 

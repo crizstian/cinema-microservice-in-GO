@@ -10,6 +10,10 @@ disable_update_check = true
 
 client {
     enabled = true
+    host_volume "ca-certificates" {
+        path      = "/var/vault/config"
+        read_only = true
+    }
 }
 addresses {
     rpc  = "{{ env "HOST_IP" }}"
@@ -55,4 +59,10 @@ tls {
 
     verify_https_client    = false
     verify_server_hostname = true
+}
+
+plugin "raw_exec" {
+  config {
+    enabled = true
+  }
 }

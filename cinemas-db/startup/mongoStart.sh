@@ -5,6 +5,11 @@ if [ "$CONSUL_HTTP_SSL" == "true" ]; then
   ctmpl_ssl="-ca-file=${CA_CERT_FILE}"
 fi
 
+if [ -n $CONSUL_HTTP_TOKEN ]; then
+	echo "Setting consul token"
+	header="--header \"X-Consul-Token: $CONSUL_HTTP_TOKEN\""
+fi
+
 status=`curl $curl_ssl -s -X GET $CONSUL_SCHEME://${CONSUL_IP}:$CONSUL_PORT/v1/kv/cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/initMongo | jq  -r '.[].Value'| base64 -d -`
 
 echo "MONGO [KEY/VALUE]  = ${status}"
@@ -16,7 +21,7 @@ if [ -z "$status" ];  then
   for server in "mongodb1" "mongodb2" "mongodb3"
   do
     echo "Checking status of mongo cluster members"
-    until curl -s $curl_ssl $CONSUL_SCHEME://${CONSUL_IP}:$CONSUL_PORT/v1/kv/cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/${server} | jq -r '.[].Value' | base64 -d - | grep -q started; do
+    until curl -s $curl_ssl $header $CONSUL_SCHEME://${CONSUL_IP}:$CONSUL_PORT/v1/kv/cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/${server} | jq -r '.[].Value' | base64 -d - | grep -q started; do
         printf '.'
         sleep 5
     done
@@ -37,7 +42,7 @@ if [ -z "$status" ];  then
 
   /tmp/initMongo.sh &
 
-  curl $curl_ssl -s \
+  curl $header $curl_ssl -s \
       --request PUT \
       --data "started" \
     $CONSUL_SCHEME://${CONSUL_IP}:$CONSUL_PORT/v1/kv/cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/initMongo 

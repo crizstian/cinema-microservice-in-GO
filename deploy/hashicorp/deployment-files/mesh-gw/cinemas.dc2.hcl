@@ -14,9 +14,12 @@ job "cinemas" {
       }
 
       env {
-        DB_SERVERS   = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
-        SERVICE_PORT = "3000"
-        CONSUL_IP    = "consul.service.consul"
+        DB_SERVERS      = "mongodb1.service.consul:27017,mongodb2.service.consul:27018,mongodb3.service.consul:27019"
+        SERVICE_PORT    = "3000"
+        CONSUL_IP       = "172.20.20.31"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
+        CONSUL_HTTP_TOKEN = "734bccc0-14ee-3da8-22ae-9e6398be54e7"
       }
 
       resources {
@@ -49,8 +52,11 @@ job "cinemas" {
       }
 
       env {
-        SERVICE_PORT = "3001"
-        CONSUL_IP    = "consul.service.consul"
+        SERVICE_PORT    = "3001"
+        CONSUL_IP       = "172.20.20.31"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
+        CONSUL_HTTP_TOKEN = "734bccc0-14ee-3da8-22ae-9e6398be54e7"
       }
 
       resources {
@@ -77,7 +83,7 @@ job "cinemas" {
     count = 1
 
     task "mesh-gateway" {
-      driver = "exec"
+      driver = "raw_exec"
 
       config {
         command = "consul"
@@ -90,6 +96,7 @@ job "cinemas" {
           "-wan-address", "172.20.20.31:${NOMAD_PORT_proxy}",
           "-address", "172.20.20.31:${NOMAD_PORT_proxy}",
           "-bind-address", "default=172.20.20.31:${NOMAD_PORT_proxy}",
+          "-token", "734bccc0-14ee-3da8-22ae-9e6398be54e7",
           "--",
           "-l", "debug"
         ]

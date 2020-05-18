@@ -20,10 +20,15 @@ if [ "$CONSUL_HTTP_SSL" == "true" ]; then
   ctmpl_ssl="-ca-file=${CA_CERT_FILE}"
 fi
 
+if [ -n $CONSUL_HTTP_TOKEN ]; then
+	echo "Setting consul token"
+	header="--header \"X-Consul-Token: $CONSUL_HTTP_TOKEN\""
+fi
+
 echo "Setting Server as started"
 echo "curl -s $curl_ssl --request PUT --data started ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/${NOMAD_TASK_NAME}"
 
-curl -s $curl_ssl \
+curl -s $header $curl_ssl \
     --request PUT \
     --data "started" \
   ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/${NOMAD_TASK_NAME}
