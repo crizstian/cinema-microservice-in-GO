@@ -28,6 +28,7 @@ ENV CONSUL_SCHEME http
 ENV CONSUL_PORT 8500
 ENV CONSUL_HTTP_SSL false
 ENV CA_CERT_FILE /tmp/ca.crt.pem
+ENV VAULT_ADDR https://vault.service.consul:8200
 
 ENV APP_NAME mongo-db
 

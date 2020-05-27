@@ -1,0 +1,10 @@
+{{range services}} {{$service := .Name}} {{ if .Tags | contains "ENTRY" }} {{ if service $service}}
+# create a backend that is tagged with ENTRY
+    upstream {{$service}} {
+        {{range service $service}}  server {{.Address}}:{{.Port}};
+        {{end}} } {{end}} {{end}} {{end}}
+{{range ls "cobalt/services/default-pod/"}} {{ $key := (.Key | trimSpace) }}{{ $value := (.Value | trimSpace) }}{{ if not (service $key) }}{{ if service $value }}
+# Create a backend for each service that is configured in Consul to point to the default POD
+    upstream {{$key}} {
+        {{range service $value}}  server {{.Address}}:{{.Port}};
+        {{end}} } {{end}}{{ end }}{{end}}

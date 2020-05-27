@@ -14,9 +14,9 @@ echo $response
 
 rootToken=`echo $response | jq .SecretID | sed s/\"//g`
 
-echo "Setting Consul Root Token"
-echo "CONSUL_HTTP_TOKEN=$rootToken consul acl set-agent-token default $rootToken"
-CONSUL_HTTP_TOKEN=$rootToken consul acl set-agent-token default $rootToken
+# echo "Setting Consul Root Token"
+# echo "CONSUL_HTTP_TOKEN=$rootToken consul acl set-agent-token default $rootToken"
+# CONSUL_HTTP_TOKEN=$rootToken consul acl set-agent-token default $rootToken
 
 
 echo "Storing Consul Root Token"

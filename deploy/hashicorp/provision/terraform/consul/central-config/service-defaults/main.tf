@@ -14,7 +14,7 @@ resource "consul_config_entry" "service-defaults" {
   config_json = jsonencode({
     Protocol    = "http"
     MeshGateway = {
-      mode = var.app_config_services[count.index].mesh_resolver
+      Mode = var.app_config_services[count.index].mesh_resolver
     }
   })
 }

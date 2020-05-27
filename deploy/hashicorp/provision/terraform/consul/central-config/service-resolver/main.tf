@@ -15,5 +15,5 @@ resource "consul_config_entry" "service-resolver" {
 }
 
 locals {
-  resolver  = flatten([for i, s in var.app_config_services: can(s.service_resolver) ? [s] : []])
+  resolver  = flatten([for i, s in var.app_config_services: s if can(s.service_resolver) ])
 }

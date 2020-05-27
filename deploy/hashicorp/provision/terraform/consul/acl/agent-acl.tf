@@ -3,7 +3,7 @@ variable "enable_agent_policy" {
 }
 
 variable "datacenters" {
-  default = ["dc1", "dc2"]
+  default = []
 }
 
 resource "consul_acl_policy" "agent-policy" {

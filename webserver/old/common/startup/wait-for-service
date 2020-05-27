@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+export WAIT_SERVICE_NAME=$1
+ping -c 1 ${WAIT_SERVICE_NAME}.service.consul
+while [ $? -ne 0 ]; do
+    echo "Waiting for service ${WAIT_SERVICE_NAME}.service.consul"
+    sleep 2
+    ping -c 1 ${WAIT_SERVICE_NAME}.service.consul
+done

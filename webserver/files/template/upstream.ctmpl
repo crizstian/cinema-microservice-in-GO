@@ -1,0 +1,5 @@
+{{range services}} {{$service := .Name}} {{ if .Tags | contains "ENTRY" }} {{ if service $service}}
+# create a backend that is tagged with ENTRY
+    upstream {{$service}} {
+        {{range service $service}}  server {{.Address}}:{{.Port}};
+        {{end}} } {{end}} {{end}} {{end}}

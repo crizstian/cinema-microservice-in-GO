@@ -1,0 +1,44 @@
+{
+    consul: "{{ .NOMAD_IP_aero }}:8500",
+    jobs: [
+        {
+            logging: { raw: true },
+            name: "setup",
+            exec: "/var/tmp/startup/preStart.sh",
+            restarts: "never"
+        },
+        {
+            logging: { raw: true },
+            {{ if (env ("IS_ENTRY_POINT")) }}
+                name: "{{ .NOMAD_JOB_NAME }}",
+            {{ else }}
+                name: "{{ .NOMAD_JOB_NAME }}-{{ .NOMAD_TASK_NAME }}",
+            {{ end }}
+            exec: "{{ .CUSTOM_CMD }}",
+            port: {{ .SERVICE_PORT }},
+            health: {
+                {{ if (env ("HEALTH_CHECK_URL")) }}
+                    exec: "/usr/bin/curl --fail -s -o /dev/null {{ .HEALTH_CHECK_URL }}",
+                {{ else }}
+                    exec: "{{ .HEALTH_CHECK_CMD }}",
+                {{ end }}
+                interval: 10,
+                ttl: 25
+            },
+            when: {
+                source: "setup",
+                once: "exitSuccess",
+                timeout: "60s"
+            },
+            tags: [
+                "{{ .NOMAD_JOB_NAME }}",
+                {{ if eq (env "IS_ENTRY_POINT") "true" }}
+                    "ENTRY"
+                {{ end }}
+            ],
+            interfaces: [
+                "static:{{ .NOMAD_IP_aero }}"
+            ]
+        }
+    ]
+}

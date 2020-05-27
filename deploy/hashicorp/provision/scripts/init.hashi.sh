@@ -34,45 +34,57 @@ sudo sed -i "s/@primary_ip/$2/" /etc/environment
 sudo sed -i "s/@dc/$1/" /etc/environment
 sudo sed -i "s/@primary/sfo/" /etc/environment
 sudo sed -i "s/@secondary/nyc/" /etc/environment
-sudo sed -i "s/@list_ips/'[\"172.20.20.11\",\"172.20.20.31\"]'/" /etc/environment
+sudo sed -i "s/@list_ips/'[\"172.20.20.11\",\"172.20.20.21\"]'/" /etc/environment
 
 sudo cat /etc/environment
-sudo source /etc/environment
+source /etc/environment
 
 # Setup Restart daemons
 sudo systemctl daemon-reload
-echo "Restarting Consul"
-sudo service consul restart
-sudo service consul status
+sudo service consul stop
+sudo service vault stop
+sudo service nomad stop
+sudo service docker stop
+sudo service csreplicate stop
+sudo service vaultagent stop
 
 if [ "$1" == "sfo" ]; then 
+  echo "Restarting Consul"
+  sudo service consul restart
+  sudo service consul status
+  
   echo "Waiting for Consul leader to bootstrap ACL System"
   sudo bash /vagrant/provision/consul/system/wait-consul-leader.sh
 
   echo "Bootstraping ACL System"
   sudo bash /vagrant/provision/consul/system/bootstrap.sh
-fi
 
-echo "Restarting Nomad and Vault"
-sudo service vault restart
-sudo service vault status
-sudo service nomad restart
-sudo service nomad status
+  echo "Setting Consul Token to the system"
+  sudo service consul restart
+  sudo service consul status
 
-if [ "$1" == "sfo" ]; then 
+  echo "Restarting Nomad and Vault"
+  sudo service vault restart
+  sudo service vault status
+
+  sudo service nomad restart
+  sudo service nomad status
+
   echo "Waiting for Consul leader to unseal Vault"
   sudo bash /vagrant/provision/consul/system/wait-consul-leader.sh
-  echo "Waiting for Vault leader to unseal the cluster"
-  sudo bash /vagrant/provision/vault/system/wait-vault-leader.sh
-
+  
   echo "Unsealing Vault ..."
   sudo bash /vagrant/provision/vault/system/unseal.sh
+
+  source /etc/environment
+  env | grep CONS
+
+  consul-template -template "/etc/docker/daemon.json.tmpl:/etc/docker/daemon.json" -once
+  sudo service docker restart
 fi
 
-sudo consul-template -template "/etc/docker/daemon.json.tmpl:/etc/docker/daemon.json" -once
-sudo service docker restart
+# if [ "$1" != "sfo" ]; then
+#   export CONSUL_HTTP_TOKEN=`curl -s -k https://172.20.20.11:8500/v1/kv/cluster/consul/rootToken | jq  -r '.[].Value'| base64 -d -`
+# fi
 
-if [ "$1" == "nyc" ]; then 
-  sudo service csreplicate restart
-  sudo service vaultagent stop
-fi
+

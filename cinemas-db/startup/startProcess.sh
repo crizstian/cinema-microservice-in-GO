@@ -20,7 +20,7 @@ if [ "$CONSUL_HTTP_SSL" == "true" ]; then
   ctmpl_ssl="-ca-file=${CA_CERT_FILE}"
 fi
 
-if [ -n $CONSUL_HTTP_TOKEN ]; then
+if [ -n $CONSUL_HTTP_TOKEN ] && [ $CONSUL_HTTP_TOKEN != "" ]; then
 	echo "Setting consul token"
 	header="--header \"X-Consul-Token: $CONSUL_HTTP_TOKEN\""
 fi

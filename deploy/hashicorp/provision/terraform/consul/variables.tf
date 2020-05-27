@@ -67,3 +67,9 @@ variable "enable_service_resolver" {
 variable "enable_service_defaults" {
   default = false
 }
+variable "enable_replication_policy" {
+  default = false
+}
+variable "enable_mesh_gateway_policy" {
+  default = false
+}

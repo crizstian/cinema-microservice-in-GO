@@ -22,6 +22,8 @@ job "cinemas-db" {
         DB2             = "${NOMAD_ADDR_mongodb2_service_port}"
         DB3             = "${NOMAD_ADDR_mongodb3_service_port}"        
         CONSUL_IP       = "consul.service.consul"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
       }
 
       resources {
@@ -59,6 +61,8 @@ job "cinemas-db" {
         DB2             = "${NOMAD_ADDR_mongodb2_service_port}"
         DB3             = "${NOMAD_ADDR_mongodb3_service_port}"        
         CONSUL_IP       = "consul.service.consul"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
       }
 
       resources {
@@ -96,6 +100,8 @@ job "cinemas-db" {
         DB2             = "${NOMAD_ADDR_mongodb2_service_port}"
         DB3             = "${NOMAD_ADDR_mongodb3_service_port}"        
         CONSUL_IP       = "consul.service.consul"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
       }
 
       resources {

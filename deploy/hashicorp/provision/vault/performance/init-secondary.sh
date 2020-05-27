@@ -4,7 +4,7 @@
 
 
 if [ "$CONSUL_HTTP_SSL" == "true" ]; then
-  curl_ssl="--cacert ${CONSUL_CACERT}"
+  curl_ssl="--cacert ${VAULT_CACERT}"
 fi
 
 if [ -n $CONSUL_HTTP_TOKEN ]; then
@@ -18,10 +18,10 @@ echo $second
 
 export SECONDARY_TOKEN=$(eval $second | jq  -r '.[].Value'| base64 -d - | sed s/\"//g)
 
+echo $SECONDARY_TOKEN
 
-curl -s \
-    --cacert $VAULT_CACERT \
-    --header "X-Vault-Token: $VAULT_TOKEN" \
-    --request POST \
-    --data '{ "token": "'"$SECONDARY_TOKEN"'", "ca_file": "'"$VAULT_CACERT"'" }' \
-    ${VAULT_ADDR}/v1/sys/replication/performance/secondary/enable
+REQUEST="curl -s --cacert $VAULT_CACERT --header 'X-Vault-Token: $VAULT_TOKEN' --request POST --data '{ \"token\": \"$SECONDARY_TOKEN\", \"ca_file\": \"$VAULT_CACERT\" }' ${VAULT_ADDR}/v1/sys/replication/performance/secondary/enable"
+
+echo $REQUEST
+
+curl $curl_ssl --header "X-Vault-Token: $VAULT_TOKEN" --request POST --data "{ \"token\": \"$SECONDARY_TOKEN\", \"ca_file\": \"$VAULT_CACERT\" }" ${VAULT_ADDR}/v1/sys/replication/performance/secondary/enable

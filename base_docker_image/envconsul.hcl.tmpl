@@ -8,7 +8,7 @@ consul {
 }
 
 vault {
-  address     = "https://vault.service.consul:8200"
+  address     = "[[ env "VAULT_ADDR" ]]"
   token       = "[[ env "VAULT_TOKEN" ]]"
   renew_token = false
 

@@ -10,7 +10,7 @@ if [ $CONSUL_HTTP_SSL == "true" ]; then
   curl_ssl="--cacert ${CA_CERT_FILE}"
 fi
 
-if [ -n $CONSUL_HTTP_TOKEN ]; then
+if [ -n $CONSUL_HTTP_TOKEN ] && [ $CONSUL_HTTP_TOKEN != "" ]; then
 	echo "Setting consul token"
 	header="--header \"X-Consul-Token: $CONSUL_HTTP_TOKEN\""
 fi
@@ -42,7 +42,10 @@ if [ -n "$APP_NAME" ]; then
 	if [ -n "$role_id" ] && [ -n "$secret_id" ]; then
 		echo "Exporting VAULT_TOKEN"
 
-		export VAULT_TOKEN=`curl --cacert ${CA_CERT_FILE} -s -X POST -d '{"role_id":"'$role_id'","secret_id":"'$secret_id'"}' https://vault.service.consul:8200/v1/auth/approle/login | jq -r .auth.client_token`
+		echo "Vault request"
+		echo "curl --cacert ${CA_CERT_FILE} -s -X POST -d '{"role_id":"'$role_id'","secret_id":"'$secret_id'"}' ${VAULT_ADDR}/v1/auth/approle/login"
+
+		export VAULT_TOKEN=`curl --cacert ${CA_CERT_FILE} -s -X POST -d '{"role_id":"'$role_id'","secret_id":"'$secret_id'"}' ${VAULT_ADDR}/v1/auth/approle/login | jq -r .auth.client_token`
 		if [ -z "$VAULT_TOKEN" ]; then
 			echo "Unable to get a vault token, exiting..."
 			exit 3

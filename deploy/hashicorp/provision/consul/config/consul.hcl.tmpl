@@ -20,9 +20,9 @@ ports {
 advertise_addr     = "{{ env "HOST_IP" }}"
 advertise_addr_wan = "{{ env "HOST_IP" }}"
 
-retry_interval = "30s"
-retry_max      = 0
+{{ if eq (env "DATACENTER") (env "PRIMARY_DATACENTER") }}{{else}}
 retry_join_wan = {{ env "HOST_LIST" }}
+{{end}}
 
 enable_central_service_config = true
 
@@ -33,11 +33,19 @@ connect {
 acl = {
   enabled        = true
   default_policy = "deny"
-  enable_token_persistence = true
+  down_policy    = "extend-cache"
+  # enable_token_persistence = true
+  {{ if eq (env "DATACENTER") (env "PRIMARY_DATACENTER") }}{{else}}
+  enable_token_replication = true
+  {{end}}
+  tokens = {
+    default     = "{{ env "CONSUL_HTTP_TOKEN" }}"
+    replication = "{{ env "CONSUL_HTTP_TOKEN" }}"
+  }
 }
 
 verify_incoming        = false
-verify_incoming_rpc    = false
+verify_incoming_rpc    = {{ if eq (env "CONSUL_SSL") "true" }}true{{ else }}false{{end}}
 verify_outgoing        = {{ if eq (env "CONSUL_SSL") "true" }}true{{ else }}false{{end}}
 verify_server_hostname = {{ if eq (env "CONSUL_SSL") "true" }}true{{ else }}false{{end}}
 

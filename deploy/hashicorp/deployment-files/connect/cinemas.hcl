@@ -1,4 +1,4 @@
-job "cinemas1" {
+job "cinemas" {
 
   datacenters = ["sfo-ncv"]
   region      = "sfo-region"
@@ -43,9 +43,11 @@ job "cinemas1" {
       }
 
       env {
-        DB_SERVERS      = "mongodb1.service.consul:27017,mongodb2.service.consul:27018,mongodb3.service.consul:27019"
+        DB_SERVERS      = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
         SERVICE_PORT    = "3000"
         CONSUL_IP       = "consul.service.consul"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
       }
 
       resources {
@@ -96,6 +98,8 @@ job "cinemas1" {
       env {
         SERVICE_PORT    = "3001"
         CONSUL_IP       = "consul.service.consul"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
       }
 
       resources {
@@ -104,7 +108,6 @@ job "cinemas1" {
       }
     }
   }
-
 
   group "booking-api" {
     count = 1
@@ -127,16 +130,16 @@ job "cinemas1" {
       port = "http"
       tags = ["cinemas-project"]
 
-      // check {
-      //   name     = "booking-api-health"
-      //   port     = "http"
-      //   type     = "http"
-      //   protocol = "http"
-      //   path     = "/ping"
-      //   interval = "10s"
-      //   timeout  = "3s"
-      //   expose   = true
-      // }
+      check {
+        name     = "booking-api-health"
+        port     = "healthcheck"
+        type     = "http"
+        protocol = "http"
+        path     = "/ping"
+        interval = "10s"
+        timeout  = "3s"
+        expose   = true
+      }
 
       connect {
         sidecar_service {
@@ -166,6 +169,9 @@ job "cinemas1" {
         DB_SERVERS       = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
 
         CONSUL_IP        = "consul.service.consul"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
+        
         PAYMENT_URL      = "http://${NOMAD_UPSTREAM_ADDR_payment_api}"
         NOTIFICATION_URL = "http://${NOMAD_UPSTREAM_ADDR_notification_api}"
       }

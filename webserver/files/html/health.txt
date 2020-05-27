@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome</title>
+<style>
+    body {
+        width: 35em;
+        margin: 0 auto;
+        font-family: Tahoma, Verdana, Arial, sans-serif;
+    }
+</style>
+</head>
+<body>
+<h1>Welcome!</h1>
+<p>If you see this page, the web server is successfully installed and
+working. Further configuration is required or your url address is incomplete.</p>
+</body>
+</html>

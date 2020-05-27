@@ -20,7 +20,7 @@ curl -s \
 
 sleep 2
 
-SECONDARY_TOKEN=`curl --cacert $VAULT_CACERT --header "X-Vault-Token: $VAULT_TOKEN" --request POST --data '{ "id": "nyc" }' ${VAULT_ADDR}/v1/sys/replication/performance/primary/secondary-token | jq ".wrap_info.token"`
+SECONDARY_TOKEN=`curl -s --cacert $VAULT_CACERT --header "X-Vault-Token: $VAULT_TOKEN" --request POST --data '{ "id": "nyc" }' ${VAULT_ADDR}/v1/sys/replication/performance/primary/secondary-token | jq ".wrap_info.token"`
 
 echo "SECONDARY_TOKEN = $SECONDARY_TOKEN"
 

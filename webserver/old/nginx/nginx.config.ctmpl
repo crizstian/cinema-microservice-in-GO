@@ -1,0 +1,56 @@
+    {{ range $i := loop 1 20 }}
+        {{ if env (printf "PROXIED_SERVICE_%d" $i) }}
+            {{with $name := env (printf "PROXIED_SERVICE_%d" $i) }}
+                {{with $serviceName := printf "%s-%s" (env "NOMAD_JOB_NAME") $name }}
+                    {{ if service $serviceName}}
+                        upstream {{$serviceName}} {
+                            {{ range service $serviceName }}
+                                server {{.Address}}:{{.Port}};
+                            {{ end }}
+                        }
+                    {{end}}
+                {{end}}
+            {{end}}
+        {{end}}
+    {{end}}
+
+    server {
+        listen       80;
+        server_name  _;
+        client_max_body_size 2048M;
+         proxy_set_header Host $host;
+         proxy_set_header X-Real-IP $remote_addr;
+         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+         proxy_set_header X-Request-Uri $request_uri;
+         proxy_set_header X-Request-ID $request_id;
+         proxy_set_header Upgrade $http_upgrade;
+
+            location / {
+                root   /usr/share/nginx/html;
+                index  index.html index.htm;
+            }
+
+            #error_page  404              /404.html;
+
+            # redirect server error pages to the static page /50x.html
+            #
+            error_page   500 502 503 504  /50x.html;
+            location = /50x.html {
+                root   /usr/share/nginx/html;
+            }
+
+        {{ range $i := loop 1 20 }}
+            {{ if env (printf "PROXIED_SERVICE_%d" $i) }}
+                {{with $name := env (printf "PROXIED_SERVICE_%d" $i) }}
+                    {{with $serviceName := printf "%s-%s" (env "NOMAD_JOB_NAME") $name }}
+                        {{ if service $serviceName}}
+                            location /{{ $name }} {
+                                rewrite ^/{{ $name }}(.*) /$1 break;
+                                proxy_pass http://{{ $serviceName }};
+                            }
+                        {{end}}
+                    {{end}}
+                {{end}}
+            {{end}}
+        {{end}}
+    }

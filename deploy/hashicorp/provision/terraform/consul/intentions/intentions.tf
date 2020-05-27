@@ -15,7 +15,7 @@ variable "enable_intentions" {
 }
 
 locals {
-  service_to_service = flatten([for s in var.service_to_service_intentions: [for d in s.destination: { "source": s.source, "destination": d }]])
+  service_to_service = flatten([for s in var.service_to_service_intentions: [for d in s.destination: { "source": s.source, "destination": d, "action": s.action }]])
   service_to_db      = flatten([for s in var.service_to_db_intentions: [for d in s.destination: { "source": s.source, "destination": d }]])
   intentions         = concat(local.service_to_service, local.service_to_db)
 }
@@ -25,7 +25,7 @@ resource "consul_intention" "allow-service-to-service" {
 
   source_name      = local.intentions[count.index].source
   destination_name = local.intentions[count.index].destination
-  action           = "allow"
+  action           = local.intentions[count.index].action
 }
 
 resource "consul_intention" "deny-all" {

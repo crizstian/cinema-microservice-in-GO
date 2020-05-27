@@ -7,20 +7,25 @@ variable "consul_scheme" {}
 
 variable "service_to_service_intentions" {
   default = [{
-    source      = "booking-service"
-    destination = ["payment-api", "notification-api", "mongodb1", "mongodb2", "mongodb3"]
-  },{
+    source      = "booking-api"
+    destination = ["payment-api", "notification-api"]
+    action      = "allow"
+  }, {
     source      = "payment-api"
-    destination = ["booking-service", "mongodb1", "mongodb2", "mongodb3"]
-  },{
+    destination = ["booking-api"]
+    action      = "allow"
+  }, {
     source      = "notification-api"
-    destination = ["booking-service"]
-  },{
+    destination = ["booking-api"]
+    action      = "allow"
+  }, {
     source      = "count-dashboard"
     destination = ["count-api"]
-  },{
+    action      = "allow"
+  }, {
     source      = "count-api"
     destination = ["count-dashboard"]
+    action      = "allow"
   }]
 }
 
@@ -75,7 +80,7 @@ variable "service_defaults_apps" {
         }
         Failover = {
           "*" = {
-            datacenters = ["nyc"]
+            Datacenters = ["nyc"]
           }
         }
       }
@@ -86,7 +91,7 @@ variable "service_defaults_apps" {
       service_resolver = {
         Failover = {
           "*" = {
-            datacenters = ["nyc"]
+            Datacenters = ["nyc"]
           }
         }
       }
@@ -104,52 +109,9 @@ variable "service_defaults_apps" {
 
 variable "proxy_defaults" {
   default = {
-    Config = {
-envoy_prometheus_bind_addr = "0.0.0.0:9102"
-
-envoy_extra_static_clusters_json = <<EOL
-{
-"connect_timeout": "3.000s",
-"dns_lookup_family": "V4_ONLY",
-"lb_policy": "ROUND_ROBIN",
-"load_assignment": {
-"cluster_name": "jaeger",
-"endpoints": [
-    {
-        "lb_endpoints": [
-            {
-                "endpoint": {
-                    "address": {
-                        "socket_address": {
-                            "address": "10.0.2.15",
-                            "port_value": 6831,
-                            "protocol": "TCP"
-                        }
-                    }
-                }
-            }
-        ]
+      MeshGateway = {
+        Mode = "local"
     }
-]
-},
-"name": "jaeger",
-"type": "STRICT_DNS"
-}
-EOL
-
-envoy_tracing_json = <<EOL
-{
-"http": {
-  "config": {
-      "collector_cluster": "jaeger",
-      "collector_endpoint": "/api/v1/spans",
-      "shared_span_context": false
-  },
-  "name": "envoy.zipkin"
-}
-}
-EOL
-}
   }
 }
 variable "enable_proxy_defaults" {

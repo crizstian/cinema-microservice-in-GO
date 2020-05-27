@@ -1,11 +1,13 @@
 module "acl" {
   source = "./acl"
 
-  datacenters             = var.datacenters
-  enable_agent_policy     = var.enable_agent_policy    
-  enable_anonymous_policy = var.enable_anonymous_policy
-  enable_sensitive_policy = var.enable_sensitive_policy
-  enable_blocking_policy  = var.enable_blocking_policy 
+  datacenters               = var.datacenters
+  enable_agent_policy       = var.enable_agent_policy    
+  enable_anonymous_policy   = var.enable_anonymous_policy
+  enable_sensitive_policy   = var.enable_sensitive_policy
+  enable_blocking_policy    = var.enable_blocking_policy
+  enable_replication_policy = var.enable_replication_policy 
+  enable_mesh_gateway_policy = var.enable_mesh_gateway_policy 
 
   enable_server_role = var.enable_server_role
 }

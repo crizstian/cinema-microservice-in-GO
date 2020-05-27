@@ -1,0 +1,2 @@
+#!/bin/sh
+nginx -T | grep -v "^\s*$"
