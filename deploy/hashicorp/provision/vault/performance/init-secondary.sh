@@ -2,6 +2,7 @@
 
 . /etc/environment
 
+sleep 2
 
 if [ "$CONSUL_HTTP_SSL" == "true" ]; then
   curl_ssl="--cacert ${VAULT_CACERT}"
@@ -24,4 +25,4 @@ REQUEST="curl -s --cacert $VAULT_CACERT --header 'X-Vault-Token: $VAULT_TOKEN' -
 
 echo $REQUEST
 
-curl $curl_ssl --header "X-Vault-Token: $VAULT_TOKEN" --request POST --data "{ \"token\": \"$SECONDARY_TOKEN\", \"ca_file\": \"$VAULT_CACERT\" }" ${VAULT_ADDR}/v1/sys/replication/performance/secondary/enable
+curl --cacert ${VAULT_CACERT} --header "X-Vault-Token: $VAULT_TOKEN" --request POST --data "{ \"token\": \"$SECONDARY_TOKEN\", \"ca_file\": \"$VAULT_CACERT\" }" ${VAULT_ADDR}/v1/sys/replication/performance/secondary/enable

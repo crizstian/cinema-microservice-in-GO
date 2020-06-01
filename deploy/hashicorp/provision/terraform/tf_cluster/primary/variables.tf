@@ -59,16 +59,20 @@ variable "infrastructure" {
   default = ["vault-agent"]
 }
 
-variable "service_defaults_apps" {
-  default = [
-    {
-      name           = "booking-service"
-      mesh_resolver  = "local"
-    },
-    {
-      name             = "notification-api"
-      mesh_resolver    = "local"
-      service_resolver = {
+variable "central_config_apps" {
+
+  default = {
+    service_defaults = [
+     "booking-api",
+     "notification-api",
+     "payment-api",
+     "count-dashboard",
+     "count-api"
+    ]
+
+    service_resolver = [{
+      name   = "notification-api"
+      config = {
         DefaultSubset = "v1"
         Subsets = {
           "v1" = {
@@ -84,27 +88,17 @@ variable "service_defaults_apps" {
           }
         }
       }
-    },
-    {
-      name             = "payment-api"
-      mesh_resolver    = "local"
-      service_resolver = {
+    }, {
+      name   = "payment-api"
+      config = {
         Failover = {
           "*" = {
             Datacenters = ["nyc"]
           }
         }
       }
-    },
-    {
-      name             = "count-dashboard"
-      mesh_resolver    = "local"
-    },
-    {
-      name             = "count-api"
-      mesh_resolver    = "local"
-    }
-  ]
+    }]
+  }
 }
 
 variable "proxy_defaults" {

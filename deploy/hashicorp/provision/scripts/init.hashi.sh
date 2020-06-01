@@ -1,3 +1,5 @@
+#!/bin/bash
+
 sudo mkdir -p /var/consul/config
 sudo mkdir -p /var/nomad/config
 sudo mkdir -p /var/vault/config
@@ -59,32 +61,16 @@ if [ "$1" == "sfo" ]; then
   echo "Bootstraping ACL System"
   sudo bash /vagrant/provision/consul/system/bootstrap.sh
 
-  echo "Setting Consul Token to the system"
-  sudo service consul restart
-  sudo service consul status
+  sudo bash /vagrant/provision/scripts/common-services.sh
 
-  echo "Restarting Nomad and Vault"
-  sudo service vault restart
-  sudo service vault status
-
-  sudo service nomad restart
-  sudo service nomad status
-
-  echo "Waiting for Consul leader to unseal Vault"
-  sudo bash /vagrant/provision/consul/system/wait-consul-leader.sh
-  
-  echo "Unsealing Vault ..."
-  sudo bash /vagrant/provision/vault/system/unseal.sh
-
-  source /etc/environment
-  env | grep CONS
-
-  consul-template -template "/etc/docker/daemon.json.tmpl:/etc/docker/daemon.json" -once
-  sudo service docker restart
+  sudo bash /vagrant/provision/vault/performance/init-primary.sh
 fi
 
-# if [ "$1" != "sfo" ]; then
-#   export CONSUL_HTTP_TOKEN=`curl -s -k https://172.20.20.11:8500/v1/kv/cluster/consul/rootToken | jq  -r '.[].Value'| base64 -d -`
-# fi
+if [ "$1" != "sfo" ]; then
+  sudo bash /vagrant/provision/scripts/init.secondaries.sh
+  sudo bash /vagrant/provision/vault/performance/init-secondary.sh
+fi
 
-
+echo "SERVERS: =>"
+ip_addresses=`echo $3 | sed "s/,/\",\"/g"`
+echo "\"$ip_addresses\""

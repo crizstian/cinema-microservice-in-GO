@@ -1,3 +1,14 @@
+# encoding: utf-8
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+#require 'yaml'
+
+#current_dir    = File.dirname(File.expand_path(__FILE__))
+#configs        = YAML.load_file("#{current_dir}/vagrant.variables.yml")
+#datacenters    = configs['configs'][configs['configs']['datacenter']]
+#ip_addresses   = configs['configs'][configs['configs']['ip_addresses']]
+
 Vagrant.configure("2") do |config|
 
   config.vm.provider "virtualbox" do |v|
@@ -9,13 +20,14 @@ Vagrant.configure("2") do |config|
   config.vm.provision "shell", path: "provision/scripts/install.sh", args: "false true", privileged: false
   
   ['sfo','nyc'].each do |dc|
-  
+
+    ip_addresses = "172.20.20.11,172.20.20.21"
     ip_prefix = dc == 'sfo' ? '172.20.20.11' : dc == 'nyc' ? '172.20.20.21' : '172.20.20.31'
 
     config.vm.define "#{dc}-consul-server" do |cs|
       cs.vm.hostname = "#{dc}-consul-server"
       cs.vm.network "private_network", ip: "#{ip_prefix}"
-      cs.vm.provision "shell", path: "provision/scripts/init.hashi.sh", args: "#{dc} #{ip_prefix}", privileged: false
+      cs.vm.provision "shell", path: "provision/scripts/init.hashi.sh", args: "#{dc} #{ip_prefix} #{ip_addresses}", privileged: false
       cs.vm.provision "shell", path: "provision/scripts/install.dnsmasq.sh", privileged: false
 
 

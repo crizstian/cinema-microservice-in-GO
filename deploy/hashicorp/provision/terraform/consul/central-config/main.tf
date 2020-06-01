@@ -1,5 +1,8 @@
 variable "consul_central_config" {
-  default = []
+  default = {
+    service_defaults = []
+    service_resolver = []
+  }
 }
 variable "proxy_defaults" {
   default = ""
@@ -21,14 +24,14 @@ module "service-defaults" {
   source = "./service-defaults"
 
   enable_service_defaults = var.enable_service_defaults
-  app_config_services     = var.consul_central_config
+  app_config_services     = var.consul_central_config.service_defaults
 }
 
 module "service-resolver" {
   source = "./service-resolver"
 
   enable_service_resolver = var.enable_service_resolver
-  app_config_services     = var.consul_central_config
+  app_config_services     = var.consul_central_config.service_resolver
 }
 
 module "service-splitter" {

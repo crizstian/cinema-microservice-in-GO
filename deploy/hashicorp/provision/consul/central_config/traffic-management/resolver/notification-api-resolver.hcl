@@ -12,6 +12,6 @@ subsets = {
 
 failover = {
   "*" = {
-    datacenters = ["dc2"]
+    datacenters = ["nyc"]
   }
 }

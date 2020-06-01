@@ -3,16 +3,16 @@ module "tf_consul" {
 
   datacenters = var.consul_datacenters
   
-  enable_agent_policy       = true
-  enable_anonymous_policy   = true
-  enable_sensitive_policy   = true
-  enable_blocking_policy    = true
-  enable_server_role        = true
-  enable_replication_policy = true
+  enable_agent_policy        = true
+  enable_anonymous_policy    = true
+  enable_sensitive_policy    = true
+  enable_blocking_policy     = true
+  enable_server_role         = true
+  enable_replication_policy  = true
   enable_mesh_gateway_policy = true
 
-  enable_intentions             = false
-  enable_deny_all               = false
+  enable_intentions             = true
+  enable_deny_all               = true
   service_to_service_intentions = var.service_to_service_intentions
 
   enabled_prepared_queries = true
@@ -23,9 +23,9 @@ module "tf_consul" {
     value = "active"
   }]
 
-  consul_central_config   = var.service_defaults_apps
+  consul_central_config   = var.central_config_apps
   proxy_defaults          = var.proxy_defaults
-  enable_proxy_defaults   = true
+  enable_proxy_defaults   = false
   enable_service_splitter = false
   enable_service_resolver = false
   enable_service_defaults = false

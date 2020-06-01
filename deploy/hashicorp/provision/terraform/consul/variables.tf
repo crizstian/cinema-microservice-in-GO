@@ -50,8 +50,12 @@ variable "datacenter" {
 }
 
 variable "consul_central_config" {
-  default = []
+  default = {
+    service_defaults = []
+    service_resolver = []
+  }
 }
+
 variable "proxy_defaults" {
   default = ""
 }

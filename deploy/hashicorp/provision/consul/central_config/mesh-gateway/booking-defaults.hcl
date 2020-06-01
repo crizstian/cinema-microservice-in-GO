@@ -1,5 +1,5 @@
 Kind = "service-defaults"
-Name = "booking-service"
+Name = "booking-api"
 
 Protocol = "http"
 

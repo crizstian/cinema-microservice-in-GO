@@ -7,7 +7,7 @@ if [ "$CONSUL_HTTP_SSL" == "true" ]; then
   curl_ssl="-consul-ssl -consul-ssl-ca-cert=${CA_CERT_FILE}"
 fi
 
-if [ -n $CONSUL_HTTP_TOKEN ] && [ $CONSUL_HTTP_TOKEN != "" ]; then
+if [ -n $CONSUL_HTTP_TOKEN ]; then
 	echo "Setting consul token"
 	header="--header \"X-Consul-Token: $CONSUL_HTTP_TOKEN\""
 fi
@@ -24,5 +24,6 @@ else
 fi
 echo "Proceeding with startup..."
  
+echo "consul-template -log-level err $curl_ssl -consul-addr ${CONSUL_IP}:${CONSUL_PORT} -exec-reload-signal=SIGHUP -template /tmp/upstream.ctmpl:/etc/nginx/upstream.all.conf -template /tmp/domain.ctmpl:/etc/nginx/conf.d/domain.conf -config /tmp/ct-config.hcl"
 
 exec consul-template -log-level err $curl_ssl -consul-addr ${CONSUL_IP}:${CONSUL_PORT} -exec-reload-signal=SIGHUP -template "/tmp/upstream.ctmpl:/etc/nginx/upstream.all.conf" -template "/tmp/domain.ctmpl:/etc/nginx/conf.d/domain.conf" -config "/tmp/ct-config.hcl"

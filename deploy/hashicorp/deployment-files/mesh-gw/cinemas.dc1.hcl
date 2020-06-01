@@ -23,7 +23,7 @@ job "cinemas" {
     service {
       name = "booking-api"
       port = "http"
-      tags = ["cinemas-project"]
+      tags = ["cinemas-project", "ENTRY"]
 
       check {
         name     = "booking-api-health"
@@ -94,7 +94,7 @@ job "cinemas" {
           "-address", ":${NOMAD_PORT_proxy}",
           "-wan-address", "172.20.20.11:${NOMAD_PORT_proxy}",
           "-admin-bind", "127.0.0.1:19005",
-          "-token", "c6759f14-1005-675c-1db6-18132ada0a39",
+          "-token", "c6b64436-5f05-deba-c579-ef7d08de8763",
           "-deregister-after-critical", "5s",
           "--",
           "-l", "debug"

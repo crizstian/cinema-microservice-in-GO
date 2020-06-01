@@ -1,79 +1,40 @@
 job "cinemas" {
 
-  datacenters = ["dc1-ncv"]
-  region      = "dc1-region"
+  datacenters = ["sfo-ncv"]
+  region      = "sfo-region"
   type        = "service"
 
-  group "payment-api" {
+  group "booking-api" {
     count = 1
-
-    task "payment-api" {
-      driver = "docker"
-      config {
-        image = "crizstian/payment-service-go:v0.4"
-      }
-
-      env {
-        DB_SERVERS   = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
-        SERVICE_PORT = "3000"
-        CONSUL_IP    = "172.20.20.11"
-      }
-
-      resources {
-        cpu    = 50
-        memory = 50
-      }
-    }
 
     network {
       mode = "bridge"
-    }
 
-    service {
-      name = "payment-api"
-      port = "3000"
-
-      connect {
-        sidecar_service {}
-      }
-    }
-  }
-
-  group "booking-service" {
-    count = 1
-
-    task "booking-service" {
-      driver = "docker"
-      config {
-        image   = "crizstian/booking-service-go:v0.4"
-      }
-
-      env {
-        SERVICE_PORT     = "3002"
-        DB_SERVERS       = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
-        CONSUL_IP        = "172.20.20.11"
-        TRACER_URL       = "10.0.2.15:6831"
-        PAYMENT_URL      = "http://${NOMAD_UPSTREAM_ADDR_payment_api}"
-        NOTIFICATION_URL = "http://${NOMAD_UPSTREAM_ADDR_notification_api}"
-      }
-
-      resources {
-        cpu    = 50
-        memory = 50
-      }
-    }
-
-    network {
-      mode = "bridge"
       port "http" {
         static = 3002
         to     = 3002
+      }
+
+      port "healthcheck" {
+        to = -1
       }
     }
 
     service {
       name = "booking-api"
-      port = "3002"
+      port = "http"
+      tags = ["cinemas-project"]
+
+      check {
+        name     = "booking-api-health"
+        port     = "healthcheck"
+        type     = "http"
+        protocol = "http"
+        path     = "/ping"
+        interval = "10s"
+        timeout  = "3s"
+        expose   = true
+      }
 
       connect {
         sidecar_service {
@@ -90,13 +51,38 @@ job "cinemas" {
         }
       }
     }
+
+    task "booking-api" {
+      driver = "docker"
+
+      config {
+        image   = "crizstian/booking-service-go:v0.4"
+      }
+
+      env {
+        SERVICE_PORT     = "3002"
+        DB_SERVERS       = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
+
+        CONSUL_IP        = "consul.service.consul"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
+        
+        PAYMENT_URL      = "http://${NOMAD_UPSTREAM_ADDR_payment_api}"
+        NOTIFICATION_URL = "http://${NOMAD_UPSTREAM_ADDR_notification_api}"
+      }
+
+      resources {
+        cpu    = 50
+        memory = 50
+      }
+    }
   }
 
   group "mesh-gateway" {
     count = 1
 
     task "mesh-gateway" {
-      driver = "exec"
+      driver = "raw_exec"
 
       config {
         command = "consul"
@@ -104,11 +90,12 @@ job "cinemas" {
           "connect", "envoy",
           "-mesh-gateway",
           "-register",
-          "-http-addr", "172.20.20.11:8500",
-          "-grpc-addr", "172.20.20.11:8502",
+          "-service", "gateway-primary",
+          "-address", ":${NOMAD_PORT_proxy}",
           "-wan-address", "172.20.20.11:${NOMAD_PORT_proxy}",
-          "-address", "172.20.20.11:${NOMAD_PORT_proxy}",
-          "-bind-address", "default=172.20.20.11:${NOMAD_PORT_proxy}",
+          "-admin-bind", "127.0.0.1:19005",
+          "-token", "9267d886-3c2f-926e-4115-dbaad3595ff5",
+          "-deregister-after-critical", "5s",
           "--",
           "-l", "debug"
         ]

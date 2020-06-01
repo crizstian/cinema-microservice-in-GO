@@ -1,38 +1,88 @@
 job "cinemas" {
 
-  datacenters = ["dc2-ncv"]
-  region      = "dc2-region"
+  datacenters = ["nyc-ncv"]
+  region      = "nyc-region"
   type        = "service"
 
-  group "notification-api-v1" {
+  group "payment-api" {
     count = 1
-
-    task "notification-api-v1" {
-      driver = "docker"
-      config {
-        image   = "crizstian/notification-service-go:v0.4"
-      }
-
-      env {
-        SERVICE_PORT="3001"
-        CONSUL_IP = "172.20.20.11"
-      }
-
-      resources {
-        cpu    = 100
-        memory = 100
-      }
-    }
 
     network {
       mode = "bridge"
+      
+      port "healthcheck" {
+        to = -1
+      }
     }
 
     service {
+      name = "payment-api"
+      port = "3000"
+
+      check {
+        name     = "payment-api-health"
+        port     = "healthcheck"
+        type     = "http"
+        protocol = "http"
+        path     = "/ping"
+        interval = "5s"
+        timeout  = "2s"
+        expose   = true
+      }
+
+      connect {
+        sidecar_service {}
+      }
+    }
+
+    task "payment-api" {
+      driver = "docker"
+
+      config {
+        image = "crizstian/payment-service-go:v0.4"
+      }
+
+      env {
+        DB_SERVERS      = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
+        SERVICE_PORT    = "3000"
+        CONSUL_IP       = "consul.service.consul"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
+      }
+
+      resources {
+        cpu    = 50
+        memory = 50
+      }
+    }
+  }
+
+  group "notification-api" {
+    count = 1
+    
+    network {
+      mode = "bridge"
+
+      port "healthcheck" {
+        to = -1
+      }
+    }
+
+      service {
       name = "notification-api"
       port = "3001"
       tags = ["notification-api-v1", "cinema-microservice-project"]
 
+      check {
+        name     = "notification-api-health"
+        port     = "healthcheck"
+        type     = "http"
+        protocol = "http"
+        path     = "/ping"
+        interval = "5s"
+        timeout  = "2s"
+        expose   = true
+      }
       meta {
         version = "1"
       }
@@ -41,21 +91,19 @@ job "cinemas" {
         sidecar_service {}
       }
     }
-  }
 
-
-  group "notification-api-v2" {
-    count = 1
-
-    task "notification-api-v2" {
+    task "notification-api" {
       driver = "docker"
+
       config {
-        image   = "crizstian/notification-service-go:v0.3-tls"
+        image   = "crizstian/notification-service-go:v0.4"
       }
 
       env {
-        SERVICE_PORT = "3001"
-        CONSUL_IP    = "172.20.20.11"
+        SERVICE_PORT    = "3001"
+        CONSUL_IP       = "consul.service.consul"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
       }
 
       resources {
@@ -63,30 +111,68 @@ job "cinemas" {
         memory = 50
       }
     }
-
+  }
+    group "notification-api-v2" {
+    count = 1
+    
     network {
       mode = "bridge"
+
+      port "healthcheck" {
+        to = -1
+      }
     }
 
-    service {
+      service {
       name = "notification-api"
       port = "3001"
       tags = ["notification-api-v2", "cinema-microservice-project"]
 
+      check {
+        name     = "notification-api-health"
+        port     = "healthcheck"
+        type     = "http"
+        protocol = "http"
+        path     = "/ping"
+        interval = "5s"
+        timeout  = "2s"
+        expose   = true
+      }
       meta {
         version = "2"
       }
+
       connect {
         sidecar_service {}
       }
     }
-  }
 
+    task "notification-api" {
+      driver = "docker"
+
+      config {
+        image   = "crizstian/notification-service-go:v0.4.1"
+      }
+
+      env {
+        SERVICE_PORT    = "3001"
+        CONSUL_IP       = "consul.service.consul"
+        CONSUL_SCHEME   = "https"
+        CONSUL_HTTP_SSL = "true"
+      }
+
+      resources {
+        cpu    = 50
+        memory = 50
+      }
+    }
+  }
+  
   group "mesh-gateway" {
     count = 1
 
     task "mesh-gateway" {
-      driver = "exec"
+      driver = "raw_exec"
 
       config {
         command = "consul"
@@ -94,13 +180,12 @@ job "cinemas" {
           "connect", "envoy",
           "-mesh-gateway",
           "-register",
-          "-http-addr", "172.20.20.31:8500",
-          "-grpc-addr", "172.20.20.31:8502",
-          "-wan-address", "172.20.20.31:${NOMAD_PORT_proxy}",
-          "-address", "172.20.20.31:${NOMAD_PORT_proxy}",
-          "-bind-address", "default=172.20.20.31:${NOMAD_PORT_proxy}",
-          "--",
-          "-l", "debug"
+          "-service", "gateway-secondary",
+          "-address", ":${NOMAD_PORT_proxy}",
+          "-wan-address", "172.20.20.21:${NOMAD_PORT_proxy}",
+          "-admin-bind", "127.0.0.1:19005",
+          "-token", "c6b64436-5f05-deba-c579-ef7d08de8763",
+          "-deregister-after-critical", "5s",
         ]
       }
 

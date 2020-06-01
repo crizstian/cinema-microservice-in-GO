@@ -5,7 +5,7 @@ env | grep CONSUL
 
 export CUSTOM_CMD="$@"
 
-if [ $CONSUL_HTTP_SSL == "true" ] && [ $CONSUL_HTTP_TOKEN != "" ]; then
+if [ $CONSUL_HTTP_SSL == "true" ]; then
 	echo "SSL IS ENABLED"
   curl_ssl="--cacert ${CA_CERT_FILE}"
 fi
@@ -22,7 +22,7 @@ fi
 
 echo "Setting secrets for $APP_NAME if exists"
 
-if [ -n "$APP_NAME" ]; then
+if [ -n "$APP_NAME" ] && [ $ENABLE_SECRETS == "true" ]; then
 
 	#Get vault token if APP_NAME is specified by the application
 	echo "Fetching role and secrets..."
