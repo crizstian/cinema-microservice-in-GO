@@ -1,0 +1,4 @@
+---
+configs:
+    datacenters: ['sfo', 'nyc']
+    ip_addresses: ['172.20.20.11', '172.20.20.21']
