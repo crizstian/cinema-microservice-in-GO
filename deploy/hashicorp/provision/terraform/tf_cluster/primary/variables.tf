@@ -111,3 +111,51 @@ variable "proxy_defaults" {
 variable "enable_proxy_defaults" {
   default = false
 }
+variable "users" {
+  default = [{
+    user        = "root"
+    entity_name = "admin"
+    metadata    = {
+      type  = "admin"
+      group = "root"
+    }
+    policies    = ["admin-policy"]
+    password    = "admin"
+  },{
+    user        = "bob"
+    entity_name = "Bob Smith"
+    metadata    = {
+      type  = "admin"
+      group = "technology-ops_us"
+    }
+    policies    = ["default"]
+    password    = "user"
+  },{
+    user        = "johndoe"
+    entity_name = "John DevOps"
+    metadata    = {
+      type  = "user"
+      group = "technology-ops_us"
+    }
+    policies    = ["default"]
+    password    = "user"
+  },{
+    user        = "johnsnow"
+    entity_name = "John Snow"
+    metadata    = {
+      type  = "admin"
+      group = "clgx-cicd"
+    }
+    policies    = ["default"]
+    password    = "user"
+  },{
+    user        = "marydoe"
+    entity_name = "Mary DevOps"
+    metadata    = {
+      type  = "user"
+      group = "clgx-cicd"
+    }
+    policies    = ["default"]
+    password    = "user"
+  }]
+}

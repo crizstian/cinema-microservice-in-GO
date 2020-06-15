@@ -34,23 +34,21 @@ module "tf_consul" {
 module "tf_vault" {
   source = "../../vault"
 
-  enable_app_role                = true
-  enable_userpass_engine         = true
-  enable_store_approle_in_consul = true
+  enable_kv_engine                 = true
+  enable_userpass_engine           = true
+  enable_namespaces                = true
+      
+  enable_admin_policy              = true
+  enable_infrastructure_policy     = true
   
-  roles                          = concat(var.apps, var.infrastructure, var.dbs)
-  consul_datacenter              = var.consul_datacenter
-  
-  enable_admin_policy            = true
-  enable_infrastructure_policy   = true
-  enable_app_policy              = true
-  policy_apps                    = concat(var.apps, var.dbs)
-  
-  enable_consul_engine           = false
-  enable_kv_engine               = true
-  enable_mongo_db_engine         = false
-  enable_admin_user              = true
-  
-  deploy_cinema_microservice_secrets = true
-  deploy_mongodb_secrets             = true
+  enable_userpass_entity           = true
+  enable_store_entity_id_in_consul = true
+  consul_datacenter                = var.consul_datacenter
+
+  users      = var.users
+  namespaces = [
+    "prd",
+    "nonprd",
+    "sbx",
+  ]
 }

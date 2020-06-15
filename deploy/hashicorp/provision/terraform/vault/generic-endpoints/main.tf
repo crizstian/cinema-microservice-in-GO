@@ -18,7 +18,7 @@ module "userpass" {
   source = "./userpass"
 
   depends_on_userpass_mount = var.depends_on_userpass_mount
-  enable_admin_user         = var.enable_admin_user
+  users                     = var.users
 }
 
 module "mongo-secrets" {

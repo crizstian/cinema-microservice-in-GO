@@ -1,22 +1,15 @@
-variable "depends_on_userpass_mount" {
-  default = ""
-}
-variable "enable_admin_user" {
-  default = false
-}
-
+variable "depends_on_userpass_mount" {}
+variable "users" {}
 
 resource "vault_generic_endpoint" "admin-user" {
-  count = var.enable_admin_user ? 1 : 0
+  count = length(var.users)
   
   depends_on           = [var.depends_on_userpass_mount]
-  path                 = "auth/userpass/users/admin"
+  path                 = "auth/userpass/users/${var.users[count.index].user}"
   ignore_absent_fields = true
-
-  data_json = <<EOT
-{
-  "policies": ["admin-policy", "default"],
-  "password": "admin"
-}
-EOT
+  data_json            = <<EOT
+  {
+    "password": "${var.users[count.index].password}"
+  }
+  EOT
 }

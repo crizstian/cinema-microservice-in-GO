@@ -138,10 +138,13 @@ function vaultConsulKV {
   data=$1
   path=$2
   url="$CONSUL_HTTP_ADDR/v1/kv/$path"
+
+  echo "curl -s $curl_ssl $header  --request PUT -H Content-Type: application/json --data $data $url"
+
   if [ "$data" == "file" ]; then
-   curl -s $curl_ssl $header  --request PUT -H "Content-Type: application/json --data @file.json $url
+   curl -s $curl_ssl $header  --request PUT -H "Content-Type: application/json" --data @file.json $url
   else
-   curl -s $curl_ssl $header  --request PUT -H "Content-Type: application/json --data $data $url
+   curl -s $curl_ssl $header  --request PUT -H "Content-Type: application/json" --data $data $url
   fi
 }
 

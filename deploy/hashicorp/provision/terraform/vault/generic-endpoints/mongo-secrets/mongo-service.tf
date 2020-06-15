@@ -1,9 +1,5 @@
-variable "depends_on_kv_mount" {
-  default = ""
-}
-variable "deploy_mongodb_secrets" {
-  default = false
-}
+variable "depends_on_kv_mount" {}
+variable "deploy_mongodb_secrets" {}
 
 resource "vault_generic_secret" "mongodb-service" {
   count = var.deploy_mongodb_secrets ? 1 : 0

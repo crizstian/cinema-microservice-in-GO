@@ -1,9 +1,5 @@
-variable "enable_app_policy" {
-  default = false
-}
-variable "policy_apps" {
-  default = []
-}
+variable "enable_app_policy" {}
+variable "policy_apps" {}
 
 # Application Policies
 resource "vault_policy" "apps-policy" {

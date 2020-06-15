@@ -20,7 +20,6 @@ echo "Unsealing Vault ..."
 sudo bash /vagrant/provision/vault/system/unseal.sh
 
 source /etc/environment
-env | grep CONS
 
 consul-template -template "/etc/docker/daemon.json.tmpl:/etc/docker/daemon.json" -once
 sudo service docker restart

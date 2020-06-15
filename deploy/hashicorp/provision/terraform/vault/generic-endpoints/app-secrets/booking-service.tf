@@ -1,9 +1,5 @@
-variable "depends_on_kv_mount" {
-  default = ""
-}
-variable "deploy_cinema_microservice_secrets" {
-  default = false
-}
+variable "depends_on_kv_mount" {}
+variable "deploy_cinema_microservice_secrets" {}
 
 resource "vault_generic_secret" "booking-service" {
   count = var.deploy_cinema_microservice_secrets ? 1 : 0

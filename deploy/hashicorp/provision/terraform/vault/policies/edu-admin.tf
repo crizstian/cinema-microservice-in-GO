@@ -1,0 +1,48 @@
+variable "enable_edu_admin_policy" {}
+
+resource "vault_policy" "edu-admin-policy" {
+  count = var.enable_edu_admin_policy ? 1 : 0
+
+  name   = "edu-admin-policy"
+  policy = <<EOT
+    # Manage namespaces
+    path "sys/namespaces/*" {
+      capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+    }
+
+    # Manage policies
+    path "sys/policies/acl/*" {
+      capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+    }
+
+    # List policies
+    path "sys/policies/acl" {
+      capabilities = ["list"]
+    }
+
+    # Enable and manage secrets engines
+    path "sys/mounts/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+
+    # List available secrets engines
+    path "sys/mounts" {
+      capabilities = [ "read" ]
+    }
+
+    # Create and manage entities and groups
+    path "identity/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+
+    # Manage tokens
+    path "auth/token/*" {
+      capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+    }
+
+    # Manage secrets at 'edu-secret'
+    path "edu-secret/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+  EOT
+}

@@ -63,7 +63,7 @@ if [ "$1" == "sfo" ]; then
 
   sudo bash /vagrant/provision/scripts/common-services.sh
 
-  sudo bash /vagrant/provision/vault/performance/init-primary.sh
+  # sudo bash /vagrant/provision/vault/performance/init-primary.sh
 fi
 
 if [ "$1" != "sfo" ]; then

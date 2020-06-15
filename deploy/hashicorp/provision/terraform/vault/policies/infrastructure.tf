@@ -1,6 +1,4 @@
-variable "enable_infrastructure_policy" {
-  default = false
-}
+variable "enable_infrastructure_policy" {}
 
 resource "vault_policy" "infrastructure-policy" {
   count = var.enable_infrastructure_policy ? 1 : 0

@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-CONSUL_ENTERPRISE=$1
-VAULT_ENTERPRISE=$2
+LOCAL_CONSUL_BINARY=$1
+LOCAL_VAULT_BINARY=$2
+LOCAL_NOMAD_BINARY=$3
 
-echo "CONSUL_ENTERPRISE=$CONSUL_ENTERPRISE"
-echo "VAULT_ENTERPRISE=$VAULT_ENTERPRISE"
+echo "LOCAL_CONSUL_BINARY=$LOCAL_CONSUL_BINARY"
+echo "LOCAL_NOMAD_BINARY=$LOCAL_NOMAD_BINARY"
+echo "LOCAL_VAULT_BINARY=$LOCAL_VAULT_BINARY"
 
 # Install Keys
 curl -sL -s https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
@@ -41,7 +43,7 @@ BLUE="\[\e[34m\]"
 PS1="$DARKGRAY\u@$BOLD$BLUE\h$DARKGRAY:\w\$ $NORMAL"
 END
 
-# if [ "$CONSUL_ENTERPRISE" != "true"]; then
+if [ "$LOCAL_CONSUL_BINARY" != "true"]; then
 # Download consul
 export CONSUL_VERSION=1.7.3
 curl -sL https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip -o consul.zip
@@ -50,11 +52,11 @@ curl -sL https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL
 sudo unzip consul.zip
 sudo chmod +x consul
 sudo mv consul /usr/bin/consul
-# else 
-#     cp /vagrant/bin/consul .
-#     sudo chmod +x consul
-#     sudo mv consul /usr/bin/consul
-# fi
+else 
+    cp /vagrant/bin/consul .
+    sudo chmod +x consul
+    sudo mv consul /usr/bin/consul
+fi
 
 # Download consul-template
 export CONSUL_TEMPLATE_VERSION=0.24.0
@@ -77,6 +79,9 @@ sudo unzip consul-replicate.zip
 sudo chmod +x consul-replicate
 sudo mv consul-replicate /usr/bin/consul-replicate
 
+
+
+if [ "$LOCAL_NOMAD_BINARY" != "true"]; then
 # Download nomad
 export NOMAD_VERSION=0.11.2
 curl -sL https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip -o nomad.zip
@@ -85,8 +90,13 @@ curl -sL https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VER
 sudo unzip nomad.zip
 sudo chmod +x nomad
 sudo mv nomad /usr/bin/nomad
+else 
+    cp /vagrant/bin/nomad .
+    sudo chmod +x nomad
+    sudo mv nomad /usr/bin/nomad
+fi
 
-# Download nomad
+# Download terraform
 export TERRAFORM_VERSION=0.12.24
 curl -sL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
 
@@ -104,7 +114,7 @@ sudo tar -C /opt/cni/bin -xzf cni-plugins.tgz
 
 
 # Download vault
-if [ "$VAULT_ENTERPRISE" != "true" ]; then
+if [ "$LOCAL_VAULT_BINARY" != "true" ]; then
     export VAULT_VERSION=1.2.3
     curl -sL https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip -o vault.zip
 

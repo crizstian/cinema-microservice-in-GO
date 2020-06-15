@@ -1,15 +1,7 @@
-variable "enable_consul_engine" {
-  default = false
-}
-variable "consul_token" {
-  default = ""
-}
-variable "consul_address" {
-  default = ""
-}
-variable "consul_scheme" {
-  default = ""
-}
+variable "enable_consul_engine" {}
+variable "consul_token" {}
+variable "consul_address" {}
+variable "consul_scheme" {}
 
 resource "vault_consul_secret_backend" "consul" {
   count = var.enable_consul_engine ? 1 : 0
@@ -22,11 +14,13 @@ resource "vault_consul_secret_backend" "consul" {
 }
 
 resource "null_resource" "depends_on_consul_mount" {
+  count = var.enable_consul_engine ? 1 : 0
+  
   depends_on = [vault_consul_secret_backend.consul]
 }
 
 output "depends_on_consul_mount" {
-  value = null_resource.depends_on_consul_mount.id
+  value = var.enable_consul_engine ? null_resource.depends_on_consul_mount.0.id : 0
 }
 
 // resource "null_resource" "set-consul-token" {

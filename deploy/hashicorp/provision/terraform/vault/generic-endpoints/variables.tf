@@ -29,3 +29,6 @@ variable "enable_userpass_engine" {
 variable "deploy_mongodb_secrets" {
   default = false
 }
+variable "users" {
+  default = []
+}

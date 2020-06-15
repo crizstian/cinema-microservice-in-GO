@@ -1,15 +1,7 @@
-variable "depends_on_consul_mount" {
-  default = ""
-}
-variable "generate_server_token" {
-  default = false
-}
-variable "upload_server_token_to_consul_kv" {
-  default = false
-}
-variable "consul_datacenter" {
-  default = ""
-}
+variable "depends_on_consul_mount" {}
+variable "generate_server_token" {}
+variable "upload_server_token_to_consul_kv" {}
+variable "consul_datacenter" {}
 
 resource "vault_generic_endpoint" "server-consul-token" {
   count = var.generate_server_token ? 1 : 0

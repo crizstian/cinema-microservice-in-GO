@@ -1,6 +1,4 @@
-variable "enable_admin_policy" {
-  default = false
-}
+variable "enable_admin_policy" {}
 
 resource "vault_policy" "admin-policy" {
   count = var.enable_admin_policy ? 1 : 0
@@ -9,6 +7,11 @@ resource "vault_policy" "admin-policy" {
   policy = <<EOT
     # Manage auth methods broadly across Vault
     path "auth/*"
+    {
+      capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+    }
+
+    path "auth/userpass/users"
     {
       capabilities = ["create", "read", "update", "delete", "list", "sudo"]
     }

@@ -1,24 +1,10 @@
-variable "enable_mongo_db_engine" {
-  default = false
-}
-variable "allowed_roles" {
-  default = []
-}
-variable "mongo_username" {
-  default = ""
-}
-variable "mongo_password" {
-  default = ""
-}
-variable "mongo_ip" {
-  default = ""
-}
-variable "mongo_port" {
-  default = ""
-}
-variable "connection_url" {
-  default = ""
-}
+variable "enable_mongo_db_engine" {}
+variable "allowed_roles" {}
+variable "mongo_username" {}
+variable "mongo_password" {}
+variable "mongo_ip" {}
+variable "mongo_port" {}
+variable "connection_url" {}
 
 locals {
   connection_url = "mongodb://${var.mongo_username}:${var.mongo_password}@${var.mongo_ip}:${var.mongo_port}/admin?ssl=true"

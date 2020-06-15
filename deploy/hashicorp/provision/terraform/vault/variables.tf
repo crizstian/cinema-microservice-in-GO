@@ -1,7 +1,7 @@
 variable "enable_app_role" {
   default = false
 }
-variable "roles" {
+variable "app_roles" {
   default = []
 }
 variable "enable_store_approle_in_consul" {
@@ -87,5 +87,64 @@ variable "enable_userpass_engine" {
   default = false
 }
 variable "deploy_mongodb_secrets" {
+  default = false
+}
+variable "enable_gcp_engine" {
+  default = false
+}
+variable "enable_gcp_devops_sa" {
+  default = false
+}
+variable "gcp_root_project" {
+  default = ""
+}
+variable "gcp_root_creds" {
+  default = ""
+}
+variable "enable_namespaces" {
+  default = false
+}
+variable "enable_user1_sbx" {
+  default = false
+}
+variable "enable_gcp_storage_sa" {
+  default = false
+}
+variable "enable_edu_admin_policy" {
+  default = false
+}
+variable "enable_technology-ops_us_admin_policy" {
+  default = false
+}
+variable "namespaces" {
+  default = []
+}
+variable "users" {
+  default = []
+}
+variable "enable_identity_group" {
+  default = false
+}
+variable "groups" {
+  default = []
+}
+
+
+variable "enable_userpass_entity" {
+  default = false
+}
+variable "userpass_accessor" {
+  default = ""
+}
+variable "enable_store_entity_id_in_consul" {
+  default = false
+}
+variable "enable_technology-ops_us_policy" {
+  default = false
+}
+variable "enable_clgx-cicd_admin_policy" {
+  default = false
+}
+variable "enable_clgx-cicd_policy" {
   default = false
 }
