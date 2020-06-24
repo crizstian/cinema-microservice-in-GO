@@ -44,6 +44,7 @@ PS1="$DARKGRAY\u@$BOLD$BLUE\h$DARKGRAY:\w\$ $NORMAL"
 END
 
 if [ "$LOCAL_CONSUL_BINARY" != "true"]; then
+echo "############## Downloading consul binary ########################"
 # Download consul
 export CONSUL_VERSION=1.7.3
 curl -sL https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip -o consul.zip
@@ -53,6 +54,7 @@ sudo unzip consul.zip
 sudo chmod +x consul
 sudo mv consul /usr/bin/consul
 else 
+echo "############## Copying consul binary ########################"
     cp /vagrant/bin/consul .
     sudo chmod +x consul
     sudo mv consul /usr/bin/consul
@@ -82,6 +84,7 @@ sudo mv consul-replicate /usr/bin/consul-replicate
 
 
 if [ "$LOCAL_NOMAD_BINARY" != "true"]; then
+echo "############## Downloading nomad binary ########################"
 # Download nomad
 export NOMAD_VERSION=0.11.2
 curl -sL https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip -o nomad.zip
@@ -91,6 +94,7 @@ sudo unzip nomad.zip
 sudo chmod +x nomad
 sudo mv nomad /usr/bin/nomad
 else 
+echo "############## Copying nomad binary ########################"
     cp /vagrant/bin/nomad .
     sudo chmod +x nomad
     sudo mv nomad /usr/bin/nomad
@@ -115,6 +119,7 @@ sudo tar -C /opt/cni/bin -xzf cni-plugins.tgz
 
 # Download vault
 if [ "$LOCAL_VAULT_BINARY" != "true" ]; then
+echo "############## Downloading vault binary ########################"
     export VAULT_VERSION=1.2.3
     curl -sL https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip -o vault.zip
 
@@ -123,6 +128,7 @@ if [ "$LOCAL_VAULT_BINARY" != "true" ]; then
     sudo chmod +x vault
     sudo mv vault /usr/bin/vault
 else 
+echo "############## Copying vault binary ########################"
     cp /vagrant/bin/vault .
     sudo chmod +x vault
     sudo mv vault /usr/bin/vault

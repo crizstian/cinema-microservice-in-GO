@@ -47,10 +47,6 @@ job "cinemas" {
         interval = "5s"
         timeout  = "2s"
       }
-
-      connect {
-        sidecar_service {}
-      }
     }
   }
 
@@ -96,10 +92,6 @@ job "cinemas" {
         path     = "/ping"
         interval = "5s"
         timeout  = "2s"
-      }
-
-      connect {
-        sidecar_service {}
       }
     }
   }
@@ -149,17 +141,6 @@ job "cinemas" {
         path     = "/ping"
         interval = "5s"
         timeout  = "2s"
-      }
-
-      connect {
-        sidecar_service {
-          proxy {
-            upstreams {
-              destination_name = "payment-api"
-              local_bind_port  = 8080
-            }
-          }
-        }
       }
     }
   }
