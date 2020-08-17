@@ -64,6 +64,30 @@ if [ "$1" == "sfo" ]; then
   sudo bash /vagrant/provision/scripts/common-services.sh
 
   sudo bash /vagrant/provision/vault/performance/init-primary.sh
+
+  source /etc/environment
+  echo '
+  key "cluster/consul/rootToken" {
+    policy = "read"
+  }
+  node_prefix "" {
+    policy = "read"
+  }
+  service_prefix "" {
+    policy = "read"
+  }
+  session_prefix "" {
+    policy = "read"
+  }
+  agent_prefix "" {
+    policy = "read"
+  }
+  query_prefix "" {
+    policy = "read"
+  }
+  operator = "read"' |  consul acl policy create -name anonymous -rules -
+
+  consul acl token update -id anonymous -policy-name anonymous 1>/dev/null
 fi
 
 if [ "$1" != "sfo" ]; then

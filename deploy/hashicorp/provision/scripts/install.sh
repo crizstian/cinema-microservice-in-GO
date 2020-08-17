@@ -101,7 +101,7 @@ echo "############## Copying nomad binary ########################"
 fi
 
 # Download terraform
-export TERRAFORM_VERSION=0.12.24
+export TERRAFORM_VERSION=0.13.0
 curl -sL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip
 
 # Install terraform
