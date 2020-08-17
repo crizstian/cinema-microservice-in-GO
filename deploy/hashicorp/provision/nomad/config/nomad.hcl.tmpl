@@ -10,10 +10,6 @@ disable_update_check = true
 
 client {
     enabled = true
-    host_volume "ca-certificates" {
-        path      = "/var/vault/config"
-        read_only = true
-    }
 }
 addresses {
     rpc  = "{{ env "HOST_IP" }}"
