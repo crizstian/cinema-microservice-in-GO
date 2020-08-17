@@ -34,14 +34,9 @@ acl = {
   enabled        = true
   default_policy = "deny"
   down_policy    = "extend-cache"
-  # enable_token_persistence = true
   {{ if eq (env "DATACENTER") (env "PRIMARY_DATACENTER") }}{{else}}
   enable_token_replication = true
   {{end}}
-  tokens = {
-    default     = "{{ env "CONSUL_HTTP_TOKEN" }}"
-    replication = "{{ env "CONSUL_HTTP_TOKEN" }}"
-  }
 }
 
 verify_incoming        = false
@@ -63,7 +58,9 @@ encrypt = "{{ env "CONSUL_ENCRYPT_KEY" }}"
 encrypt_verify_incoming = true
 encrypt_verify_outgoing = true
 
+{{ if eq (env "ENABLE_METRICS") "true" }}
 telemetry = {
-  dogstatsd_addr   = "10.0.2.15:8125"
+  dogstatsd_addr   = "{{ env "MONITORING_ADDR" }}"
   disable_hostname = true
 }
+{{end}}
