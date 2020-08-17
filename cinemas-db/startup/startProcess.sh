@@ -26,16 +26,11 @@ if [ -n $CONSUL_HTTP_TOKEN ] && [ $CONSUL_HTTP_TOKEN != "" ]; then
 fi
 
 echo "Setting Server as started"
-echo "curl -s $curl_ssl --request PUT --data started ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/${NOMAD_TASK_NAME}"
-
-curl -s $header $curl_ssl \
-    --request PUT \
-    --data "started" \
-  ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/${NOMAD_TASK_NAME}
+start="curl -s $curl_ssl $header --request PUT --data started ${CONSUL_SCHEME}://${CONSUL_IP}:${CONSUL_PORT}/v1/kv/cluster/apps/${APP_NAME}/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/${NOMAD_TASK_NAME}"
+echo $start
+eval $start
 
 echo "Proceeding with replica set config..."
-echo "CONSUL_HTTP_SSL=${CONSUL_HTTP_SSL} /usr/bin/consul lock $ctmpl_ssl -http-addr=${CONSUL_IP}:${CONSUL_PORT} cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/initMongo /tmp/mongoStart.sh &"
-
-CONSUL_HTTP_SSL=${CONSUL_HTTP_SSL} /usr/bin/consul lock $ctmpl_ssl -http-addr=${CONSUL_IP}:${CONSUL_PORT} cluster/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/initMongo /tmp/mongoStart.sh &
+consul lock $ctmpl_ssl -verbose -http-addr=${CONSUL_IP}:${CONSUL_PORT} cluster/apps/${APP_NAME}/${NOMAD_JOB_NAME}/${NOMAD_GROUP_NAME}/initMongo /tmp/mongoStart.sh &
 
 wait

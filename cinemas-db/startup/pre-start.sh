@@ -61,7 +61,7 @@ if [ -n "$APP_NAME" ]; then
 	cat /tmp/envconsul.hcl
 
   echo "Continuing with envconsul based startup..."
-  exec envconsul -config=/tmp/envconsul.hcl /tmp/startProcess.sh $START_CMD
+  CONSUL_HTTP_TOKEN=${CONSUL_HTTP_TOKEN} envconsul -config=/tmp/envconsul.hcl /tmp/startProcess.sh $START_CMD
 else
 	echo "Application is not envconsul enabled; Continuing with standard startup..."
 	exec $START_CMD
