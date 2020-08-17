@@ -1,13 +1,18 @@
 #!/bin/bash
 set -e
 
-env | grep CONSUL
+env
 
 export CUSTOM_CMD="$@"
 
 if [ $CONSUL_HTTP_SSL == "true" ]; then
 	echo "SSL IS ENABLED"
   curl_ssl="--cacert ${CA_CERT_FILE}"
+fi
+
+if [ "$DISABLE_CURL_SSL" == "true" ]; then
+	echo "SSL IS BYPASS ON CURL ENABLED"
+  curl_ssl="-k"
 fi
 
 if [ -n $CONSUL_HTTP_TOKEN ]; then
@@ -61,7 +66,7 @@ if [ -n "$APP_NAME" ]; then
 	cat /tmp/envconsul.hcl
 
   echo "Continuing with envconsul based startup..."
-  exec envconsul -config=/tmp/envconsul.hcl /tmp/start-process.sh $START_CMD
+ 	envconsul -config=/tmp/envconsul.hcl /tmp/start-process.sh $START_CMD
 else
 	echo "Application is not envconsul enabled; Continuing with standard startup..."
 	exec $START_CMD

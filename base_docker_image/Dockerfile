@@ -6,7 +6,9 @@ COPY envconsul.hcl.tmpl /tmp/envconsul.hcl.tmpl
 COPY *.sh /tmp/
 COPY ca.crt.pem /tmp/
 
-RUN chmod +x /tmp/*.sh && bash /tmp/install-tools.sh
+RUN chmod +x /tmp/*.sh && \
+  bash /tmp/install-tools.sh && \
+  chmod 400 /tmp/ca.crt.pem
 
 ENV CONSUL_SCHEME http
 ENV CONSUL_PORT 8500
