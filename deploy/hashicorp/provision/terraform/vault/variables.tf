@@ -116,10 +116,10 @@ variable "enable_edu_admin_policy" {
 variable "enable_technology-ops_us_admin_policy" {
   default = false
 }
-variable "namespaces" {
+variable "vault_namespaces" {
   default = []
 }
-variable "users" {
+variable "vault_users" {
   default = []
 }
 variable "enable_identity_group" {

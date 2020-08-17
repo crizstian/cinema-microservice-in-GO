@@ -17,7 +17,7 @@ module "entities" {
 
   enable_userpass_entity           = var.enable_userpass_entity
   enable_store_entity_id_in_consul = var.enable_store_entity_id_in_consul
-  users                            = var.users
+  users                            = var.vault_users
 
   enable_identity_group = var.enable_identity_group
   groups                = var.groups
@@ -74,12 +74,12 @@ module "generic-endpoints" {
 
   deploy_cinema_microservice_secrets = var.deploy_cinema_microservice_secrets
   deploy_mongodb_secrets             = var.deploy_mongodb_secrets
-  users                              = var.users
+  users                              = var.vault_users
 }
 
 module "namespaces" {
   source = "./namespaces"
 
   enable_namespaces = var.enable_namespaces
-  namespaces        = var.namespaces
+  namespaces        = var.vault_namespaces
 }
