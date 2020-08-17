@@ -35,7 +35,6 @@ job "ingress-nginx" {
         path     = "/"
         interval = "10s"
         timeout  = "3s"
-        expose   = true
       }
     }
 
@@ -51,11 +50,6 @@ job "ingress-nginx" {
         CONSUL_IP       = "consul.service.consul"
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
-      }
-
-      resources {
-        cpu    = 50
-        memory = 50
       }
     }
   }

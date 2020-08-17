@@ -43,11 +43,13 @@ job "cinemas" {
       }
 
       env {
-        DB_SERVERS      = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
-        SERVICE_PORT    = "3000"
-        CONSUL_IP       = "consul.service.consul"
-        CONSUL_SCHEME   = "https"
-        CONSUL_HTTP_SSL = "true"
+        DB_SERVERS        = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
+        SERVICE_PORT      = "3000"
+        CONSUL_IP         = "consul.service.consul"
+        CONSUL_SCHEME     = "https"
+        CONSUL_HTTP_SSL   = "true"
+        DISABLE_CURL_SSL  = "true"
+        CONSUL_HTTP_TOKEN = "c02e086c-96f2-6aa7-7bdd-2865c7c577f8"
       }
 
       resources {
@@ -92,7 +94,7 @@ job "cinemas" {
       driver = "docker"
 
       config {
-        image   = "crizstian/notification-service-go:v0.4"
+        image   = "crizstian/notification-service-go:v0.4.1"
       }
 
       env {
@@ -100,6 +102,8 @@ job "cinemas" {
         CONSUL_IP       = "consul.service.consul"
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
+        DISABLE_CURL_SSL  = "true"
+        CONSUL_HTTP_TOKEN = "8573dde7-7f27-8c37-46f9-5121747e2fc6"
       }
 
       resources {
@@ -168,9 +172,11 @@ job "cinemas" {
         SERVICE_PORT     = "3002"
         DB_SERVERS       = "mongodb1.query.consul:27017,mongodb2.query.consul:27018,mongodb3.query.consul:27019"
 
-        CONSUL_IP        = "consul.service.consul"
+        CONSUL_IP       = "consul.service.consul"
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
+        DISABLE_CURL_SSL  = "true"
+        CONSUL_HTTP_TOKEN = "e40feec8-78f4-8341-2900-f9c856b030c2"
         
         PAYMENT_URL      = "http://${NOMAD_UPSTREAM_ADDR_payment_api}"
         NOTIFICATION_URL = "http://${NOMAD_UPSTREAM_ADDR_notification_api}"

@@ -1,7 +1,7 @@
 job "metrics-db" {
 
-  datacenters = ["dc1-ncv"]
-  region      = "dc1-region"
+  datacenters = ["sfo-ncv"]
+  region      = "sfo-region"
   type        = "service"
 
   group "influxdb" {

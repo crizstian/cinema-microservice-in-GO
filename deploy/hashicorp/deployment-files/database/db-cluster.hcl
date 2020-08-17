@@ -24,6 +24,7 @@ job "cinemas-db" {
         CONSUL_IP       = "consul.service.consul"
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
+        CONSUL_HTTP_TOKEN = "1c09bf2a-5255-c914-4f0b-77f4cb4e1bf6"
       }
 
       resources {
@@ -63,6 +64,7 @@ job "cinemas-db" {
         CONSUL_IP       = "consul.service.consul"
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
+        CONSUL_HTTP_TOKEN = "1c09bf2a-5255-c914-4f0b-77f4cb4e1bf6"
       }
 
       resources {
@@ -102,6 +104,7 @@ job "cinemas-db" {
         CONSUL_IP       = "consul.service.consul"
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
+        CONSUL_HTTP_TOKEN = "1c09bf2a-5255-c914-4f0b-77f4cb4e1bf6"
       }
 
       resources {

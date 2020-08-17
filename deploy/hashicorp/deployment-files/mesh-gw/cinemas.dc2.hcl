@@ -125,7 +125,7 @@ job "cinemas" {
           "-address", ":${NOMAD_PORT_proxy}",
           "-wan-address", "172.20.20.21:${NOMAD_PORT_proxy}",
           "-admin-bind", "127.0.0.1:19005",
-          "-token", "c6b64436-5f05-deba-c579-ef7d08de8763",
+          "-token", "6c5e8db9-005e-8153-5cdc-396948f1ecb6",
           "-deregister-after-critical", "5s",
         ]
       }

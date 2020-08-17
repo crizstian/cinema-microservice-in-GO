@@ -19,6 +19,7 @@ job "cinemas" {
         CONSUL_IP       = "consul.service.consul"
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
+        CA_CERT_FILE    = "-k"
       }
 
       resources {
@@ -65,6 +66,7 @@ job "cinemas" {
         CONSUL_IP       = "consul.service.consul"
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
+        CA_CERT_FILE    = "-k"
       }
 
       resources {
@@ -114,6 +116,7 @@ job "cinemas" {
         NOTIFICATION_URL = "http://notification-api.service.consul:3001"
         CONSUL_SCHEME    = "https"
         CONSUL_HTTP_SSL  = "true"
+        CA_CERT_FILE    = "-k"
       }
 
       resources {
@@ -133,7 +136,7 @@ job "cinemas" {
     service {
       name = "booking-api"
       port = "http"
-      tags = ["${NOMAD_JOB_NAME}"]
+      tags = ["${NOMAD_JOB_NAME}", "ENTRY"]
 
       check {
         type     = "http"
