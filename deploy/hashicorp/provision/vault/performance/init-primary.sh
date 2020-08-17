@@ -6,11 +6,6 @@ if [ "$CONSUL_HTTP_SSL" == "true" ]; then
   curl_ssl="--cacert ${CONSUL_CACERT}"
 fi
 
-if [ -n $CONSUL_HTTP_TOKEN ]; then
-	echo "Setting consul token"
-	header="--header \"X-Consul-Token: ${CONSUL_HTTP_TOKEN}\""
-fi
-
 curl -s \
     --cacert $VAULT_CACERT \
     --header "X-Vault-Token: $VAULT_TOKEN" \
@@ -20,13 +15,8 @@ curl -s \
 
 sleep 2
 
-SECONDARY_TOKEN=`curl -s --cacert $VAULT_CACERT --header "X-Vault-Token: $VAULT_TOKEN" --request POST --data '{ "id": "nyc" }' ${VAULT_ADDR}/v1/sys/replication/performance/primary/secondary-token | jq ".wrap_info.token"`
+SECONDARY_TOKEN=`curl -s --cacert $VAULT_CACERT --header "X-Vault-Token: $VAULT_TOKEN" --request POST --data '{ "id": "nyc-2" }' ${VAULT_ADDR}/v1/sys/replication/performance/primary/secondary-token | jq ".wrap_info.token"`
 
 echo "SECONDARY_TOKEN = $SECONDARY_TOKEN"
 
-echo "curl -s $header $curl_ssl --request PUT --data "$SECONDARY_TOKEN" ${CONSUL_HTTP_ADDR}/v1/kv/cluster/global/vault/secondary-token"
-
-curl -s $header $curl_ssl \
-    --request PUT \
-    --data "${SECONDARY_TOKEN}" \
-    ${CONSUL_HTTP_ADDR}/v1/kv/cluster/global/vault/secondary-token
+CONSUL_HTTP_TOKEN=${CONSUL_HTTP_TOKEN} consul kv put cluster/global/vault/secondary-token "${SECONDARY_TOKEN}"

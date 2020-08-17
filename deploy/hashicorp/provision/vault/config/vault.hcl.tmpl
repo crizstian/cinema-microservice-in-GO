@@ -24,8 +24,9 @@ listener "tcp" {
     tls_key_file  = "{{ env "VAULT_CLIENT_KEY" }}"
 }
 
-# Telemetry
+{{ if eq (env "ENABLE_METRICS") "true" }}
 telemetry = {
-  dogstatsd_addr   = "10.0.2.15:8125"
+  dogstatsd_addr   = "{{ env "MONITORING_ADDR" }}"
   disable_hostname = true
 }
+{{end}}
