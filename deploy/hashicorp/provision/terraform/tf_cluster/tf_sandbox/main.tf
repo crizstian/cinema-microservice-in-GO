@@ -1,5 +1,5 @@
 provider "vault" {
-  namespace = "sbx"
+  namespace = "sandbox"
   alias     = "sbx"
 }
 
@@ -7,13 +7,13 @@ terraform {
   backend "consul" {}
 }
 
-module "tf_vault_ENV1" {
+module "tf_vault_sandbox" {
   source = "../../vault"
   
   enable_namespaces = true
   namespaces        = [
-    "technology-ops_us",
-    "clgx-cicd",
+    "devops",
+    "innovation",
   ]
 
   providers = {

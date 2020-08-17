@@ -111,7 +111,7 @@ variable "proxy_defaults" {
 variable "enable_proxy_defaults" {
   default = false
 }
-variable "users" {
+variable "vault_users" {
   default = [{
     user        = "root"
     entity_name = "admin"
