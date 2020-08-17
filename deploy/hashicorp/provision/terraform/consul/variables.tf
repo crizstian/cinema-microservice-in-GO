@@ -1,22 +1,37 @@
 variable "datacenters" {
   default = []
 }
-variable "enable_agent_policy" {
+
+# ACL system
+variable "create_consul_gossip_encryption_key" {
+  default = false
+}
+variable "create_consul_master_token" {
   default = false
 }
 variable "enable_anonymous_policy" {
   default = false
 }
-variable "enable_sensitive_policy" {
+variable "enable_consul_server_agent_policy" {
   default = false
 }
-variable "enable_blocking_policy" {
+variable "enable_consul_snapshot_agent_policy" {
   default = false
 }
-variable "enable_server_role" {
+variable "enable_consul_vault_agent_policy" {
+  default = false
+}
+variable "enable_mesh_gateway_policy" {
+  default = false
+}
+variable "enable_replication_policy" {
+  default = false
+}
+variable "enable_vault_agent_policy" {
   default = false
 }
 
+# Consul Connect
 variable "service_to_service_intentions" {
   default = []
 }
@@ -29,6 +44,7 @@ variable "enable_deny_all" {
 variable "enable_intentions" {
   default = false
 }
+
 
 variable "prepared_queries" {
   default = []
@@ -49,6 +65,8 @@ variable "datacenter" {
   default = ""
 }
 
+
+# Consul Central Config
 variable "consul_central_config" {
   default = {
     service_defaults = []
@@ -71,9 +89,7 @@ variable "enable_service_resolver" {
 variable "enable_service_defaults" {
   default = false
 }
-variable "enable_replication_policy" {
-  default = false
-}
-variable "enable_mesh_gateway_policy" {
-  default = false
+
+variable "custom_kv_acl" {
+  default = []
 }

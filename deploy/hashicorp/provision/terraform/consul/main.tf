@@ -1,15 +1,19 @@
 module "acl" {
   source = "./acl"
 
-  datacenters               = var.datacenters
-  enable_agent_policy       = var.enable_agent_policy    
-  enable_anonymous_policy   = var.enable_anonymous_policy
-  enable_sensitive_policy   = var.enable_sensitive_policy
-  enable_blocking_policy    = var.enable_blocking_policy
-  enable_replication_policy = var.enable_replication_policy 
-  enable_mesh_gateway_policy = var.enable_mesh_gateway_policy 
+  datacenters                         = var.datacenters
+  create_consul_gossip_encryption_key = var.create_consul_gossip_encryption_key
+  create_consul_master_token          = var.create_consul_master_token
 
-  enable_server_role = var.enable_server_role
+  enable_anonymous_policy             = var.enable_anonymous_policy
+  enable_consul_server_agent_policy   = var.enable_consul_server_agent_policy
+  enable_consul_snapshot_agent_policy = var.enable_consul_snapshot_agent_policy
+  enable_consul_vault_agent_policy    = var.enable_consul_vault_agent_policy
+  enable_mesh_gateway_policy          = var.enable_mesh_gateway_policy
+  enable_replication_policy           = var.enable_replication_policy
+  enable_vault_agent_policy           = var.enable_vault_agent_policy
+
+  custom_kv_acl                       = var.custom_kv_acl
 }
 
 module "intentions" {
@@ -51,4 +55,8 @@ module "central-config" {
   enable_service_splitter = var.enable_service_splitter
   enable_service_resolver = var.enable_service_resolver
   enable_service_defaults = var.enable_service_defaults
+}
+
+output "consul_custom_kv_token" {
+  value = module.acl.consul_custom_kv_token
 }

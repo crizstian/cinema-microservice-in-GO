@@ -1,35 +1,33 @@
 variable "enable_anonymous_policy" {
   default = false
 }
+variable "datacenters" {
+  default = []
+}
 
 resource "consul_acl_policy" "anonymous-policy" {
   count = var.enable_anonymous_policy ? 1 : 0
 
   name        = "anonymous-policy"
   datacenters = var.datacenters
-  description = "Policy to use for read only capabilities"
-  rules       = <<-RULE
-    node "" { 
-      policy = "read"
-    } 
-    agent "" { 
-      policy = "read"
-    } 
-    event "" { 
-      policy = "read"
-    } 
-    key "" { 
-      policy = "read"
-    } 
-    query "" { 
-      policy = "read"
-    } 
-    service "" { 
-      policy     = "read"
-      intentions = "deny"
-    } 
-    session "" { 
+  description = "Anonymous Policy"
+
+  rules = <<-RULE
+    node_prefix "" {
       policy = "read"
     }
+    service_prefix "" {
+      policy = "read"
+    }
+    session_prefix "" {
+      policy = "read"
+    }
+    agent_prefix "" {
+      policy = "read"
+    }
+    query_prefix "" {
+      policy = "read"
+    }
+    operator = "read"
   RULE
 }

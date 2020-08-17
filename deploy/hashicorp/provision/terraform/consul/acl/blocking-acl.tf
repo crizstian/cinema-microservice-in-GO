@@ -8,6 +8,7 @@ resource "consul_acl_policy" "blocking-policy" {
   name        = "blocking-policy"
   datacenters = var.datacenters
   description = "Policy to use for blocking access to restricted operations"
+
   rules       = <<-RULE
     key_prefix "cluster/consul/" {
       policy = "deny"
@@ -21,5 +22,5 @@ resource "consul_acl_policy" "blocking-policy" {
     acl      = "deny"
     keyring  = "deny"
     operator = "deny"
-    RULE
+  RULE
 }

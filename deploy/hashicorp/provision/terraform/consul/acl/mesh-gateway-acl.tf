@@ -1,4 +1,3 @@
-
 variable "enable_mesh_gateway_policy" {
   default = false
 }
