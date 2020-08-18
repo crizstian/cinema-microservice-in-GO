@@ -34,7 +34,7 @@ module "tf_consul" {
   enable_service_resolver = false
   enable_service_defaults = false
 
-  custom_kv_acl = concat(var.apps, var.dbs)
+  custom_kv_acl = concat(var.apps, var.dbs, var.infrastructure)
 }
 
 module "tf_vault" {
@@ -57,7 +57,7 @@ module "tf_vault" {
   enable_admin_policy            = true
   enable_infrastructure_policy   = true
   enable_app_policy              = true
-  policy_apps                    = concat(var.apps, var.dbs)
+  policy_apps                    = concat(var.apps, var.dbs, var.infrastructure)
   
   # Vault Engines
   enable_consul_engine           = false
@@ -71,7 +71,7 @@ module "tf_vault" {
   vault_users                      = var.vault_users
 
   # Configurations
-  app_roles                          = concat(var.apps, var.infrastructure, var.dbs)
+  app_roles                          = concat(var.apps, var.dbs, var.infrastructure)
   deploy_cinema_microservice_secrets = true
   deploy_mongodb_secrets             = true
 }

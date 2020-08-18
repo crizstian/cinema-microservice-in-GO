@@ -1,13 +1,18 @@
 #!/bin/bash
 set -e
 
-env | grep CONSUL
+env
 
 export CUSTOM_CMD="$@"
 
 if [ $CONSUL_HTTP_SSL == "true" ]; then
 	echo "SSL IS ENABLED"
   curl_ssl="--cacert ${CA_CERT_FILE}"
+fi
+
+if [ "$DISABLE_CURL_SSL" == "true" ]; then
+	echo "SSL IS BYPASS ON CURL ENABLED"
+  curl_ssl="-k"
 fi
 
 if [ -n $CONSUL_HTTP_TOKEN ]; then
@@ -22,7 +27,7 @@ fi
 
 echo "Setting secrets for $APP_NAME if exists"
 
-if [ -n "$APP_NAME" ] && [ $ENABLE_SECRETS == "true" ]; then
+if [ -n "$APP_NAME" ]; then
 
 	#Get vault token if APP_NAME is specified by the application
 	echo "Fetching role and secrets..."
@@ -42,7 +47,14 @@ if [ -n "$APP_NAME" ] && [ $ENABLE_SECRETS == "true" ]; then
 	if [ -n "$role_id" ] && [ -n "$secret_id" ]; then
 		echo "Exporting VAULT_TOKEN"
 
-		export VAULT_TOKEN=`curl --cacert ${CA_CERT_FILE} -s -X POST -d '{"role_id":"'$role_id'","secret_id":"'$secret_id'"}' https://vault.service.consul:8200/v1/auth/approle/login | jq -r .auth.client_token`
+		echo "Vault request"
+
+		token="curl $curl_ssl -s -X POST -d '{\"role_id\":\"'$role_id'\",\"secret_id\":\"'$secret_id'\"}' ${VAULT_ADDR}/v1/auth/approle/login | jq -r .auth.client_token"
+		
+		echo $token
+
+		export VAULT_TOKEN=$(eval $token)
+
 		if [ -z "$VAULT_TOKEN" ]; then
 			echo "Unable to get a vault token, exiting..."
 			exit 3
@@ -58,7 +70,7 @@ if [ -n "$APP_NAME" ] && [ $ENABLE_SECRETS == "true" ]; then
 	cat /tmp/envconsul.hcl
 
   echo "Continuing with envconsul based startup..."
-  exec envconsul -config=/tmp/envconsul.hcl /tmp/startProcess.sh $START_CMD
+ 	envconsul -config=/tmp/envconsul.hcl /tmp/start-process.sh $START_CMD
 else
 	echo "Application is not envconsul enabled; Continuing with standard startup..."
 	exec $START_CMD

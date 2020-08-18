@@ -21,3 +21,7 @@ bash create-image.sh
 cd ../payment-service
 
 bash create-image.sh
+
+cd ../webserver
+
+bash create-image.sh

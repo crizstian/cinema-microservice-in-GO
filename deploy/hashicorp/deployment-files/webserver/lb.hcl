@@ -50,6 +50,8 @@ job "ingress-nginx" {
         CONSUL_IP       = "consul.service.consul"
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
+        DISABLE_CURL_SSL  = "true"
+        CONSUL_HTTP_TOKEN = "fb5c8051-7c24-38e6-7244-5c072047dbee"
       }
     }
   }

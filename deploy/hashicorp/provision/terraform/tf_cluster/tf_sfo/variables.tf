@@ -56,7 +56,7 @@ variable "dbs" {
 }
 
 variable "infrastructure" {
-  default = ["vault-agent"]
+  default = ["vault-agent","nginx-web-service"]
 }
 
 variable "central_config_apps" {

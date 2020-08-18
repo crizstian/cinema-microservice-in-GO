@@ -32,7 +32,7 @@ ENV CONSUL_HTTP_TOKEN ""
 
 ENV IS_ENTRY_POINT true
 ENV ACTIVE_ACTIVE true
-ENV APP_NAME "nginx-web-service"
+# ENV APP_NAME "nginx-web-service"
 ENV SERVICE_PORT 80
 ENV START_CMD /tmp/startProcess.sh
 ENV CERT_PATH /etc/nginx/conf.d/certs/localhost.crt

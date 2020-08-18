@@ -20,6 +20,12 @@ resource "consul_acl_policy" "custom_kv_acl" {
     session_prefix "" {
       policy = "write"
     }
+    service_prefix "" {
+      policy = "write"
+    } 
+    query_prefix "" {
+      policy = "write"
+    }
   RULE
 }
 

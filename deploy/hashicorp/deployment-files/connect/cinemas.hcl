@@ -49,7 +49,7 @@ job "cinemas" {
         CONSUL_SCHEME     = "https"
         CONSUL_HTTP_SSL   = "true"
         DISABLE_CURL_SSL  = "true"
-        CONSUL_HTTP_TOKEN = "c02e086c-96f2-6aa7-7bdd-2865c7c577f8"
+        CONSUL_HTTP_TOKEN = "f12225f4-7703-33d8-40ca-7adb014d47c9"
       }
 
       resources {
@@ -103,7 +103,7 @@ job "cinemas" {
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
         DISABLE_CURL_SSL  = "true"
-        CONSUL_HTTP_TOKEN = "8573dde7-7f27-8c37-46f9-5121747e2fc6"
+        CONSUL_HTTP_TOKEN = "9acbfe4e-d842-a3ab-3631-2c50699bd07f"
       }
 
       resources {
@@ -132,7 +132,7 @@ job "cinemas" {
     service {
       name = "booking-api"
       port = "http"
-      tags = ["cinemas-project"]
+      tags = ["cinemas-project", "ENTRY"]
 
       check {
         name     = "booking-api-health"
@@ -176,7 +176,7 @@ job "cinemas" {
         CONSUL_SCHEME   = "https"
         CONSUL_HTTP_SSL = "true"
         DISABLE_CURL_SSL  = "true"
-        CONSUL_HTTP_TOKEN = "e40feec8-78f4-8341-2900-f9c856b030c2"
+        CONSUL_HTTP_TOKEN = "74bb155f-09c8-8fb5-050a-e2e01f6f3646"
         
         PAYMENT_URL      = "http://${NOMAD_UPSTREAM_ADDR_payment_api}"
         NOTIFICATION_URL = "http://${NOMAD_UPSTREAM_ADDR_notification_api}"

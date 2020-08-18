@@ -7,17 +7,17 @@ consul {
   }
 }
 
-vault {
-  address     = "[[ env "VAULT_ADDR" ]]"
-  token       = "[[ env "VAULT_TOKEN" ]]"
-  renew_token = false
+// vault {
+//   address     = "[[ env "VAULT_ADDR" ]]"
+//   token       = "[[ env "VAULT_TOKEN" ]]"
+//   renew_token = false
 
-  ssl {
-    ca_cert = "[[ env "CA_CERT_FILE" ]]"
-  }
-}
+//   ssl {
+//     ca_cert = "[[ env "CA_CERT_FILE" ]]"
+//   }
+// }
 
-secret {
-  no_prefix = true
-  path   = "secret/[[ env "APP_NAME" ]]"
-}
+// secret {
+//   no_prefix = true
+//   path   = "secret/[[ env "APP_NAME" ]]"
+// }
