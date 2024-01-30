@@ -1,0 +1,22 @@
+kind: System
+spec:
+  owner: cristian.ramirez@harness.io
+  domain: default
+apiVersion: backstage.io/v1alpha1
+metadata:
+  name: movie-service
+  links:
+    - url: https://app.harness.io/ng/account/6_vVHzo9Qeu9fXvj-AcbCQ/home/orgs/default/projects/GIT_FLOW_DEMO/details
+      title:  Harness Banking Demo Project
+      icon: dashboard
+      type: Harness Banking Demo Project
+    - url: https://app.harness.io/ng/account/6_vVHzo9Qeu9fXvj-AcbCQ/cd/orgs/default/projects/GIT_FLOW_DEMO/pipelines/Production_Git_Flow/pipeline-studio/?branch=main
+      title: Harness Plaforrm Story
+      icon: dashboard
+      type: Harness Plaforrm Story
+    - url: http://ff.harness-demo.site/diegopereiraeng/index.html
+      title: Prod Website
+      icon: dashboard
+      type: Boutique FrontEnd
+  description: "Documentation: https://harness.atlassian.net/wiki/spaces/SE/pages/21066940575/Banking+Demo"
+  tags: []
