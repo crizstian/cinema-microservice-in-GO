@@ -1,5 +1,5 @@
 apiVersion: backstage.io/v1alpha1
-kind: Component
+kind: API
 metadata:
   name: movie-service
   description: movie service API test
@@ -8,13 +8,13 @@ metadata:
     backstage.io/techdocs-ref: dir:./
   tags:
     - golang
+    - rest
   links:
-    - url: https://movie-service.scv.local
-      title: Movie API service
-      icon: dashboard
-      type: admin-dashboard
+    - url: https://github.com/swagger-api/swagger-petstore
+      title: GitHub Repo
+      icon: github
 spec:
-  type: service
-  lifecycle: development
+  type: openapi
+  lifecycle: dev
   owner: default
   system: Cristian_Labs_Manual_Setup
