@@ -5,7 +5,7 @@ spec:
   owner: cristian.ramirez@harness.io
   system: cristian_labs_manual_setup
   dependsOn:
-    - component:movie-service
+    - api:movie-service
   providesApis:
     - notification-service
 apiVersion: backstage.io/v1alpha1
