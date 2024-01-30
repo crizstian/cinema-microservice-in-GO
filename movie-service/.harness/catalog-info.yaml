@@ -16,5 +16,5 @@ metadata:
 spec:
   type: service
   lifecycle: development
-  owner: e-commerce
-  system: platform-streaming
+  owner: default
+  system: Cristian_Labs_Manual_Setup
