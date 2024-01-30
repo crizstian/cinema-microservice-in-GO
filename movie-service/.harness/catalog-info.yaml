@@ -10,7 +10,7 @@ metadata:
     - golang
     - rest
   links:
-    - url: https://github.com/swagger-api/swagger-petstore
+    - url: https://github.com/crizstian/cinema-microservice-in-GO/tree/step-1
       title: GitHub Repo
       icon: github
 spec:
