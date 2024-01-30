@@ -1,0 +1,20 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: movie-service
+  description: movie service API
+  annotations:
+    github.com/project-slug: crizstian/cinema-microservice-in-GO
+    backstage. io/techdocs-ref: dir:./
+  tags:
+    - golang
+  links:
+    - url: https://movie-service.scv.local
+      title: Movie API service
+      icon: dashboard
+      type: admin-dashboard
+spec:
+  type: service
+  lifecycle: development
+  owner: e-commerce
+  system: platform-streaming
