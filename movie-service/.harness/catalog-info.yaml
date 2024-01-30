@@ -5,7 +5,7 @@ metadata:
   description: movie service API
   annotations:
     github.com/project-slug: crizstian/cinema-microservice-in-GO
-    backstage. io/techdocs-ref: dir:./
+    backstage.io/techdocs-ref: dir:./
   tags:
     - golang
   links:
