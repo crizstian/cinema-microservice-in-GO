@@ -18,3 +18,5 @@ spec:
   lifecycle: dev
   owner: default
   system: Cristian_Labs_Manual_Setup
+  definition:
+    $text: https://github.com/OAI/OpenAPI-Specification/blob/main/examples/v2.0/json/api-with-examples.json
