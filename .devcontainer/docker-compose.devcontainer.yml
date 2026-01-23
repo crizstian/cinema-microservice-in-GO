@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  cinemas_microservice_go:
+    build:
+      context: ../platform/docker/devcontainer/Dockerfile
+      dockerfile: devcontainer.Dockerfile
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - ../:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /workspace
+    user: devuser
+    container_name: cinemas_microservice_go
+    command: /bin/sh -c "while sleep 1000; do :; done"

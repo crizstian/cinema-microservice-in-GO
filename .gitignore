@@ -12,3 +12,21 @@
 **/hashicorp/bin/
 
 **/gcp.json
+
+# Go build artifacts
+*.exe
+*.test
+*.out
+go.sum
+
+# Go workspace and cache
+.go/
+/tmp/go-cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

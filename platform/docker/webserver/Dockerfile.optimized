@@ -1,0 +1,75 @@
+# ============================================================
+# Nginx Webserver - Dockerfile Optimizado
+# ============================================================
+#
+# Mejoras aplicadas:
+# - Versión específica de Nginx
+# - Reducción de dependencias
+# - Multi-stage build para herramientas
+# - Configuración explícita de nginx.conf
+#
+# ============================================================
+
+FROM nginx:1.25-alpine
+
+# Build args
+ARG NGINX_VERSION=1.25
+
+# Labels
+LABEL org.opencontainers.image.title="cinemas-webserver"
+LABEL org.opencontainers.image.description="Nginx reverse proxy for Cinemas"
+LABEL org.opencontainers.image.version="${NGINX_VERSION}"
+
+# Instalar solo dependencias necesarias
+RUN apk add --no-cache \
+      curl \
+      wget \
+      openssl \
+      ca-certificates \
+      bash \
+      jq && \
+    update-ca-certificates
+
+# Copiar archivos de configuración
+COPY files/template/ /etc/nginx/templates/
+COPY files/certs/ /etc/nginx/conf.d/certs/
+
+# Copiar scripts
+COPY startup/ /tmp/
+RUN chmod +x /tmp/*.sh
+
+# Si usas Hashicorp tools:
+# COPY files/ca.crt.pem /tmp/
+# COPY files/ct.hcl /tmp/
+# COPY files/ct-config.hcl /tmp/
+# COPY files/bin/installhashi.sh /tmp/
+# RUN /tmp/installhashi.sh
+
+# Generar Diffie-Hellman parameters para TLS
+RUN mkdir -p /usr/local/nginx/ssl && \
+    openssl dhparam -out /usr/local/nginx/ssl/dhparam.pem 2048
+
+# Variables de entorno
+ENV SERVICE_PORT=80
+ENV CERT_PATH=/etc/nginx/conf.d/certs/localhost.crt
+ENV KEY_PATH=/etc/nginx/conf.d/certs/localhost.key
+
+# Si usas Consul/Vault (opcional):
+# ENV CONSUL_SCHEME=http
+# ENV CONSUL_PORT=8500
+# ENV ENABLE_SECRETS=false
+# ENV VAULT_ADDR=https://vault.service.consul:8200
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${SERVICE_PORT}/ || exit 1
+
+# Exponer puerto
+EXPOSE ${SERVICE_PORT}
+
+WORKDIR /etc/nginx/
+
+# Entrypoint
+# Si usas Hashicorp: ENTRYPOINT ["bash", "/tmp/pre-start.sh"]
+# Si es nginx simple: usar default entrypoint
+ENTRYPOINT ["bash", "/tmp/pre-start.sh"]

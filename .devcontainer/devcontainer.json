@@ -1,0 +1,18 @@
+{
+    "name": "Go & Terraform DevContainer",
+    "dockerComposeFile": [
+        "docker-compose.devcontainer.yml"
+    ],
+    "service": "cinemas_microservice_go",
+    "workspaceFolder": "/workspace",
+    "settings": {
+        "go.useLanguageServer": true,
+        "go.lintTool": "golangci-lint",
+        "editor.formatOnSave": true
+    },
+    "extensions": [
+        "golang.Go",
+        "hashicorp.terraform"
+    ],
+    "remoteUser": "devuser"
+}

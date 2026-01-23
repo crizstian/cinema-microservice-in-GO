@@ -1,0 +1,70 @@
+# ============================================================
+# .dockerignore para Servicios Go
+# ============================================================
+#
+# Este archivo evita copiar archivos innecesarios al contexto
+# de Docker, reduciendo el tamaño y acelerando builds.
+#
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentación
+README.md
+*.md
+docs/
+
+# Tests
+*_test.go
+testdata/
+integration_test/
+*.test
+
+# Builds locales
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+build/
+
+# Go específico
+vendor/
+*.mod.sum~
+.go/
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Logs
+*.log
+logs/
+
+# Temporal
+tmp/
+temp/
+.tmp/
+
+# OS
+Thumbs.db
+.DS_Store

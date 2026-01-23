@@ -1,0 +1,80 @@
+# ============================================================
+# MongoDB Replica Set - Dockerfile Optimizado
+# ============================================================
+#
+# Mejoras aplicadas:
+# - Versión específica de MongoDB
+# - Reducción de dependencias innecesarias
+# - Mejor organización de capas
+# - Usuario no-root donde sea posible
+#
+# ============================================================
+
+# Usar versión específica (no :latest)
+FROM mongo:7.0
+
+# Build args
+ARG MONGO_VERSION=7.0
+
+# Labels
+LABEL org.opencontainers.image.title="cinemas-mongodb"
+LABEL org.opencontainers.image.description="MongoDB Replica Set for Cinemas"
+LABEL org.opencontainers.image.version="${MONGO_VERSION}"
+
+# Instalar solo dependencias necesarias en una sola capa
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      curl \
+      wget \
+      unzip \
+      jq \
+      ca-certificates; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
+# Crear directorios necesarios
+RUN mkdir -p /data/keyfile /data/admin /var/tmp/start
+
+# Copiar archivos de configuración
+COPY files/admin.js.ctmpl /data/admin/
+COPY files/replica.js.ctmpl /data/admin/
+COPY files/grantRole.js.ctmpl /data/admin/
+COPY files/movies.js /data/admin/
+
+# Copiar scripts de inicialización
+COPY startup/ /tmp/
+
+# Si usas Hashicorp tools (Consul/Vault), copiar solo si son necesarios
+# COPY files/ca.crt.pem /tmp/
+# COPY files/ct.hcl /tmp/
+# COPY files/envconsul.hcl.tmpl /tmp/
+# COPY files/bin/installhashi.sh /tmp/
+
+# Configurar permisos
+RUN chown -R mongodb:mongodb /data && \
+    chmod -R +x /tmp/
+
+# Si usas Hashicorp:
+# RUN /tmp/installhashi.sh && chmod 400 /tmp/ca.crt.pem
+
+# Variables de entorno
+# NOTA: Considera usar secrets en lugar de env vars para credenciales
+ENV DB_REPLSET_NAME=rs1
+ENV DB_PORT=27017
+
+# Si usas Consul/Vault (opcional):
+# ENV CONSUL_SCHEME=http
+# ENV CONSUL_PORT=8500
+# ENV CONSUL_HTTP_SSL=false
+# ENV VAULT_ADDR=https://vault.service.consul:8200
+# ENV APP_NAME=mongo-db
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD mongo --eval "db.adminCommand('ping')" --quiet || exit 1
+
+# Entrypoint
+# Si usas Hashicorp: ENTRYPOINT ["/tmp/pre-start.sh"]
+# Si es MongoDB simple: use default mongo entrypoint
+ENTRYPOINT ["/tmp/pre-start.sh"]
