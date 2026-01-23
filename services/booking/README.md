@@ -84,3 +84,12 @@ go test -tags=integration ./...
 - Notification Service
 - Echo framework (HTTP)
 - Jaeger (tracing, opcional)
+
+
+
+
+
+
+
+
+demoiasda
