@@ -40,3 +40,6 @@ go build -o movie ./cmd/movie
 - `POST /api/movies` - Crear película
 - `PUT /api/movies/:id` - Actualizar película
 - `DELETE /api/movies/:id` - Eliminar película
+
+
+de,mpo
