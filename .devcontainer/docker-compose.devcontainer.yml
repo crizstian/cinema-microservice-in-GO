@@ -3,8 +3,8 @@ version: "3.8"
 services:
   cinemas_microservice_go:
     build:
-      context: ../platform/docker/devcontainer/Dockerfile
-      dockerfile: devcontainer.Dockerfile
+      context: ../platform/docker/devcontainer
+      dockerfile: Dockerfile
     cap_add:
       - SYS_PTRACE
     security_opt:

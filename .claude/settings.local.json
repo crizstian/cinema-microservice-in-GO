@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(GOPATH=/workspace/.go GOMODCACHE=/workspace/.go/pkg/mod go mod tidy:*)",
+      "Bash(GOPATH=/tmp/go-cache GOMODCACHE=/tmp/go-cache/pkg/mod go mod tidy:*)",
+      "Bash(GOPATH=/tmp/go-cache GOMODCACHE=/tmp/go-cache/pkg/mod go test:*)",
+      "Bash(GOPATH=/tmp/go-cache GOMODCACHE=/tmp/go-cache/pkg/mod go list:*)",
+      "Bash(GOPATH=/tmp/go-cache GOMODCACHE=/tmp/go-cache/pkg/mod go build:*)",
+      "Bash(GOPATH=/tmp/go-cache GOMODCACHE=/tmp/go-cache/pkg/mod go work sync:*)",
+      "Bash(done)",
+      "Bash(chmod:*)",
+      "Bash(docker-compose config:*)",
+      "Bash(bash -n:*)",
+      "Bash(bash:*)",
+      "Bash(SERVICE=booking-service VERSION=v1.0.0-test bash -x /workspace/scripts/build-image.sh)",
+      "Bash(docker-compose:*)",
+      "Bash(python3:*)",
+      "Bash(tree:*)",
+      "Bash(wc:*)",
+      "Bash(go work:*)",
+      "Bash(test:*)"
+    ]
+  }
+}

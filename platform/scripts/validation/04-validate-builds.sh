@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-WORKSPACE_ROOT="/workspace"
+WORKSPACE_ROOT="."
 FAILURES=0
 BUILD_SCRIPT="$WORKSPACE_ROOT/platform/scripts/build-go-service.sh"
 
@@ -71,7 +71,7 @@ fi
 log_header "4. Construyendo imágenes de servicios"
 
 SERVICES=("booking" "movie" "payment" "notification")
-VERSION="test-$(date +%Y%m%d-%H%M%S)"
+VERSION="v0.1" #test-$(date +%Y%m%d-%H%M%S)"
 
 log_step "Versión de test: $VERSION"
 
@@ -86,12 +86,13 @@ for service in "${SERVICES[@]}"; do
     fi
 
     # Construir imagen
-    IMAGE_NAME="cinema/$service:$VERSION"
+    IMAGE_NAME="crizstian/cinema/$service:$VERSION"
 
-    log_step "  → Ejecutando build..."
+    log_step "  → Ejecutando build... $IMAGE_NAME"
 
     if SERVICE="$service" VERSION="$VERSION" ORGANIZATION="cinema" bash "$BUILD_SCRIPT" > /tmp/build-$service.log 2>&1; then
         log_success "  Build de $service exitoso"
+        cat /tmp/build-$service.log
 
         # Verificar que la imagen existe
         if docker image inspect "$IMAGE_NAME" > /dev/null 2>&1; then
@@ -155,7 +156,7 @@ done
 log_header "5. Verificando que las imágenes pueden ejecutarse"
 
 for service in "${SERVICES[@]}"; do
-    IMAGE_NAME="cinema/$service:$VERSION"
+    IMAGE_NAME="crizstian/cinema/$service:$VERSION"
 
     if docker image inspect "$IMAGE_NAME" > /dev/null 2>&1; then
         log_step "Verificando ejecución de $service..."

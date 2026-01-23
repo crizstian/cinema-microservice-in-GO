@@ -70,9 +70,9 @@ RUN git clone --depth=1 https://github.com/tfutils/tfenv.git /home/devuser/.tfen
 
 # ---------- kubectl (versión más nueva) ----------
 ARG KUBECTL_VERSION=v1.30.0
-RUN curl -L "https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl && \
-    chmod +x /usr/local/bin/kubectl && \
-    kubectl version --client
+RUN curl -L "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl && \
+  chmod +x /usr/local/bin/kubectl
+
 
 # ---------- Google Cloud SDK ----------
 RUN curl -sSL https://dl.google.com/dl/cloudsdk/release/google-cloud-sdk.tar.gz -o /tmp/google-cloud-sdk.tar.gz && \

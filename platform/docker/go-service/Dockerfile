@@ -18,7 +18,7 @@
 # ------------------------------------------------------------
 # Build Arguments (parametrización)
 # ------------------------------------------------------------
-ARG GO_VERSION=1.21
+ARG GO_VERSION=1.23
 ARG ALPINE_VERSION=3.19
 
 # ------------------------------------------------------------
@@ -61,16 +61,11 @@ COPY internal ./internal
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -a \
     -installsuffix cgo \
-    -ldflags="-w -s \
-      -X main.Version=${VERSION} \
-      -X main.BuildDate=${BUILD_DATE} \
-      -X main.GitCommit=${VCS_REF}" \
-    -trimpath \
-    -o /build/app \
-    ./cmd/${SERVICE_NAME}
+    -o app \
+    ./cmd/${SERVICE_NAME} 
 
 # Verificar que el binario se creó
-RUN ls -lh /build/app && file /build/app
+RUN ls -lh app
 
 # ------------------------------------------------------------
 # Stage 2: Runtime (imagen final)

@@ -68,8 +68,8 @@ for service in "${SERVICES[@]}"; do
 
     if go test -v -coverprofile="$COVERAGE_FILE" ./internal/... 2>&1 | tee /tmp/test-output-$service.log; then
         # Contar tests pasados
-        local test_count=$(grep -c "^=== RUN" /tmp/test-output-$service.log || echo "0")
-        local pass_count=$(grep -c "^--- PASS" /tmp/test-output-$service.log || echo "0")
+        test_count=$(grep -c "^=== RUN" /tmp/test-output-$service.log || echo "0")
+        pass_count=$(grep -c "^--- PASS" /tmp/test-output-$service.log || echo "0")
 
         TOTAL_TESTS=$((TOTAL_TESTS + test_count))
         PASSED_TESTS=$((PASSED_TESTS + pass_count))
@@ -78,7 +78,7 @@ for service in "${SERVICES[@]}"; do
 
         # Calcular cobertura si existe el archivo
         if [[ -f "$COVERAGE_FILE" ]]; then
-            local coverage=$(go tool cover -func="$COVERAGE_FILE" 2>/dev/null | tail -1 | awk '{print $3}' || echo "N/A")
+            coverage=$(go tool cover -func="$COVERAGE_FILE" 2>/dev/null | tail -1 | awk '{print $3}' || echo "N/A")
             log_step "  → Cobertura: $coverage"
         fi
     else
