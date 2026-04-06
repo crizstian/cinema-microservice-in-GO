@@ -4,22 +4,24 @@ import (
 	"cinemas/services/payment/internal/api"
 	"cinemas/services/payment/internal/config"
 	"cinemas/services/payment/internal/server"
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
+	"time"
 
-	"gopkg.in/mgo.v2"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	log "github.com/sirupsen/logrus"
 )
 
-var s *mgo.Session
+var client *mongo.Client
 
 func main() {
 	log.Info("--- Payment Service ---")
 
 	di := make(chan *config.DI)
-	quit := make(chan os.Signal)
+	quit := make(chan os.Signal, 1)
 	serverError := make(chan error)
 	signal.Notify(quit, os.Interrupt)
 
@@ -31,10 +33,10 @@ func main() {
 			startServer(c, serverError)
 		case q := <-quit:
 			fmt.Println(q)
-			server.Shutdown(s)
+			server.Shutdown(client)
 		case se := <-serverError:
 			log.Infof(fmt.Sprintf("[ERROR] an error happend in the server, %v", se))
-			server.Shutdown(s)
+			server.Shutdown(client)
 		}
 	}
 }
@@ -43,9 +45,9 @@ func startServer(di *config.DI, se chan error) {
 	log.Info("Connected to Payment Service DB")
 	log.Info("Connecting to payment repository...")
 
-	s = di.Database.Session
+	client = di.Database.Client
 
-	r, err := api.Connect(di.Database.DB, di.Stripe)
+	r, err := api.Connect(di.Database.Database, di.Stripe)
 
 	if err != nil {
 		mainErrorHandler(fmt.Sprintf("[ERROR] Could not connect to Repo -> %s", err))
@@ -62,6 +64,12 @@ func startServer(di *config.DI, se chan error) {
 
 func mainErrorHandler(msg string) {
 	log.Errorln(msg)
-	s.Close()
+	if client != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := client.Disconnect(ctx); err != nil {
+			log.Errorf("Error disconnecting from MongoDB: %v", err)
+		}
+	}
 	os.Exit(1)
 }

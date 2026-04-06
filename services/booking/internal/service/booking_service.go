@@ -8,17 +8,17 @@ import (
 	"errors"
 
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/mgo.v2"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // BookingService encapsula la lógica de negocio de reservas
 type BookingService struct {
-	db     *mgo.Database
+	db     *mongo.Database
 	client *config.Client
 }
 
 // NewBookingService crea una nueva instancia del servicio
-func NewBookingService(db *mgo.Database, client *config.Client) *BookingService {
+func NewBookingService(db *mongo.Database, client *config.Client) *BookingService {
 	return &BookingService{
 		db:     db,
 		client: client,

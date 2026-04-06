@@ -1,0 +1,27 @@
+# Dockerfile.local - MongoDB Replica Set para desarrollo local
+# SIN dependencias de Consul/Nomad/Vault
+#
+# Uso:
+#   docker build -f Dockerfile.local -t crizstian/cinema/mongodb:local .
+
+FROM mongo:7.0
+
+# Crear directorios necesarios
+RUN mkdir -p /data/keyfile /data/admin /docker-entrypoint-initdb.d
+
+# Copiar keyfile (será generado dinámicamente en docker-compose)
+COPY files/mongo-keyfile /data/keyfile/
+
+# Copiar datos de inicialización
+COPY files/movies.js /data/admin/
+
+# Establecer permisos correctos
+RUN chown -R mongodb:mongodb /data && \
+    chmod 400 /data/keyfile/mongo-keyfile
+
+# Variables de entorno por defecto
+ENV DB_REPLSET_NAME=rs1 \
+    DB_PORT=27017
+
+# El entrypoint por defecto de mongo es suficiente
+# El replica set se inicializa con el script externo init-replica.sh

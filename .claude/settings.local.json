@@ -22,7 +22,11 @@
       "Bash(tree:*)",
       "Bash(wc:*)",
       "Bash(go work:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(go build ./...)",
+      "Bash(go build:*)",
+      "Bash(go list:*)",
+      "Bash(go test:*)"
     ]
   }
 }

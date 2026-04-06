@@ -3,19 +3,21 @@ package api
 import (
 	errs "cinemas/services/payment/internal/errors"
 	"cinemas/services/payment/internal/models"
+	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	stripe "github.com/stripe/stripe-go"
 	"github.com/stripe/stripe-go/client"
 
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/labstack/echo"
 )
 
-// RegisterPurchase ...
+// RegisterPurchase processes a payment and stores it in the database.
 func (a API) RegisterPurchase(c echo.Context) error {
 	c.Request().Header.Set("Content-Type", echo.MIMEApplicationJSONCharsetUTF8)
 
@@ -25,8 +27,13 @@ func (a API) RegisterPurchase(c echo.Context) error {
 		return errs.Send("User", "Could not get Payment data", err)
 	}
 
+	// Validación defensiva del monto
+	if p.Amount <= 0 {
+		return errs.Send("User", "Invalid amount, must be greater than 0", errors.New("amount must be > 0"))
+	}
+
 	chargeParams := &stripe.ChargeParams{
-		Amount:      stripe.Int64(p.Amount * 100),
+		Amount:      stripe.Int64(p.Amount * 100), // p.Amount en unidades de moneda (no centavos)
 		Currency:    stripe.String(p.Currency),
 		Description: stripe.String(p.Description),
 		Source: &stripe.SourceParams{
@@ -44,7 +51,11 @@ func (a API) RegisterPurchase(c echo.Context) error {
 		return errs.Send("External", "Stripe Error", err)
 	}
 
-	if err = a.db.C("payments").Insert(ch); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err = a.db.Collection("payments").InsertOne(ctx, ch)
+	if err != nil {
 		return errs.Send("External", "Could not insert payment into DB", err)
 	}
 
@@ -57,18 +68,22 @@ func (a API) RegisterPurchase(c echo.Context) error {
 	return c.JSON(http.StatusCreated, res)
 }
 
-// GetPurchaseByID ...
+// GetPurchaseByID retrieves a payment by its ID.
 func (a API) GetPurchaseByID(c echo.Context) error {
 	var p map[string]interface{}
 
 	id := c.Param("id")
-	// projection := bson.M{"_id": 0, "id": 1, "title": 1, "format": 1}
 	query := bson.M{"id": id}
 
-	err := a.db.C("payments").Find(query).One(&p)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
+	err := a.db.Collection("payments").FindOne(ctx, query).Decode(&p)
 	if err != nil {
-		return errs.Send("external", "Failed to GetMovieByID", err)
+		if err == mongo.ErrNoDocuments {
+			return errs.Send("External", "Payment not found", err)
+		}
+		return errs.Send("External", "Failed to GetPurchaseByID", err)
 	}
 
 	res := map[string]interface{}{
@@ -80,27 +95,30 @@ func (a API) GetPurchaseByID(c echo.Context) error {
 }
 
 type (
-	// API ...
+	// API holds the database and Stripe client.
 	API struct {
-		db     *mgo.Database
+		db     *mongo.Database
 		stripe *client.API
 	}
 
-	// Repository ...
+	// Repository defines the payment repository interface.
 	Repository interface {
 		RegisterPurchase(c echo.Context) error
 		GetPurchaseByID(c echo.Context) error
 	}
 )
 
-// Connect ...
-func Connect(db *mgo.Database, stripe *client.API) (Repository, error) {
+// Connect initializes the API with a database and Stripe client.
+func Connect(db *mongo.Database, stripeClient *client.API) (Repository, error) {
 	if db == nil {
+		// Mensaje de alto nivel; el mensaje interno se conserva en el error original
 		return nil, errs.Send("Internal", "Failed to initialize repository", errors.New("db object is empty"))
 	}
-	api := new(API)
-	api.db = db
-	api.stripe = stripe
+
+	api := &API{
+		db:     db,
+		stripe: stripeClient,
+	}
 
 	return api, nil
 }

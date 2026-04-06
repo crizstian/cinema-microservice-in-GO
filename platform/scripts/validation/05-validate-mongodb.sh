@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-WORKSPACE_ROOT="/workspace"
+WORKSPACE_ROOT="."
 COMPOSE_FILE="$WORKSPACE_ROOT/platform/deploy/docker-compose/docker-compose.yml"
 FAILURES=0
 
@@ -70,7 +70,7 @@ log_header "4. Levantando MongoDB replica set"
 
 log_step "Iniciando contenedores MongoDB..."
 
-if docker-compose up -d mongo1 mongo2 mongo3 2>&1 > /tmp/mongo-start.log; then
+if docker-compose up -d 2>&1 > /tmp/mongo-start.log; then
     log_success "Contenedores MongoDB iniciados"
 else
     log_error "Falló al iniciar contenedores MongoDB"

@@ -107,38 +107,13 @@ func initServerEnvironment() (int, error) {
 }
 
 // initDBEnvironment ...
-func initDBEnvironment() (*db.MongoReplicaSet, error) {
-
-	u, uok := os.LookupEnv("DB_USER")
-	p, pok := os.LookupEnv("DB_PASS")
-	s, sok := os.LookupEnv("DB_SERVERS")
-	n, nok := os.LookupEnv("DB_NAME")
-	r, rok := os.LookupEnv("DB_REPLICA")
-
-	if !uok {
-		return nil, errors.New("[ERROR] NO DB_USER defined")
+func initDBEnvironment() (*db.Config, error) {
+	// Use modern configuration loader
+	cfg, err := db.LoadConfigFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("[ERROR] Failed to load MongoDB configuration: %w", err)
 	}
-	if !pok {
-		return nil, errors.New("[ERROR] NO DB_PASS defined")
-	}
-	if !sok {
-		return nil, errors.New("[ERROR] NO DB_SERVERS defined")
-	}
-	if !nok {
-		return nil, errors.New("[ERROR] NO DB_NAME defined")
-	}
-	if !rok {
-		return nil, errors.New("[ERROR] NO DB_REPLICA defined")
-	}
-
-	return &db.MongoReplicaSet{
-		User:       u,
-		Pass:       p,
-		Servers:    s,
-		Db:         n,
-		ReplicaSet: r,
-		AuthSource: "authSource=admin",
-	}, nil
+	return cfg, nil
 }
 
 // Client ...

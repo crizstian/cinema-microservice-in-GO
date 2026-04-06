@@ -6,18 +6,20 @@ import (
 	errs "cinemas/services/booking/internal/errors"
 	"cinemas/services/booking/internal/models"
 	"cinemas/services/booking/internal/tracing"
+	"context"
 	"errors"
 	"net/http"
+	"time"
 
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/labstack/echo"
 )
 
 const makeBookingResponse = "Booking has been created successfully"
 
-// MakeBooking ...
+// MakeBooking creates a new booking with payment and notification.
 func (a API) MakeBooking(c echo.Context) error {
 
 	c.Request().Header.Set("Content-Type", echo.MIMEApplicationJSONCharsetUTF8)
@@ -70,17 +72,21 @@ func (a API) MakeBooking(c echo.Context) error {
 	return c.JSON(http.StatusCreated, res)
 }
 
-// GetOrderByID ...
+// GetOrderByID retrieves a booking by its order ID.
 func (a API) GetOrderByID(c echo.Context) error {
 	var p map[string]interface{}
 
 	id := c.Param("id")
-	// projection := bson.M{"_id": 0, "id": 1, "title": 1, "format": 1}
 	query := bson.M{"orderid": id}
 
-	err := a.db.C("booking").Find(query).One(&p)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
+	err := a.db.Collection("booking").FindOne(ctx, query).Decode(&p)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return errs.Send("external", "Order not found", err)
+		}
 		return errs.Send("external", "Failed to GetOrderByID", err)
 	}
 
@@ -93,21 +99,21 @@ func (a API) GetOrderByID(c echo.Context) error {
 }
 
 type (
-	// API ...
+	// API holds the database and client connections.
 	API struct {
-		db     *mgo.Database
+		db     *mongo.Database
 		client *config.Client
 	}
 
-	// Repository ...
+	// Repository defines the booking repository interface.
 	Repository interface {
 		MakeBooking(c echo.Context) error
 		GetOrderByID(c echo.Context) error
 	}
 )
 
-// Connect ...
-func Connect(db *mgo.Database, client *config.Client) (Repository, error) {
+// Connect initializes the API with a database connection and client.
+func Connect(db *mongo.Database, client *config.Client) (Repository, error) {
 	if db == nil {
 		return nil, errs.Send("Internal", "Failed to initialize repository", errors.New("db object is empty"))
 	}

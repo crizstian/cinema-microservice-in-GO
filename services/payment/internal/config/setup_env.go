@@ -17,40 +17,11 @@ type StripeSettings struct {
 // GetServiceConfig ...
 func GetServiceConfig() map[string]interface{} {
 
-	conn := db.MongoReplicaSet{}
-	u, uok := os.LookupEnv("DB_USER")
-	p, pok := os.LookupEnv("DB_PASS")
-	s, sok := os.LookupEnv("DB_SERVERS")
-	n, nok := os.LookupEnv("DB_NAME")
-	r, rok := os.LookupEnv("DB_REPLICA")
-
-	if !uok {
-		log.Errorln("[ERROR] NO DB_USER defined")
-		os.Exit(1)
+	// Load MongoDB configuration using modern API
+	conn, err := db.LoadConfigFromEnv()
+	if err != nil {
+		log.Fatalf("[ERROR] Failed to load MongoDB configuration: %v", err)
 	}
-	if !pok {
-		log.Errorln("[ERROR] NO DB_PASS defined")
-		os.Exit(1)
-	}
-	if !sok {
-		log.Errorln("[ERROR] NO DB_SERVERS defined")
-		os.Exit(1)
-	}
-	if !nok {
-		log.Errorln("[ERROR] NO DB_NAME defined")
-		os.Exit(1)
-	}
-	if !rok {
-		log.Errorln("[ERROR] NO DB_REPLICA defined")
-		os.Exit(1)
-	}
-
-	conn.User = u
-	conn.Pass = p
-	conn.Servers = s
-	conn.Db = n
-	conn.ReplicaSet = r
-	conn.AuthSource = "authSource=admin"
 
 	sp, spok := os.LookupEnv("SERVICE_PORT")
 

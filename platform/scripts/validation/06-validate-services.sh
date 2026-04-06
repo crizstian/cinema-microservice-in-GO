@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-WORKSPACE_ROOT="/workspace"
+WORKSPACE_ROOT="."
 COMPOSE_FILE="$WORKSPACE_ROOT/platform/deploy/docker-compose/docker-compose.yml"
 FAILURES=0
 
@@ -49,7 +49,7 @@ log_header "3. Preparando ambiente"
 
 log_step "Limpiando contenedores existentes..."
 cd "$(dirname "$COMPOSE_FILE")"
-docker-compose down -v --remove-orphans 2>&1 > /dev/null || true
+docker compose down -v --remove-orphans 2>&1 > /dev/null || true
 log_success "Ambiente limpio"
 
 # ============================================================
@@ -59,7 +59,7 @@ log_header "4. Levantando infraestructura completa"
 
 log_step "Iniciando todos los servicios..."
 
-if docker-compose up -d 2>&1 > /tmp/compose-start.log; then
+if docker compose up -d 2>&1 > /tmp/compose-start.log; then
     log_success "Servicios iniciados"
 else
     log_error "Falló al iniciar servicios"
@@ -70,7 +70,7 @@ fi
 
 # Mostrar servicios levantados
 log_step "Servicios activos:"
-docker-compose ps | sed 's/^/  /'
+docker compose ps | sed 's/^/  /'
 
 # ============================================================
 # 5. Esperar que los servicios estén listos
@@ -86,7 +86,7 @@ log_step "Esperando MongoDB replica set..."
 sleep 10  # Dar tiempo inicial
 
 for mongo in mongo1 mongo2 mongo3; do
-    if docker-compose ps | grep -q "$mongo.*Up"; then
+    if docker compose ps | grep -q "$mongo.*Up"; then
         log_success "$mongo está running"
     else
         log_warning "$mongo no está running"
@@ -97,17 +97,17 @@ done
 log_step "Esperando servicios de aplicación..."
 
 SERVICE_CONTAINERS=(
-    "movie-service"
-    "payment-service"
-    "notification-service"
-    "booking-service"
+    "movie"
+    "payment"
+    "notification"
+    "booking"
 )
 
 sleep 20  # Dar tiempo para que se conecten a MongoDB
 
 for container in "${SERVICE_CONTAINERS[@]}"; do
     # Verificar que el contenedor está running
-    if docker-compose ps | grep -q "$container.*Up"; then
+    if docker compose ps | grep -q "$container.*Up"; then
         log_success "$container está running"
     else
         log_warning "$container no está running"
@@ -148,16 +148,21 @@ log_header "7. Verificando endpoints de servicios"
 # Esperar un poco más para que los servicios estén completamente listos
 sleep 10
 
-# Definir endpoints de ping
-declare -A SERVICE_ENDPOINTS=(
-    ["movie"]="http://localhost:8000/ping"
-    ["payment"]="http://localhost:8100/ping"
-    ["notification"]="http://localhost:8200/ping"
-    ["booking"]="http://localhost:8300/ping"
-)
+# Definir endpoints de ping sin declare -A
+SERVICE_ENDPOINTS="
+movie=http://localhost:8000/ping
+payment=http://localhost:8100/ping
+notification=http://localhost:8200/ping
+booking=http://localhost:8300/ping
+"
+
+get_endpoint() {
+  local svc="$1"
+  echo "$SERVICE_ENDPOINTS" | awk -F= -v s="$svc" '$1==s {print $2}'
+}
 
 for service in movie payment notification booking; do
-    endpoint="${SERVICE_ENDPOINTS[$service]}"
+    endpoint="$(get_endpoint "$service")"
 
     log_step "Verificando $service ($endpoint)..."
 
@@ -168,8 +173,10 @@ for service in movie payment notification booking; do
 
     while [[ $RETRY -lt $MAX_RETRIES ]]; do
         RESPONSE=$(curl -s -w "\n%{http_code}" "$endpoint" 2>/dev/null || echo -e "\n000")
-        BODY=$(echo "$RESPONSE" | head -n -1)
-        STATUS=$(echo "$RESPONSE" | tail -n 1)
+
+        # Última línea = status, resto = body (compatible con macOS/BSD)
+        STATUS=$(printf '%s\n' "$RESPONSE" | tail -n 1)
+        BODY=$(printf '%s\n' "$RESPONSE" | sed '$d')
 
         if [[ "$STATUS" == "200" ]]; then
             if [[ "$BODY" == *"pong"* ]] || [[ "$BODY" == *"OK"* ]]; then
@@ -191,7 +198,6 @@ for service in movie payment notification booking; do
         FAILURES=$((FAILURES + 1))
     fi
 done
-
 # ============================================================
 # 8. Verificar logs sin errores críticos
 # ============================================================

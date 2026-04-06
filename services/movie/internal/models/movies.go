@@ -2,12 +2,14 @@ package models
 
 // Movie ...
 type Movie struct {
-	ID           string
+	ID           string `bson:"_id"`
 	Title        string
 	Runtime      string
 	Format       string
 	Plot         string
-	ReleaseYear  int
-	ReleaseMonth int
-	ReleaseDay   int
+	ReleaseYear  int `bson:"year"`
+	ReleaseMonth int `bson:"month"`
+	ReleaseDay   int `bson:"day"`
+	Director     string
+	Genres       []string
 }

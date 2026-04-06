@@ -89,6 +89,7 @@ echo "🔨 Building Docker image..."
 echo ""
 
 docker build \
+    --no-cache \
     --file "$DOCKERFILE" \
     --build-arg SERVICE_NAME="$SERVICE" \
     --build-arg SERVICE_PORT="$SERVICE_PORT" \
@@ -96,7 +97,6 @@ docker build \
     --build-arg BUILD_DATE="$BUILD_DATE" \
     --build-arg VCS_REF="$VCS_REF" \
     --tag "$IMAGE_TAG" \
-    --tag "$IMAGE_LATEST" \
     "$CONTEXT"
 
 echo ""
@@ -104,7 +104,6 @@ echo "✅ Build successful!"
 echo ""
 echo "Image tags:"
 echo "  - $IMAGE_TAG"
-echo "  - $IMAGE_LATEST"
 echo ""
 
 # ============================================================

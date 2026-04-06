@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"gopkg.in/mgo.v2"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -28,7 +28,7 @@ func init() {
 
 var e *echo.Echo
 
-// Start ...
+// Start initializes and starts the HTTP server.
 func Start(r map[string]interface{}, se chan error) {
 
 	// get server settings from dependecy injection
@@ -68,14 +68,21 @@ func Start(r map[string]interface{}, se chan error) {
 	}()
 }
 
-// Shutdown ...
-func Shutdown(s *mgo.Session) {
+// Shutdown gracefully shuts down the server and closes MongoDB connection.
+func Shutdown(client *mongo.Client) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := e.Shutdown(ctx); err != nil {
 		e.Logger.Fatal(err)
 	}
-	s.Close()
+
+	// Disconnect MongoDB client
+	if client != nil {
+		if err := client.Disconnect(ctx); err != nil {
+			log.Errorf("Error disconnecting from MongoDB: %v", err)
+		}
+	}
+
 	log.Warn("Server shutdown")
 	os.Exit(1)
 }

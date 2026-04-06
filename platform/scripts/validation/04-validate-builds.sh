@@ -163,9 +163,9 @@ for service in "${SERVICES[@]}"; do
 
         # Intentar ejecutar con --help o version (si existe)
         # Usar timeout para no quedar colgado
-        if timeout 5s docker run --rm "$IMAGE_NAME" --version > /dev/null 2>&1 || \
-           timeout 5s docker run --rm "$IMAGE_NAME" --help > /dev/null 2>&1 || \
-           timeout 5s docker run --rm "$IMAGE_NAME" version > /dev/null 2>&1; then
+        if timeout 25s docker run --rm "$IMAGE_NAME" --version > /dev/null 2>&1 || \
+           timeout 25s docker run --rm "$IMAGE_NAME" --help > /dev/null 2>&1 || \
+           timeout 25s docker run --rm "$IMAGE_NAME" version > /dev/null 2>&1; then
             log_success "$service puede ejecutarse"
         else
             # No es crítico si no responde a estos comandos

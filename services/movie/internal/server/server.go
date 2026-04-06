@@ -4,11 +4,12 @@ import (
 	"cinemas/services/movie/internal/api"
 	"cinemas/services/movie/internal/routes"
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
 
-	"gopkg.in/mgo.v2"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -29,43 +30,57 @@ func init() {
 
 var e *echo.Echo
 
-// Start ...
-func Start(r map[string]interface{}, se chan error) {
-
+// Start initializes and starts the HTTP server.
+func Start(r map[string]interface{}) error {
 	e = echo.New()
 
+	// Middleware de logging
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Format: "method=${method}, uri=${uri}, status=${status}\n",
 	}))
 	e.Use(middleware.Recover())
 
+	// Grupo de rutas para /movies
 	app := e.Group("/movies")
 
+	// Registrar rutas
 	routes.API(app, r["repo"].(api.Repository))
 	routes.HealthyAPI(e)
 
-	// Start server
-	go func() {
-		if err := e.Start(":" + strconv.Itoa(r["port"].(int))); err != nil {
-			log.Info("shutting down the server")
-			se <- err
-		}
-	}()
+	// Extraer puerto
+	port := r["port"].(int)
+	portStr := strconv.Itoa(port)
+
+	log.Infof("Starting server on port %s", portStr)
+
+	// Iniciar servidor (bloquea hasta que termine o haya error)
+	if err := e.Start(":" + portStr); err != nil {
+		return fmt.Errorf("server failed to start: %w", err)
+	}
+
+	return nil
 }
 
-// Shutdown ...
-func Shutdown(s *mgo.Session) {
+// Shutdown gracefully shuts down the server and closes MongoDB connection.
+func Shutdown(client *mongo.Client) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := e.Shutdown(ctx); err != nil {
 		e.Logger.Fatal(err)
 	}
-	s.Close()
+
+	// Disconnect MongoDB client
+	if client != nil {
+		if err := client.Disconnect(ctx); err != nil {
+			log.Errorf("Error disconnecting from MongoDB: %v", err)
+		}
+	}
+
 	log.Warn("Server shutdown")
 	os.Exit(1)
 }
 
-// GetServer ...
+// GetServer returns the Echo server instance.
 func GetServer() *echo.Echo {
 	return e
 }

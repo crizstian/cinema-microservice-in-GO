@@ -3,14 +3,15 @@ package ctrls
 import (
 	"cinemas/services/booking/internal/config"
 	"cinemas/services/booking/internal/models"
-
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
-	"gopkg.in/mgo.v2"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// MakePayment ...
+// MakePayment processes a payment for the booking.
 func MakePayment(b *models.BookingRequest, c *config.Client) (interface{}, error) {
 	d := fmt.Sprintf(`
 	Tickect(s) for movie %s,
@@ -31,8 +32,8 @@ func MakePayment(b *models.BookingRequest, c *config.Client) (interface{}, error
 	return c.API.PaymentWall(p)
 }
 
-// CreateTicket ...
-func CreateTicket(pr interface{}, b *models.BookingRequest, db *mgo.Database) (models.Ticket, error) {
+// CreateTicket creates a ticket in the database after successful payment.
+func CreateTicket(pr interface{}, b *models.BookingRequest, db *mongo.Database) (models.Ticket, error) {
 	u := func() string {
 		if b.User.Membership != "" {
 			return "loyal"
@@ -64,7 +65,11 @@ func CreateTicket(pr interface{}, b *models.BookingRequest, db *mgo.Database) (m
 		Email:       b.User.Email,
 	}
 
-	if err := db.C("booking").Insert(ticket); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := db.Collection("booking").InsertOne(ctx, ticket)
+	if err != nil {
 		return models.Ticket{}, err
 	}
 

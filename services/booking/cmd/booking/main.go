@@ -4,21 +4,23 @@ import (
 	"cinemas/services/booking/internal/api"
 	"cinemas/services/booking/internal/config"
 	"cinemas/services/booking/internal/server"
+	"context"
 	"os"
 	"os/signal"
+	"time"
 
-	"gopkg.in/mgo.v2"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	log "github.com/sirupsen/logrus"
 )
 
-var s *mgo.Session
+var client *mongo.Client
 
 func main() {
 	log.Info("--- Booking Service ---")
 
 	di := make(chan *config.DI)
-	quit := make(chan os.Signal)
+	quit := make(chan os.Signal, 1)
 	serverError := make(chan error)
 	signal.Notify(quit, os.Interrupt)
 
@@ -30,10 +32,10 @@ func main() {
 			startServer(c, serverError)
 		case q := <-quit:
 			log.Infof("Signal Interruption Received: %v", q)
-			server.Shutdown(s)
+			server.Shutdown(client)
 		case se := <-serverError:
 			log.Errorf("An error occured in the server, %v", se)
-			server.Shutdown(s)
+			server.Shutdown(client)
 		}
 	}
 }
@@ -41,10 +43,10 @@ func main() {
 func startServer(di *config.DI, se chan error) {
 	log.Info("Connected to Booking Service DB")
 
-	s = di.Database.Session
+	client = di.Database.Client
 
 	log.Info("Initializaing API Repository Configuration")
-	r, err := api.Connect(di.Database.DB, di.APIClient)
+	r, err := api.Connect(di.Database.Database, di.APIClient)
 
 	if err != nil {
 		mainErrorHandler("An error occured initializing the API Repository: " + err.Error())
@@ -60,6 +62,12 @@ func startServer(di *config.DI, se chan error) {
 
 func mainErrorHandler(msg string) {
 	log.Errorln(msg)
-	s.Close()
+	if client != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := client.Disconnect(ctx); err != nil {
+			log.Errorf("Error disconnecting from MongoDB: %v", err)
+		}
+	}
 	os.Exit(1)
 }

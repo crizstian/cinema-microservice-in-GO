@@ -3,6 +3,7 @@ package config
 import (
 	"cinemas/services/booking/internal/db"
 	"cinemas/services/booking/internal/tracing"
+	"log"
 
 	"github.com/opentracing/opentracing-go"
 )
@@ -19,16 +20,23 @@ type DI struct {
 func InitDI(di chan *DI) {
 	settings := LoadEnvSettings()
 
-	// start db connection
-	conn := make(chan *db.MongoConnection)
-	go db.MongoDB(settings["dbSettings"].(db.MongoReplicaSet), conn)
+	// start db connection: MongoDB ahora solo recibe el canal
+	connChan := make(chan *db.MongoConnection)
+	go db.MongoDB(connChan)
+
+	mongoConn := <-connChan
+	if mongoConn.Err != nil {
+		// Decide cómo manejarlo (log.Fatal/panic o propagar error).
+		// Ejemplo:
+		log.Fatalf("Error connecting to Mongo in booking: %v", mongoConn.Err)
+	}
 
 	tracer, _ := tracing.Init("booking-service", settings["tracing"].(string))
 	opentracing.SetGlobalTracer(tracer)
 
 	// return di object
 	di <- &DI{
-		Database:       <-conn,
+		Database:       mongoConn,
 		ServerSettings: settings["serverSettings"].(map[string]interface{}),
 		APIClient:      settings["apiClient"].(*Client),
 		Tracer:         tracer,

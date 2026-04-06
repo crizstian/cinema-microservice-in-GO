@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-WORKSPACE_ROOT="/workspace"
+WORKSPACE_ROOT="."
 COMPOSE_FILE="$WORKSPACE_ROOT/platform/deploy/docker-compose/docker-compose.yml"
 FAILURES=0
 
@@ -23,7 +23,6 @@ log_header "1. Verificando infraestructura"
 
 cd "$(dirname "$COMPOSE_FILE")"
 
-# Verificar que los servicios están running
 RUNNING_SERVICES=$(docker-compose ps --services --filter "status=running" | wc -l)
 
 if [[ $RUNNING_SERVICES -lt 4 ]]; then
@@ -32,7 +31,6 @@ if [[ $RUNNING_SERVICES -lt 4 ]]; then
 
     docker-compose up -d 2>&1 > /dev/null
 
-    # Esperar que estén listos
     log_step "Esperando que los servicios estén listos (30s)..."
     sleep 30
 fi
@@ -49,17 +47,15 @@ MOVIES_ENDPOINT="http://localhost:8000/movies/all"
 log_step "Solicitando lista de películas..."
 
 RESPONSE=$(curl -s -w "\n%{http_code}" "$MOVIES_ENDPOINT" 2>/dev/null || echo -e "\n000")
-BODY=$(echo "$RESPONSE" | head -n -1)
-STATUS=$(echo "$RESPONSE" | tail -n 1)
+BODY=${RESPONSE%$'\n'*}
+STATUS=${RESPONSE##*$'\n'}
 
 if [[ "$STATUS" == "200" ]]; then
     log_success "Endpoint /movies/all responde 200"
 
-    # Verificar que el body contiene datos
     if echo "$BODY" | grep -q "title" || echo "$BODY" | grep -q "Title"; then
         log_success "Respuesta contiene datos de películas"
 
-        # Contar películas (si es un array JSON)
         MOVIE_COUNT=$(echo "$BODY" | grep -o "\"title\"" | wc -l || echo "0")
         log_step "Películas encontradas: $MOVIE_COUNT"
 
@@ -85,7 +81,6 @@ log_header "3. Test: POST /booking"
 
 BOOKING_ENDPOINT="http://localhost:8300/booking/"
 
-# Crear payload de prueba
 BOOKING_PAYLOAD=$(cat <<EOF
 {
   "userId": "test-user-$(date +%s)",
@@ -104,21 +99,18 @@ RESPONSE=$(curl -s -w "\n%{http_code}" \
   -d "$BOOKING_PAYLOAD" \
   "$BOOKING_ENDPOINT" 2>/dev/null || echo -e "\n000")
 
-BODY=$(echo "$RESPONSE" | head -n -1)
-STATUS=$(echo "$RESPONSE" | tail -n 1)
+BODY=${RESPONSE%$'\n'*}
+STATUS=${RESPONSE##*$'\n'}
 
 if [[ "$STATUS" == "200" ]] || [[ "$STATUS" == "201" ]]; then
     log_success "Booking creado exitosamente (status: $STATUS)"
 
-    # Extraer orderId de la respuesta (si existe)
     ORDER_ID=$(echo "$BODY" | grep -oP '"orderId"\s*:\s*"\K[^"]+' || \
                echo "$BODY" | grep -oP '"id"\s*:\s*"\K[^"]+' || \
                echo "")
 
     if [[ -n "$ORDER_ID" ]]; then
         log_success "Order ID recibido: $ORDER_ID"
-
-        # Guardar para verificación posterior
         echo "$ORDER_ID" > /tmp/test-order-id.txt
     else
         log_warning "No se pudo extraer orderId de la respuesta"
@@ -140,7 +132,6 @@ if [[ -f /tmp/test-order-id.txt ]]; then
 
     log_step "Buscando booking en MongoDB (orderId: $ORDER_ID)..."
 
-    # Buscar en la colección bookings
     BOOKING_DOC=$(docker exec mongo1 mongosh cinemas --quiet --eval \
         "db.bookings.findOne({orderId: '$ORDER_ID'})" 2>/dev/null || echo "")
 
@@ -150,7 +141,6 @@ if [[ -f /tmp/test-order-id.txt ]]; then
         log_warning "Booking no encontrado en MongoDB (puede ser esperado si usa otra colección)"
     fi
 
-    # Cleanup
     rm -f /tmp/test-order-id.txt
 else
     log_step "Saltando verificación (no hay orderId)"
@@ -161,12 +151,10 @@ fi
 # ============================================================
 log_header "5. Verificando procesamiento de payment"
 
-# Verificar logs del servicio de payment
 log_step "Verificando logs de payment-service..."
 
 PAYMENT_LOGS=$(docker logs payment-service 2>&1 | tail -50 || echo "")
 
-# Buscar indicios de procesamiento de payment
 if echo "$PAYMENT_LOGS" | grep -qiE "payment.*process|process.*payment|POST.*payment"; then
     log_success "Se detectó procesamiento de payment en logs"
 else
@@ -184,13 +172,12 @@ if [[ -n "$ORDER_ID" ]]; then
     log_step "Obteniendo booking: $ORDER_ID..."
 
     RESPONSE=$(curl -s -w "\n%{http_code}" "$GET_BOOKING_ENDPOINT" 2>/dev/null || echo -e "\n000")
-    BODY=$(echo "$RESPONSE" | head -n -1)
-    STATUS=$(echo "$RESPONSE" | tail -n 1)
+    BODY=${RESPONSE%$'\n'*}
+    STATUS=${RESPONSE##*$'\n'}
 
     if [[ "$STATUS" == "200" ]]; then
         log_success "Booking recuperado exitosamente"
 
-        # Verificar que contiene el orderId
         if echo "$BODY" | grep -q "$ORDER_ID"; then
             log_success "Booking contiene orderId correcto"
         else
@@ -208,7 +195,6 @@ fi
 # ============================================================
 log_header "7. Verificando llamadas inter-servicio"
 
-# booking → payment
 log_step "Verificando booking → payment..."
 
 BOOKING_LOGS=$(docker logs booking-service 2>&1 | tail -100 || echo "")
@@ -219,7 +205,6 @@ else
     log_step "No se detectaron llamadas explícitas a payment en logs"
 fi
 
-# booking → notification
 log_step "Verificando booking → notification..."
 
 if echo "$BOOKING_LOGS" | grep -qiE "notification|notify|email"; then
@@ -245,7 +230,6 @@ for service in "${SERVICES[@]}"; do
     if [[ -d "$SERVICE_DIR" ]]; then
         cd "$SERVICE_DIR"
 
-        # Buscar archivos de test de integración
         INTEGRATION_FILES=$(find . -name "*integration*_test.go" -o -name "*_integration_test.go" 2>/dev/null | wc -l)
 
         if [[ $INTEGRATION_FILES -gt 0 ]]; then
@@ -253,7 +237,6 @@ for service in "${SERVICES[@]}"; do
 
             log_step "Ejecutando integration tests de $service..."
 
-            # Ejecutar tests con tag integration
             if go test -tags=integration -v ./... 2>&1 | tee /tmp/integration-test-$service.log; then
                 log_success "Integration tests de $service pasados"
             else

@@ -1,25 +1,23 @@
-version: '3'
-
 services:
+  # ============================================================
+  # MongoDB Replica Set - 3 nodos
+  # ============================================================
+
   mongo1:
-    # Nueva convención: registry/organization/service:version
-    image: crizstian/cinema/cinemas-db:v0.1
+    image: mongo:8.0
+    container_name: mongo1
+    hostname: mongo1
     restart: unless-stopped
+    command: mongod --replSet rs1 --bind_ip_all --port 27017
     ports:
       - "27017:27017"
     environment:
-      DB_ADMIN_USER: "cristian"
-      DB_ADMIN_PASS: "cristianPassword2017"
-      DB_REPLICA_ADMIN: "replicaAdmin"
-      DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
-      DB_REPLSET_NAME: "rs1"
-      DB_PORT: "27017"
-      DB1: "10.7.0.3"
-      DB2: "10.7.0.4"
-      DB3: "10.7.0.5"
-      IS_PRIMARY: "false"
+      MONGO_INITDB_DATABASE: admin
+    volumes:
+      - mongodb1_data:/data/db
+      - mongodb1_config:/data/configdb
     healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,23 +27,18 @@ services:
         ipv4_address: 10.7.0.3
 
   mongo2:
-    image: crizstian/cinema/cinemas-db:v0.1
+    image: mongo:8.0
+    container_name: mongo2
+    hostname: mongo2
     restart: unless-stopped
+    command: mongod --replSet rs1 --bind_ip_all --port 27017
     ports:
       - "27018:27017"
-    environment:
-      DB_ADMIN_USER: "cristian"
-      DB_ADMIN_PASS: "cristianPassword2017"
-      DB_REPLICA_ADMIN: "replicaAdmin"
-      DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
-      DB_REPLSET_NAME: "rs1"
-      DB_PORT: "27017"
-      DB1: "10.7.0.3"
-      DB2: "10.7.0.4"
-      DB3: "10.7.0.5"
-      IS_PRIMARY: "false"
+    volumes:
+      - mongodb2_data:/data/db
+      - mongodb2_config:/data/configdb
     healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -55,101 +48,148 @@ services:
         ipv4_address: 10.7.0.4
 
   mongo3:
-    image: crizstian/cinema/cinemas-db:v0.1
+    image: mongo:8.0
+    container_name: mongo3
+    hostname: mongo3
     restart: unless-stopped
+    command: mongod --replSet rs1 --bind_ip_all --port 27017
     ports:
       - "27019:27017"
+    volumes:
+      - mongodb3_data:/data/db
+      - mongodb3_config:/data/configdb
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.5
+
+  # ============================================================
+  # MongoDB Initializer - Configuración del Replica Set
+  # ============================================================
+
+  mongo-init:
+    image: mongo:8.0
+    container_name: mongo-init
+    depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
     environment:
       DB_ADMIN_USER: "cristian"
       DB_ADMIN_PASS: "cristianPassword2017"
       DB_REPLICA_ADMIN: "replicaAdmin"
       DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
       DB_REPLSET_NAME: "rs1"
-      DB_PORT: "27017"
-      DB1: "10.7.0.3"
-      DB2: "10.7.0.4"
-      DB3: "10.7.0.5"
-      IS_PRIMARY: "true"
-    healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
-    depends_on:
-      - mongo1
-      - mongo2
+    volumes:
+      - ./scripts/init-replica.sh:/init-replica.sh
+    command: bash /init-replica.sh
+    restart: "no"
     networks:
       dc1:
-        ipv4_address: 10.7.0.5
+        ipv4_address: 10.7.0.2
 
-  # movie:
-  #   image: crizstian/cinema/movie-service:v0.5
-  #   restart: on-failure
-  #   ports:
-  #     - "8000:8000"
-  #   environment:
-  #     DB_USER: "cristian"
-  #     DB_PASS: "cristianPassword2017"
-  #     DB_SERVERS: "10.7.0.3:27017,10.7.0.4:27017,10.7.0.5:27017"
-  #     DB_NAME: "movies"
-  #     DB_REPLICA: "rs1"
-  #     SERVICE_PORT: "8000"
-  #   depends_on:
-  #     - mongo3
-  #   networks:
-  #     dc1:
-  #       ipv4_address: 10.7.0.6
+  movie:
+    image: crizstian/cinema/movie:v0.1
+    container_name: movie
+    hostname: movie
+    restart: on-failure
+    ports:
+      - "8000:8000"
+    environment:
+      DB_USER: "cristian"
+      DB_PASS: "cristianPassword2017"
+      DB_SERVERS: "mongo1:27017,mongo2:27017,mongo3:27017"
+      DB_NAME: "admin"
+      DB_REPLICA: "rs1"
+      SERVICE_PORT: "8000"
+    depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.6
 
-  # payment:
-  #   image: crizstian/cinema/payment-service:v0.5
-  #   restart: on-failure
-  #   ports:
-  #     - "8100:8000"
-  #   environment:
-  #     DB_USER: "cristian"
-  #     DB_PASS: "cristianPassword2017"
-  #     DB_SERVERS: "10.7.0.3:27017,10.7.0.4:27017,10.7.0.5:27017"
-  #     DB_NAME: "payment"
-  #     DB_REPLICA: "rs1"
-  #     SERVICE_PORT: "8000"
-  #   depends_on:
-  #     - mongo3
-  #   networks:
-  #     dc1:
-  #       ipv4_address: 10.7.0.7
+  payment:
+    image: crizstian/cinema/payment:v0.1
+    container_name: payment
+    hostname: payment
+    restart: on-failure
+    ports:
+      - "8100:8000"
+    environment:
+      DB_USER: "cristian"
+      DB_PASS: "cristianPassword2017"
+      DB_SERVERS: "mongo1:27017,mongo2:27017,mongo3:27017"
+      DB_NAME: "admin"
+      DB_REPLICA: "rs1"
+      SERVICE_PORT: "8000"
+      STRIPE_PUBLIC: "pk_test_l10342hIODZmOJsBpY6GVPHj"
+      STRIPE_SECRET: "sk_test_lPPoJjmmbSjymtgo4r0O3z89"
+    depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.7
 
-  # notification:
-  #   image: crizstian/cinema/notification-service:v0.5
-  #   restart: on-failure
-  #   ports:
-  #     - "8200:8000"
-  #   environment:
-  #     SERVICE_PORT: "8000"
-  #     EMAIL: "your-email@gmail.com"
-  #     EMAIL_PASS: "your-password"
-  #   networks:
-  #     dc1:
-  #       ipv4_address: 10.7.0.8
+  notification:
+    image: crizstian/cinema/notification:v0.1
+    container_name: notification
+    hostname: notification
+    restart: on-failure
+    ports:
+      - "8200:8000"
+    environment:
+      SERVICE_PORT: "8000"
+      EMAIL: "your-email@gmail.com"
+      EMAIL_PASS: "your-password"
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.8
 
-  # booking:
-  #   image: crizstian/cinema/booking-service:v0.5
-  #   restart: on-failure
-  #   ports:
-  #     - "8300:8000"
-  #   environment:
-  #     DB_USER: "cristian"
-  #     DB_PASS: "cristianPassword2017"
-  #     DB_SERVERS: "10.7.0.3:27017,10.7.0.4:27017,10.7.0.5:27017"
-  #     DB_NAME: "booking"
-  #     DB_REPLICA: "rs1"
-  #     SERVICE_PORT: "8000"
-  #     PAYMENT_URL: "http://10.7.0.7:8000"
-  #     NOTIFICATION_URL: "http://10.7.0.8:8000"
-  #     ENABLE_TRACING: "false"
-  #   networks:
-  #     dc1:
-  #       ipv4_address: 10.7.0.9
+  booking:
+    image: crizstian/cinema/booking:v0.1
+    container_name: booking
+    hostname: booking
+    restart: on-failure
+    ports:
+      - "8300:8000"
+    environment:
+      DB_USER: "cristian"
+      DB_PASS: "cristianPassword2017"
+      DB_SERVERS: "mongo1:27017,mongo2:27017,mongo3:27017"
+      DB_NAME: "admin"
+      DB_REPLICA: "rs1"
+      SERVICE_PORT: "8000"
+      PAYMENT_URL: "http://payment:8000"
+      NOTIFICATION_URL: "http://notification:8000"
+      ENABLE_TRACING: "false"
+    depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy      
+    networks:
+      dc1:
+        ipv4_address: 10.7.0.9
 
 # # Tracing and Metrics  
 #   grafana:
@@ -207,3 +247,20 @@ networks:
     ipam:
      config:
        - subnet: 10.7.0.0/16
+
+# ============================================================
+# Volúmenes - Persistencia de datos MongoDB
+# ============================================================
+volumes:
+  mongodb1_data:
+    driver: local
+  mongodb1_config:
+    driver: local
+  mongodb2_data:
+    driver: local
+  mongodb2_config:
+    driver: local
+  mongodb3_data:
+    driver: local
+  mongodb3_config:
+    driver: local
