@@ -87,6 +87,10 @@ RUN gcloud components install gke-gcloud-auth-plugin --quiet || true
 
 # ---------- Claude Code (CLI vía npm) ----------
 RUN npm install -g @anthropic-ai/claude-code
+RUN npm install -g harness-mcp-v2
+
+# Dentro del DevContainer
+RUN git clone --depth=1 https://github.com/harness/harness-skills.git .harness-skills 
 
 # ---------- Workspace ----------
 RUN mkdir -p /workspace && chown -R devuser:devuser /workspace
