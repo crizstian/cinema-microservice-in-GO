@@ -29,6 +29,7 @@ func main() {
 
 	// Notificar en caso de Ctrl+C o SIGTERM
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	os.Exit(0)
 
 	// Goroutine 1: Conectar a MongoDB
 	go db.MongoDB(connChan)
