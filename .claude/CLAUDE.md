@@ -23,20 +23,43 @@ Este proyecto usa Harness CI/CD. Tienes acceso al Harness MCP Server (harness-mc
 5. **Nunca elimines recursos de Harness** sin confirmación explícita.
 
 ## Variables de entorno disponibles
+
 - HARNESS_API_KEY: en ~/.env
 - HARNESS_DEFAULT_PROJECT_ID: tu-proyecto
 - HARNESS_DEFAULT_ORG_ID: default
 
 ## Stack del proyecto
+
 - Go (golang:alpine)
 - Kubernetes (kubectl disponible)
 - Terraform
 - gcloud CLI
 
 ## Harness Skills disponibles
+
 - /run-pipeline — Ejecutar pipeline y monitorear progreso
 - /debug-pipeline — Analizar fallos con causa raíz
 - /create-pipeline — Generar pipeline YAML desde descripción natural
 - /manage-delegates — Verificar salud de delegates
 - /analyze-costs — Optimización de costos en cloud
 - /dora-metrics — Métricas DORA del equipo
+
+## GitHub workflow rules
+
+- Usa `git` para operaciones locales: status, diff, branch, commit.
+- Usa `gh` para operaciones GitHub rápidas desde terminal: PR status, issue view, checks.
+- Usa el GitHub MCP server para operaciones remotas estructuradas sobre PRs, issues, repos y metadatos cuando necesites contexto enriquecido.
+- Antes de crear un PR:
+  1. revisa `git diff --stat`,
+  2. ejecuta tests relevantes,
+  3. genera un resumen técnico claro,
+  4. crea el PR con título y descripción concretos.
+- No cierres issues ni hagas merge sin instrucción explícita.
+
+## Tool selection rules
+
+- Para pipelines, ejecuciones, fallos, diagnósticos y reintentos en Harness, usa las herramientas MCP de Harness antes de usar curl o llamadas REST manuales.
+- Para repositorios, pull requests, issues y metadata de GitHub, usa las herramientas MCP de GitHub antes de usar la API REST manual.
+- Usa `gh` para operaciones rápidas de CLI y fallback local.
+- Usa `git` para estado local, diffs, branches y commits.
+- Si una herramienta MCP no está disponible en la sesión, indícalo explícitamente y valida si el servidor está cargado antes de continuar con un workaround.

@@ -25,16 +25,18 @@ func Send(status string, msg string, err error) *echo.HTTPError {
 		c = http.StatusBadRequest
 		m += ", verify your data."
 		log.Warn("An External error occured." + msg)
-		break
 	case "external":
 		c = http.StatusInternalServerError
 		m += " Something went wrong, please contact you're administrator."
 		log.Warn("An External error occured." + msg)
-		break
 	case "internal":
 		c = http.StatusNotAcceptable
 		log.Warn("An Internal error occured." + msg)
-		break
+	}
+
+	// Include original error in message for debugging
+	if err != nil {
+		m = fmt.Sprintf("%s: %s", m, err.Error())
 	}
 
 	fmt.Println("-------------------------------------")

@@ -26,37 +26,25 @@
       "Bash(go build ./...)",
       "Bash(go build:*)",
       "Bash(go list:*)",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash([ -f \"/workspace/services/$service/go.mod\" ])",
+      "Bash(docker build:*)",
+      "Bash(docker compose:*)",
+      "Read(//usr/local/bin/**)",
+      "Bash(docker --version)",
+      "Bash(gh pr:*)",
+      "Bash(gh auth:*)",
+      "Bash(sudo curl:*)",
+      "Bash(sudo chmod:*)",
+      "Bash(docker exec mongo1 mongosh --quiet --eval ':*)",
+      "Bash(env)",
+      "Bash(docker exec mongo1 mongosh --quiet -u cristian -p cristianPassword2017 --authenticationDatabase admin --eval ':*)",
+      "Read(//home/devuser/.vscode-server/data/Machine/**)",
+      "Bash(npx -y harness-mcp-v2 --help)",
+      "Bash(npx -y @modelcontextprotocol/server-github --help)"
     ]
   },
-  "mcpServers": {
-    "harness": {
-      "command": "harness-mcp-v2",
-      "args": [],
-      "env": {
-        "HARNESS_API_KEY": "${containerEnv:HARNESS_API_KEY}",
-        "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
-        "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
-        "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
-        "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}",
-        "HARNESS_SKIP_ELICITATION": "false"
-      }
-    }
-  },
   "model": "claude-opus-4-5",
-  "allowedTools": [
-    "Bash",
-    "Read",
-    "Write",
-    "Edit",
-    "Glob",
-    "Grep",
-    "mcp__harness__harness_list",
-    "mcp__harness__harness_get",
-    "mcp__harness__harness_diagnose",
-    "mcp__harness__harness_status",
-    "mcp__harness__harness_execute"
-  ],
   "hooks": {
     "PostToolUse": [
       {
@@ -76,11 +64,25 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/notify-pipeline-status.sh",
-            "async": true,
-            "timeout": 60
+            "timeout": 60,
+            "async": true
           }
         ]
       }
     ]
-  }
+  },
+  "allowedTools": [
+    "Bash",
+    "Read",
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep",
+    "mcp__harness__*",
+    "mcp__github__*"
+  ],
+  "enabledMcpjsonServers": [
+    "harness",
+    "github"
+  ]
 }

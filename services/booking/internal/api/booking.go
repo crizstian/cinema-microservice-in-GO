@@ -76,7 +76,7 @@ func (a API) MakeBooking(c echo.Context) error {
 func (a API) GetOrderByID(c echo.Context) error {
 	var p map[string]interface{}
 
-	id := c.Param("id")
+	id := c.Param("orderId")
 	query := bson.M{"orderid": id}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

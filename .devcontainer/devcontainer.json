@@ -14,32 +14,30 @@
         "esbenp.prettier-vscode"
       ],
       "settings": {
-        "terminal.integrated.defaultProfile.linux": "sh",
-        "go.toolsManagement.autoUpdate": true,
-        "editor.formatOnSave": true,
-        "editor.codeActionsOnSave": {
-          "source.organizeImports": "explicit"
-        },
-        "[go]": {
-          "editor.defaultFormatter": "golang.go"
-        },
-        "[javascript]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[typescript]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[json]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[jsonc]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[yaml]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[markdown]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        "terminal.integrated.defaultProfile.linux": "sh"
+      },
+      "mcp": {
+        "servers": {
+          "harness": {
+            "command": "npx",
+            "args": ["-y", "harness-mcp-v2"],
+            "env": {
+              "HARNESS_API_KEY": "${containerEnv:HARNESS_API_KEY}",
+              "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
+              "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
+              "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
+              "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}",
+              "HARNESS_SKIP_ELICITATION": "false"
+            }
+          },
+          "github": {
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+            "env": {
+              "GH_TOKEN": "${containerEnv:GH_TOKEN}",
+              "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}"
+            }
+          }
         }
       }
     }
@@ -54,7 +52,14 @@
     "ANTHROPIC_VERTEX_PROJECT_ID": "${containerEnv:ANTHROPIC_VERTEX_PROJECT_ID}",
     "GOOGLE_CLOUD_PROJECT": "${containerEnv:GOOGLE_CLOUD_PROJECT}",
     "CLOUD_ML_REGION": "${containerEnv:CLOUD_ML_REGION}",
-    "GOOGLE_APPLICATION_CREDENTIALS": "${containerEnv:GOOGLE_APPLICATION_CREDENTIALS}"
+    "GOOGLE_APPLICATION_CREDENTIALS": "${containerEnv:GOOGLE_APPLICATION_CREDENTIALS}",
+    "GIT_USER_NAME": "${containerEnv:GIT_USER_NAME}",
+    "GIT_USER_EMAIL": "${containerEnv:GIT_USER_EMAIL}",
+    "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
+    "GH_TOKEN": "${containerEnv:GH_TOKEN}",
+    "GITHUB_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}"
   },
-  "remoteUser": "devuser"
+  "remoteUser": "devuser",
+  "postCreateCommand": "sh /workspace/platform/scripts/devcontainer/post-create.sh",
+  "postStartCommand": "sh /workspace/platform/scripts/devcontainer/post-start.sh"
 }

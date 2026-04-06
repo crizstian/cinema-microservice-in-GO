@@ -1,157 +1,187 @@
-# DevContainer + Claude Code + Vertex AI + Harness MCP
+## DevContainer + Claude Code + MCP Setup (Harness + GitHub)
 
-Este documento describe la configuración completa del entorno de desarrollo:
-
-- VS Code DevContainer
-- Claude Code usando **Google Vertex AI**
-- **Harness MCP Server v2** para orquestar pipelines
-- Tooling de Go, Terraform, kubectl, gcloud
-- Formateo automático de código al guardar
-
-Audiencia: equipo técnico (DevEx, Platform, DevOps, SEs).
+Este documento resume el setup completo para trabajar con Claude Code dentro de un DevContainer, usando MCP servers de Harness y GitHub como fuente principal de verdad para pipelines, PRs y diagnósticos.
 
 ---
 
-## 1. Tech stack
+## Tech Stack
 
-### Herramientas principales
-
-- **VS Code**
-  - Dev Containers
-  - Extensiones:
-    - `anthropic.claude-code` — Claude Code en VS Code.
-    - `golang.go` — soporte Go, `gofmt`/`goimports`.
-    - `redhat.vscode-yaml` — YAML con validación de esquemas.
-    - `humao.rest-client` — pruebas de APIs.
-    - `ms-vscode-remote.remote-containers` — DevContainer runtime.
-    - `esbenp.prettier-vscode` — formatter para JS/TS/JSON/YAML/Markdown.
-
-- **Contenedor de desarrollo**
-  - Basado en imagen Go (golang) con:
-    - `node`/`npm` (para `claude-code` CLI y `harness-mcp-v2`).
-    - `gcloud` (ADC configurado con `gcloud auth application-default login`).
-    - `kubectl`, `terraform` y herramientas de CLI necesarias.
-
-- **Claude Code**
-  - Ejecutándose dentro del DevContainer.
-  - Backend: **Google Vertex AI** (Claude 3/4 vía Vertex).
-  - Usa Application Default Credentials (ADC) de GCP montadas desde el host.
-
-- **Harness MCP Server v2**
-  - Servidor MCP para interactuar con Harness Platform.
-  - Usa `HARNESS_API_KEY` y contexto de org/proyecto.
-  - Tools clave:
-    - `harness_status`, `harness_list`, `harness_get`,
-    - `harness_diagnose`, `harness_execute`, etc.
+- **Base OS**: `golang:alpine` (Dockerfile custom)
+- **Lenguaje principal**: Go
+- **Tooling en imagen**:
+  - `git`, `bash`, `curl`, `wget`, `jq`, `yq`, `make`, `build-base`
+  - `nodejs`, `npm`, `npx`
+  - `docker-cli`
+  - `golangci-lint`, `gopls`, `dlv`, `tfenv` + Terraform
+  - `kubectl`
+  - `gcloud` + `gke-gcloud-auth-plugin`
+  - **Claude Code CLI**: `@anthropic-ai/claude-code` (global via npm)
+  - **Harness MCP Server v2**: `harness-mcp-v2` (global via npm)
+  - **GitHub CLI**: `gh` (instalado por distro en host o Dockerfile)
+- **Repos auxiliares**:
+  - `harness-skills` clonado en `/.harness-skills` dentro del contenedor
 
 ---
 
-## 2. Estructura de archivos
+## Estructura de archivos relevante
 
-```txt
-repo-root/
-├── .devcontainer/
-│   ├── devcontainer.json
-│   ├── docker-compose.devcontainer.yml
-│   └── devcontainer.env            # variables para DevContainer
-├── platform/
-│   └── docker/
-│       └── devcontainer/
-│           └── Dockerfile          # imagen base del DevContainer
-├── .claude/
-│   ├── settings.json               # (opcional) configuración avanzada de Claude
-│   └── CLAUDE.md                   # (opcional) instrucciones del proyecto
-└── ... código de la app ...
+```text
+.devcontainer/
+  devcontainer.json
+  docker-compose.devcontainer.yml   # (opcional)
+  scripts/
+    post-create.sh                  # bootstrap one-shot
+    post-start.sh                   # validación en cada arranque
+
+.claude/
+  CLAUDE.md                         # reglas de comportamiento
+  settings.json                     # permisos, hooks, allowed tools
+  settings.local.json               # overrides locales (no versionar)
+  commands/
+    create-pr.md
+    triage-issue.md
+  hooks/
+    post-edit-format.sh
+    prepare-pr-context.sh
+    pre-commit-checks.sh
+
+.mcp.json                           # MCP servers scope proyecto (opcional)
+~/.claude.json                      # MCP servers scope usuario
 ```
 
 ---
 
-## 3. Variables de entorno
+## 1. Dockerfile del DevContainer
 
-El archivo **.devcontainer/devcontainer.env** es la fuente de verdad para la configuración del DevContainer.
+### Objetivo
 
-### Ejemplo de `devcontainer.env`
+Definir una imagen autosuficiente con Go + toolchain + CLIs de IA/MCP necesarias.
+
+### Puntos clave
+
+- Basado en `golang:alpine`.
+- Instala `git`, `bash`, `curl`, `nodejs`, `npm`, `docker-cli`, `kubectl`, `gcloud`, `tfenv`, linters.
+- Instala **Claude Code CLI** y **Harness MCP Server v2** globalmente con npm.
+- Crea usuario no-root `devuser` con `bash` como shell.
+- Prepara `GOPATH`, `GOMODCACHE`, `PATH` y `/workspace`.
+
+### Fragmento relevante (resumen)
+
+```Dockerfile
+FROM golang:alpine
+
+USER root
+ENV GO111MODULE=on
+
+# Herramientas base
+RUN apk upgrade --no-cache && \
+    apk add --no-cache \
+      git build-base findutils make \
+      bat exa coreutils wget curl bash \
+      binutils jq sudo g++ py3-pip yq \
+      nodejs npm shadow docker-cli ca-certificates
+
+# Usuario no root
+RUN useradd -m -s /bin/bash devuser && \
+    echo "devuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# GOPATH
+RUN mkdir -p /home/devuser/go/pkg/mod /home/devuser/go/bin && \
+    chown -R devuser:devuser /home/devuser/go
+ENV GOPATH=/home/devuser/go
+ENV GOMODCACHE=/home/devuser/go/pkg/mod
+ENV PATH="${PATH}:/home/devuser/go/bin"
+
+# gcloud, kubectl, tfenv, linters, etc (omitido por brevedad)
+
+# Claude Code CLI + Harness MCP v2
+RUN npm install -g @anthropic-ai/claude-code
+RUN npm install -g harness-mcp-v2
+
+# Harness skills
+RUN git clone --depth=1 https://github.com/harness/harness-skills.git .harness-skills
+
+RUN mkdir -p /workspace && chown -R devuser:devuser /workspace
+USER devuser
+WORKDIR /workspace
+
+CMD ["bash"]
+```
+
+---
+
+## 2. Variables de entorno y Compose
+
+### Variables `.devcontainer/devcontainer.env`
 
 ```env
-# Harness
-HARNESS_API_KEY=pat.xxx.yyy.zzz
-HARNESS_DEFAULT_ORG_ID=default
-HARNESS_DEFAULT_PROJECT_ID=cinemas
+HARNESS_API_KEY=pat.xxx.xxx.xxx
+HARNESS_DEFAULT_ORG_ID=orgId
+HARNESS_DEFAULT_PROJECT_ID=projectId
 HARNESS_BASE_URL=https://app.harness.io
-HARNESS_TOOLSETS=pipelines,services,connectors,logs,delegates
-HARNESS_SKIP_ELICITATION=false
+HARNESS_TOOLSETS=cd,ff,sto
 
-# Vertex / GCP
-CLAUDE_CODE_USE_VERTEX=1
-ANTHROPIC_VERTEX_PROJECT_ID=tu-project-id
-GOOGLE_CLOUD_PROJECT=tu-project-id
-CLOUD_ML_REGION=global
+GITHUB_PERSONAL_ACCESS_TOKEN=ghp_xxxxxxxxxxxxxxxxx
+GH_TOKEN=ghp_xxxxxxxxxxxxxxxxx
+GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxx
 ```
 
-> Nota: este archivo NO se debe commitear si contiene secretos. Añadirlo a `.gitignore` o usar un `.env` privado equivalente.
-
----
-
-## 4. docker-compose.devcontainer.yml
-
-Archivo: `.devcontainer/docker-compose.devcontainer.yml`
+### `docker-compose.devcontainer.yml` (montajes recomendados)
 
 ```yaml
-version: "3.8"
-
 services:
-  cinemas_microservice_go:
-    build:
-      context: ../platform/docker/devcontainer
-      dockerfile: Dockerfile
-    cap_add:
-      - SYS_PTRACE
-    security_opt:
-      - seccomp:unconfined
-    env_file:
-      - devcontainer.env
+  devcontainer:
     environment:
-      # Defaults / overrides
-      HARNESS_BASE_URL: ${HARNESS_BASE_URL:-https://app.harness.io}
-      HARNESS_SKIP_ELICITATION: ${HARNESS_SKIP_ELICITATION:-false}
-
-      CLAUDE_CODE_USE_VERTEX: ${CLAUDE_CODE_USE_VERTEX:-1}
-      ANTHROPIC_VERTEX_PROJECT_ID: ${ANTHROPIC_VERTEX_PROJECT_ID}
-      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-${ANTHROPIC_VERTEX_PROJECT_ID}}
-      CLOUD_ML_REGION: ${CLOUD_ML_REGION:-global}
-
-      GOOGLE_APPLICATION_CREDENTIALS: /home/devuser/.config/gcloud/application_default_credentials.json
-
+      HARNESS_API_KEY: ${HARNESS_API_KEY}
+      HARNESS_DEFAULT_ORG_ID: ${HARNESS_DEFAULT_ORG_ID}
+      HARNESS_DEFAULT_PROJECT_ID: ${HARNESS_DEFAULT_PROJECT_ID}
+      HARNESS_BASE_URL: ${HARNESS_BASE_URL}
+      HARNESS_TOOLSETS: ${HARNESS_TOOLSETS}
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_PERSONAL_ACCESS_TOKEN}
+      GH_TOKEN: ${GH_TOKEN}
+      GITHUB_TOKEN: ${GITHUB_PERSONAL_ACCESS_TOKEN}
     volumes:
       - ../:/workspace
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HOME}/.config/gcloud:/home/devuser/.config/gcloud:rw
-
-    working_dir: /workspace
-    user: devuser
-    container_name: cinemas_microservice_go
-    command: /bin/sh -c "while sleep 1000; do :; done"
+      - ${HOME}/.config/gh:/home/devuser/.config/gh:rw
+      - ${HOME}/.claude:/home/devuser/.claude:rw # opcional
+      - ${HOME}/.claude.json:/home/devuser/.claude.json:rw
 ```
-
-Puntos clave:
-
-- `env_file: devcontainer.env` carga todas las variables para el servicio.
-- `GOOGLE_APPLICATION_CREDENTIALS` apunta a las ADC montadas desde el host.
-- Volume `${HOME}/.config/gcloud` permite que el contenedor use las credenciales de `gcloud auth application-default login`.
 
 ---
 
-## 5. devcontainer.json
+## 3. `devcontainer.json`
 
-Archivo: `.devcontainer/devcontainer.json`
+### Puntos clave
+
+- Usa la imagen build del Dockerfile.
+- Inyecta variables de entorno.
+- Configura MCP servers para VS Code en el DevContainer.
+- Conecta scripts de lifecycle (`postCreateCommand`, `postStartCommand`).
+
+### Ejemplo
 
 ```json
 {
-  "name": "cinemas_microservice_go",
-  "dockerComposeFile": ["docker-compose.devcontainer.yml"],
-  "service": "cinemas_microservice_go",
-  "workspaceFolder": "/workspace",
-
+  "name": "Go + Claude Code + Harness MCP",
+  "build": {
+    "dockerfile": ".devcontainer/Dockerfile"
+  },
+  "runArgs": [
+    "--env-file",
+    "${localWorkspaceFolder}/.devcontainer/devcontainer.env"
+  ],
+  "remoteEnv": {
+    "HARNESS_API_KEY": "${containerEnv:HARNESS_API_KEY}",
+    "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
+    "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
+    "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
+    "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}",
+    "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
+    "GH_TOKEN": "${containerEnv:GH_TOKEN}",
+    "GITHUB_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}"
+  },
   "customizations": {
     "vscode": {
       "extensions": [
@@ -159,41 +189,8 @@ Archivo: `.devcontainer/devcontainer.json`
         "golang.go",
         "redhat.vscode-yaml",
         "humao.rest-client",
-        "ms-vscode-remote.remote-containers",
-        "esbenp.prettier-vscode"
+        "ms-vscode-remote.remote-containers"
       ],
-      "settings": {
-        "terminal.integrated.defaultProfile.linux": "sh",
-        "go.toolsManagement.autoUpdate": true,
-
-        "editor.formatOnSave": true,
-        "editor.codeActionsOnSave": {
-          "source.organizeImports": "explicit"
-        },
-
-        "[go]": {
-          "editor.defaultFormatter": "golang.go"
-        },
-        "[javascript]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[typescript]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[json]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[jsonc]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[yaml]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[markdown]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        }
-      },
-
       "mcp": {
         "servers": {
           "harness": {
@@ -204,160 +201,287 @@ Archivo: `.devcontainer/devcontainer.json`
               "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
               "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
               "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
-              "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}",
-              "HARNESS_SKIP_ELICITATION": "false"
+              "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}"
+            }
+          },
+          "github": {
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+            "env": {
+              "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
+              "GH_TOKEN": "${containerEnv:GH_TOKEN}"
             }
           }
         }
       }
     }
   },
-
-  "remoteEnv": {
-    "HARNESS_API_KEY": "${containerEnv:HARNESS_API_KEY}",
-    "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
-    "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
-    "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
-    "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}",
-
-    "CLAUDE_CODE_USE_VERTEX": "${containerEnv:CLAUDE_CODE_USE_VERTEX}",
-    "ANTHROPIC_VERTEX_PROJECT_ID": "${containerEnv:ANTHROPIC_VERTEX_PROJECT_ID}",
-    "GOOGLE_CLOUD_PROJECT": "${containerEnv:GOOGLE_CLOUD_PROJECT}",
-    "CLOUD_ML_REGION": "${containerEnv:CLOUD_ML_REGION}",
-    "GOOGLE_APPLICATION_CREDENTIALS": "${containerEnv:GOOGLE_APPLICATION_CREDENTIALS}"
-  },
-
-  "remoteUser": "devuser"
+  "postCreateCommand": "sh /workspace/.devcontainer/scripts/post-create.sh",
+  "postStartCommand": "sh /workspace/.devcontainer/scripts/post-start.sh"
 }
 ```
 
 ---
 
-## 6. Configuración de Claude Code + Vertex AI
+## 4. Scripts de lifecycle
 
-### En el host (una sola vez)
+### `.devcontainer/scripts/post-create.sh` (one-shot)
 
-```bash
-gcloud auth login
-gcloud auth application-default login
-gcloud config set project TU_PROJECT_ID
+```sh
+#!/bin/sh
+set -e
+
+# Config git global si falta
+if ! git config --global user.name >/dev/null 2>&1; then
+  git config --global user.name "TU NOMBRE"
+fi
+
+if ! git config --global user.email >/dev/null 2>&1; then
+  git config --global user.email "tu-correo@dominio.com"
+fi
+
+echo "[post-create] bootstrap inicial completado"
 ```
 
-### En el DevContainer
+### `.devcontainer/scripts/post-start.sh` (cada arranque)
 
-Gracias al volumen de `~/.config/gcloud` y a `GOOGLE_APPLICATION_CREDENTIALS`, dentro del contenedor:
+```sh
+#!/bin/sh
+set -e
 
-- `gcloud auth application-default print-access-token` debe funcionar.
-- `ANTHROPIC_VERTEX_PROJECT_ID`, `CLAUDE_CODE_USE_VERTEX`, `CLOUD_ML_REGION` llegan via `env_file` y se exponen a VS Code mediante `remoteEnv`.
+echo "[post-start] validating devtoolchain..."
 
-Claude Code detecta:
+# Binarios clave
+for cmd in claude harness-mcp-v2 gh gcloud kubectl terraform; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "WARN: $cmd not found in PATH"
+  fi
+done
 
-```bash
-CLAUDE_CODE_USE_VERTEX=1
-ANTHROPIC_VERTEX_PROJECT_ID=tu-project-id
-CLOUD_ML_REGION=global
+# Vars Harness
+[ -n "$HARNESS_API_KEY" ] || echo "WARN: HARNESS_API_KEY is empty"
+[ -n "$HARNESS_DEFAULT_ORG_ID" ] || echo "WARN: HARNESS_DEFAULT_ORG_ID is empty"
+[ -n "$HARNESS_DEFAULT_PROJECT_ID" ] || echo "WARN: HARNESS_DEFAULT_PROJECT_ID is empty"
+[ -n "$HARNESS_BASE_URL" ] || echo "WARN: HARNESS_BASE_URL is empty"
+
+# Vars GitHub
+[ -n "$GITHUB_PERSONAL_ACCESS_TOKEN" ] || echo "WARN: GITHUB_PERSONAL_ACCESS_TOKEN is empty"
+[ -n "$GH_TOKEN" ] || echo "WARN: GH_TOKEN is empty"
+
+# Smoke test MCP Harness
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"devcontainer-check","version":"1.0.0"},"capabilities":{}}}' \
+  | harness-mcp-v2 >/dev/null 2>&1 || echo "WARN: harness-mcp-v2 initialize failed"
+
+echo "[post-start] done"
 ```
 
-y usa Vertex AI como backend para los modelos Claude.
-
 ---
 
-## 7. Configuración de Harness MCP Server v2
+## 5. Configuración MCP para Claude Code
 
-### Instalación en el DevContainer
+Hay dos sistemas MCP:
 
-En el Dockerfile o `postCreateCommand` (según cómo gestiones herramientas globales):
+- **VS Code MCP (DevContainer)** → configurado en `devcontainer.json`.
+- **Claude Code MCP (cliente)** → se configura en `~/.claude.json` o `.mcp.json` en la raíz del proyecto.
 
-```bash
-npm install -g harness-mcp-v2
+### Opción A: `~/.claude.json` (scope usuario)
+
+```json
+{
+  "mcpServers": {
+    "harness": {
+      "type": "stdio",
+      "command": "harness-mcp-v2",
+      "args": [],
+      "env": {
+        "HARNESS_API_KEY": "${env:HARNESS_API_KEY}",
+        "HARNESS_DEFAULT_ORG_ID": "${env:HARNESS_DEFAULT_ORG_ID}",
+        "HARNESS_DEFAULT_PROJECT_ID": "${env:HARNESS_DEFAULT_PROJECT_ID}",
+        "HARNESS_BASE_URL": "${env:HARNESS_BASE_URL}",
+        "HARNESS_TOOLSETS": "${env:HARNESS_TOOLSETS}"
+      }
+    },
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GITHUB_PERSONAL_ACCESS_TOKEN}",
+        "GH_TOKEN": "${env:GH_TOKEN}"
+      }
+    }
+  }
+}
 ```
 
-### Variables clave (desde `devcontainer.env`)
-
-- `HARNESS_API_KEY` — PAT de Harness.
-- `HARNESS_DEFAULT_ORG_ID`
-- `HARNESS_DEFAULT_PROJECT_ID`
-- `HARNESS_BASE_URL`
-- `HARNESS_TOOLSETS` — ej. `pipelines,services,connectors,logs,delegates`.
-
-El bloque `mcp.servers.harness` en `devcontainer.json` define cómo se lanza el servidor MCP y qué variables utiliza.
+> Nota: `.mcp.json` de proyecto va en la **raíz del repo**, no dentro de `.claude/`.
 
 ---
 
-## 8. Paso a paso para levantar el entorno
+## 6. `.claude/settings.json` (permisos y hooks)
 
-1. **Preparar credenciales GCP en el host**
-   - Ejecutar:
-     ```bash
-     gcloud auth login
-     gcloud auth application-default login
-     gcloud config set project TU_PROJECT_ID
-     ```
-   - Confirmar:
-     ```bash
-     ls ~/.config/gcloud/application_default_credentials.json
-     ```
+### Permisos MCP y herramientas locales
 
-2. **Crear `.devcontainer/devcontainer.env`**
-   - Definir todas las variables Harness y Vertex según tu entorno.
-   - Asegurarse de no commitearlo si contiene secretos.
+```json
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "mcp__harness__*",
+      "mcp__github__*"
+    ],
+    "deny": [
+      "Read(.env*)",
+      "Read(secrets/**)",
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh /workspace/.claude/hooks/post-edit-format.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
-3. **Revisar/crear `docker-compose.devcontainer.yml`**
-   - Confirmar que contiene `env_file: devcontainer.env`.
-   - Confirmar volumen de `~/.config/gcloud`.
+### Hooks `.claude/hooks/`
 
-4. **Revisar/crear `devcontainer.json`**
-   - Extensiones VS Code necesarias.
-   - Bloque `mcp` para Harness.
-   - Bloque `remoteEnv` con variables GCP y Harness.
+- `post-edit-format.sh`: formateo posterior a ediciones (Go / Prettier).
+- `prepare-pr-context.sh`: mostrar `git status`, `git diff --stat`, `gh pr status`.
+- `pre-commit-checks.sh`: correr `go test`, `terraform fmt -check`, etc.
 
-5. **Abrir el repo en VS Code**
-   - Aceptar el mensaje de “Reopen in Container”.
-   - O usar el comando: `Dev Containers: Rebuild and Reopen in Container`.
+Ejemplo simple de `post-edit-format.sh`:
 
-6. **Validar dentro del DevContainer**
-   - En una terminal remota:
-     ```bash
-     env | grep -E 'HARNESS|ANTHROPIC_VERTEX|GOOGLE_CLOUD|CLOUD_ML'
-     which harness-mcp-v2
-     ```
-   - Verificar que las variables tengan valores correctos y que `harness-mcp-v2` esté en el PATH.
+```sh
+#!/bin/sh
+set -e
 
-7. **Validar Claude Code**
-   - Abrir el panel de Claude Code en VS Code.
-   - Pedirle: “¿Puedes listar el estado de los pipelines en Harness para este proyecto?”.
-   - Confirmar que:
-     - No pide login directo a Anthropic;
-     - Usa Vertex AI (según configuración);
-     - Puede usar las tools MCP de Harness (estado de pipelines, diagnósticos, reintentos).
+if command -v gofmt >/dev/null 2>&1; then
+  find . -name "*.go" -type f -exec gofmt -w {} \; || true
+fi
 
----
-
-## 9. Uso típico en el día a día
-
-- Editar código Go / YAML / Terraform → guardas → se formatea automáticamente (Go con `gofmt`, lo demás con Prettier).
-- Desde Claude Code:
-  - Pedir generación o ajuste de pipelines Harness (YAML).
-  - Ejecutar pipelines y monitorear estado.
-  - Si falla, pedir:
-    > “Diagnostica el error del último pipeline fallido y corrige el código/YAML necesario; luego reintenta.”
-
-Claude, vía Harness MCP y Vertex AI, se encarga de:
-
-1. Detectar la ejecución y su resultado.
-2. Llamar a `harness_diagnose` para root cause.
-3. Proponer y aplicar el cambio en el repo.
-4. Volver a ejecutar el pipeline con `harness_execute`.
+if command -v prettier >/dev/null 2>&1; then
+  prettier --write . >/dev/null 2>&1 || true
+fi
+```
 
 ---
 
-## 10. Notas y buenas prácticas
+## 7. `CLAUDE.md` (reglas de comportamiento)
 
-- Mantener `.devcontainer/devcontainer.env` fuera de git si contiene secretos.
-- Centrarse en `containerEnv`/`remoteEnv` para variables que debe ver VS Code y Claude.
-- Cada vez que cambies `devcontainer.env`, rehacer:
-  - `Dev Containers: Rebuild and Reopen in Container`.
-- Para debug de variables:
-  - `env | grep HARNESS`
-  - `env | grep ANTHROPIC_VERTEX`
-  - `gcloud auth application-default print-access-token | head -c 20`
+Contenido sugerido:
+
+```markdown
+## Tool selection rules
+
+- Para pipelines, ejecuciones, fallos, diagnósticos y reintentos en Harness:
+  - Usa primero las herramientas MCP de Harness (`mcp__harness__*`).
+  - Solo usa `curl` directo contra la REST API como fallback cuando MCP no esté disponible.
+- Para repositorios, PRs e issues de GitHub:
+  - Usa primero las herramientas MCP de GitHub (`mcp__github__*`).
+  - Usa `gh` para operaciones rápidas de CLI y fallback local.
+  - Usa `git` para estado local, diffs, branches y commits.
+
+## Workflow de PR
+
+Antes de crear un PR:
+
+1. Revisa `git status --short` y `git diff --stat`.
+2. Ejecuta los tests relevantes (`go test ./...`, etc.).
+3. Genera un resumen técnico claro de los cambios.
+4. Crea el PR usando MCP de GitHub o `gh pr create` con título y descripción concretos.
+5. Referencia issues relacionadas si aplica.
+
+## Harness pipelines
+
+- Siempre que un pipeline falle:
+  1. Usa MCP de Harness para obtener el estado y logs del pipeline.
+  2. Explica la causa raíz.
+  3. Propón cambios de código/infra necesarios.
+  4. Aplique la corrección y vuelva a ejecutar el pipeline.
+```
+
+---
+
+## 8. Slash commands (`.claude/commands/`)
+
+### `create-pr.md`
+
+```markdown
+---
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git add:*), Bash(git commit:*), Bash(gh pr create:*), mcp__github__*
+description: Create a GitHub PR from current branch
+---
+
+## Context
+
+- Current branch: !`git branch --show-current`
+- Git status: !`git status --short`
+- Diff summary: !`git diff --stat`
+
+## Task
+
+1. Review current changes.
+2. Generate a clear commit message if needed.
+3. Ensure branch is pushed.
+4. Create a GitHub pull request with a concise title and description.
+5. Reference related issues if applicable.
+```
+
+---
+
+## 9. Checklist de validación
+
+### DevContainer
+
+- [ ] `devcontainer.json` usa la imagen del Dockerfile.
+- [ ] `postCreateCommand` apunta a `scripts/post-create.sh`.
+- [ ] `postStartCommand` apunta a `scripts/post-start.sh`.
+- [ ] MCP servers configurados en `customizations.vscode.mcp.servers.harness` y `.github`.
+
+### Dentro del contenedor
+
+- [ ] `which claude` devuelve ruta válida.
+- [ ] `which harness-mcp-v2` devuelve ruta válida.
+- [ ] `gh --version` funciona.
+- [ ] `env | grep HARNESS` muestra todas las `HARNESS_*`.
+- [ ] `env | grep GITHUB` muestra `GITHUB_PERSONAL_ACCESS_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`.
+- [ ] `echo '{"...initialize..."}' | harness-mcp-v2` responde sin error.
+
+### Claude Code / MCP
+
+- [ ] `~/.claude.json` (o `.mcp.json` en raíz) define `mcpServers.harness` y `mcpServers.github`.
+- [ ] `.claude/settings.json` incluye `mcp__harness__*` y `mcp__github__*` en `permissions.allow`.
+- [ ] Al iniciar Claude Code:
+  - [ ] “What MCP servers are available?” lista `harness` y `github`.
+  - [ ] Claude puede llamar tools de Harness y GitHub sin pedir configuración extra.
+
+### Workflow
+
+- [ ] `.claude/CLAUDE.md` describe reglas para usar MCP como fuente primaria.
+- [ ] Hooks en `.claude/hooks/` ejecutan formateo y checks básicos.
+- [ ] Slash commands (`create-pr`, `triage-issue`) funcionan y usan MCP/gh/git según lo esperado.
+
+---
+
+Este README resume el setup completo para que cada sesión en el DevContainer tenga:
+
+- todas las CLIs instaladas,
+- variables de entorno cargadas,
+- MCP servers de Harness y GitHub disponibles tanto para VS Code como para Claude Code,
+- y un workflow de trabajo guiado por MCP en lugar de llamadas manuales.

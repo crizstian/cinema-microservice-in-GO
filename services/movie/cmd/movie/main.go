@@ -35,8 +35,6 @@ func main() {
 
 	var mongoConn *db.MongoConnection
 
-	os.Exit(0)
-
 	// Esperar conexión a MongoDB o error
 	select {
 	case mongoConn = <-connChan:
