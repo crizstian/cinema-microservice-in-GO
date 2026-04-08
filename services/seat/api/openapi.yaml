@@ -1,0 +1,802 @@
+openapi: 3.0.3
+info:
+  title: Seat Service API
+  description: |
+    Servicio de gestion de asientos y disponibilidad para el sistema Cinema.
+
+    Este es el servicio MAS CRITICO del sistema, responsable de:
+    - Prevenir doble reserva de asientos (race conditions)
+    - Gestionar bloqueos temporales (holds) con TTL
+    - Confirmar reservas despues del pago
+
+    ## Arquitectura de Concurrencia
+
+    ```
+    [Cliente] --> [seat-service] --> [Redis: holds temporales (TTL 5min)]
+                                 --> [MongoDB: reservas confirmadas]
+    ```
+
+    ### Flujo de Reserva
+    1. Cliente solicita `POST /seats/hold` con asientos deseados
+    2. Sistema verifica disponibilidad atomicamente en Redis
+    3. Si disponible, crea hold con TTL de 5 minutos
+    4. Cliente completa pago en payment-service
+    5. booking-service llama `POST /seats/reserve` con hold_id
+    6. Sistema convierte hold a reserva permanente en MongoDB
+
+    ### Manejo de Concurrencia
+    - **Redis WATCH/MULTI/EXEC**: Transacciones optimistas para holds
+    - **TTL automatico**: Holds expiran en 5 minutos si no se confirman
+    - **Idempotencia**: reserve con mismo hold_id retorna mismo resultado
+
+  version: 1.0.0
+  contact:
+    name: Cinema DevOps Team
+    email: devops@cinema.local
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3004/seats
+    description: Development server
+  - url: https://api.cinema.local/seats
+    description: Production server
+
+tags:
+  - name: availability
+    description: Consulta de disponibilidad de asientos
+  - name: holds
+    description: Bloqueo temporal de asientos
+  - name: reservations
+    description: Confirmacion de reservas
+  - name: admin
+    description: Administracion de layouts de sala
+  - name: health
+    description: Health checks del servicio
+
+paths:
+  /availability:
+    get:
+      tags:
+        - availability
+      summary: Obtener mapa de disponibilidad de asientos
+      description: |
+        Retorna el mapa completo de asientos para una funcion especifica,
+        incluyendo estado actual de cada asiento.
+
+        **Nota de Concurrencia**: El estado puede cambiar entre la consulta
+        y el intento de hold. Siempre maneje errores de conflicto en el cliente.
+      operationId: getSeatAvailability
+      parameters:
+        - name: showtime_id
+          in: query
+          required: true
+          description: ID de la funcion/showtime
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Mapa de asientos con disponibilidad
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeatMap'
+        '400':
+          description: Parametro showtime_id faltante o invalido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Showtime no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /hold:
+    post:
+      tags:
+        - holds
+      summary: Bloquear asientos temporalmente
+      description: |
+        Crea un bloqueo temporal (hold) sobre los asientos especificados.
+
+        **Comportamiento de Concurrencia**:
+        - Usa transaccion atomica en Redis (WATCH/MULTI/EXEC)
+        - Si CUALQUIER asiento no esta disponible, la operacion completa falla
+        - El hold expira automaticamente en 5 minutos (TTL)
+        - Un session_id solo puede tener un hold activo por showtime
+
+        **Codigos de Error**:
+        - 409 Conflict: Uno o mas asientos ya estan ocupados/held
+        - 400 Bad Request: Datos invalidos o asientos no existen
+      operationId: holdSeats
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HoldRequest'
+            example:
+              showtime_id: "550e8400-e29b-41d4-a716-446655440000"
+              seat_ids: ["A1", "A2", "A3"]
+              session_id: "sess_abc123xyz"
+      responses:
+        '201':
+          description: Hold creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldResponse'
+          headers:
+            X-Hold-Expires:
+              description: Timestamp ISO 8601 de expiracion del hold
+              schema:
+                type: string
+                format: date-time
+        '400':
+          description: Datos invalidos o asientos no existen en el layout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: "INVALID_SEATS"
+                message: "Seats not found in room layout: X9, Z99"
+        '404':
+          description: Showtime no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicto - asientos no disponibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictError'
+              example:
+                code: "SEATS_UNAVAILABLE"
+                message: "One or more seats are not available"
+                unavailable_seats:
+                  - seat_id: "A2"
+                    status: "held"
+                    held_by: "sess_other456"
+                    held_until: "2024-01-15T10:35:00Z"
+
+  /hold/{hold_id}:
+    delete:
+      tags:
+        - holds
+      summary: Liberar bloqueo de asientos
+      description: |
+        Libera un hold existente, haciendo los asientos disponibles nuevamente.
+
+        **Autorizacion**: Solo el session_id que creo el hold puede liberarlo.
+      operationId: releaseHold
+      parameters:
+        - name: hold_id
+          in: path
+          required: true
+          description: ID del hold a liberar
+          schema:
+            type: string
+            format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - session_id
+              properties:
+                session_id:
+                  type: string
+                  description: Session ID que creo el hold (para autorizacion)
+            example:
+              session_id: "sess_abc123xyz"
+      responses:
+        '200':
+          description: Hold liberado exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Hold released successfully"
+                  released_seats:
+                    type: array
+                    items:
+                      type: string
+                    example: ["A1", "A2", "A3"]
+        '403':
+          description: Session ID no autorizado para este hold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Hold no encontrado (puede haber expirado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: "HOLD_NOT_FOUND"
+                message: "Hold not found or already expired"
+
+  /reserve:
+    post:
+      tags:
+        - reservations
+      summary: Confirmar reserva de asientos
+      description: |
+        Convierte un hold temporal en una reserva permanente.
+
+        **Flujo**:
+        1. Verifica que el hold existe y no ha expirado
+        2. Verifica que el booking_id es valido (opcional: llamada a booking-service)
+        3. Mueve los asientos de Redis (hold) a MongoDB (reserva permanente)
+        4. Elimina el hold de Redis
+
+        **Idempotencia**: Llamar multiples veces con el mismo hold_id
+        retorna el mismo resultado (la reserva existente).
+
+        **Importante**: Esta operacion debe llamarse DESPUES de que el pago
+        haya sido procesado exitosamente.
+      operationId: reserveSeats
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReserveRequest'
+            example:
+              hold_id: "123e4567-e89b-12d3-a456-426614174000"
+              booking_id: "booking_789xyz"
+      responses:
+        '201':
+          description: Reserva confirmada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+        '400':
+          description: Datos invalidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Hold no encontrado o expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: "HOLD_EXPIRED"
+                message: "Hold has expired. Please select seats again."
+        '409':
+          description: Hold ya fue convertido a reserva (idempotente - retorna reserva existente)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+
+  /layout:
+    post:
+      tags:
+        - admin
+      summary: Crear layout de sala
+      description: |
+        Define la configuracion de asientos de una sala.
+
+        **Solo Admin**: Requiere autenticacion de administrador.
+      operationId: createRoomLayout
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomLayoutRequest'
+            example:
+              room_id: "room_001"
+              name: "Sala Premium 1"
+              rows: 10
+              columns: 15
+              seats:
+                - id: "A1"
+                  row: "A"
+                  number: 1
+                  type: "wheelchair"
+                - id: "A2"
+                  row: "A"
+                  number: 2
+                  type: "regular"
+                - id: "J8"
+                  row: "J"
+                  number: 8
+                  type: "vip"
+      responses:
+        '201':
+          description: Layout creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomLayout'
+        '400':
+          description: Layout invalido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: No autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Room ID ya existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /layout/{room_id}:
+    get:
+      tags:
+        - admin
+      summary: Obtener layout de sala
+      description: Retorna la configuracion de asientos de una sala especifica.
+      operationId: getRoomLayout
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          description: ID de la sala
+          schema:
+            type: string
+          example: "room_001"
+      responses:
+        '200':
+          description: Layout de la sala
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomLayout'
+        '404':
+          description: Sala no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ping:
+    get:
+      tags:
+        - health
+      summary: Health check
+      description: Verifica que el servicio seat esta respondiendo correctamente.
+      operationId: ping
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "pong"
+
+components:
+  schemas:
+    SeatMap:
+      type: object
+      description: Mapa completo de asientos para una funcion
+      required:
+        - showtime_id
+        - room_id
+        - room_layout
+        - seats
+        - summary
+      properties:
+        showtime_id:
+          type: string
+          format: uuid
+          description: ID de la funcion
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        room_id:
+          type: string
+          description: ID de la sala
+          example: "room_001"
+        room_layout:
+          $ref: '#/components/schemas/RoomLayoutMatrix'
+        seats:
+          type: array
+          description: Lista de todos los asientos con su estado actual
+          items:
+            $ref: '#/components/schemas/Seat'
+        summary:
+          type: object
+          description: Resumen de disponibilidad
+          properties:
+            total:
+              type: integer
+              example: 150
+            available:
+              type: integer
+              example: 120
+            held:
+              type: integer
+              example: 10
+            reserved:
+              type: integer
+              example: 15
+            unavailable:
+              type: integer
+              example: 5
+
+    RoomLayoutMatrix:
+      type: object
+      description: Matriz de layout de la sala
+      properties:
+        rows:
+          type: integer
+          description: Numero de filas
+          example: 10
+        columns:
+          type: integer
+          description: Numero de columnas
+          example: 15
+        row_labels:
+          type: array
+          description: Etiquetas de filas (A-Z)
+          items:
+            type: string
+          example: ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
+
+    Seat:
+      type: object
+      description: Representacion de un asiento individual
+      required:
+        - id
+        - row
+        - number
+        - type
+        - status
+      properties:
+        id:
+          type: string
+          description: Identificador unico del asiento (fila + numero)
+          example: "A1"
+          pattern: '^[A-Z][0-9]{1,2}$'
+        row:
+          type: string
+          description: Fila del asiento
+          example: "A"
+          pattern: '^[A-Z]$'
+        number:
+          type: integer
+          description: Numero de asiento en la fila
+          minimum: 1
+          maximum: 50
+          example: 1
+        type:
+          type: string
+          description: Tipo de asiento
+          enum:
+            - regular
+            - vip
+            - wheelchair
+            - unavailable
+          example: "regular"
+        status:
+          type: string
+          description: Estado actual del asiento
+          enum:
+            - available
+            - held
+            - reserved
+            - occupied
+          example: "available"
+        held_until:
+          type: string
+          format: date-time
+          description: Timestamp de expiracion del hold (solo si status=held)
+          example: "2024-01-15T10:35:00Z"
+        held_by:
+          type: string
+          description: Session ID que tiene el hold (solo si status=held)
+          example: "sess_abc123xyz"
+        price_modifier:
+          type: number
+          format: float
+          description: Multiplicador de precio (1.0 = precio base, 1.5 = 50% extra para VIP)
+          example: 1.0
+
+    HoldRequest:
+      type: object
+      description: Solicitud para bloquear asientos temporalmente
+      required:
+        - showtime_id
+        - seat_ids
+        - session_id
+      properties:
+        showtime_id:
+          type: string
+          format: uuid
+          description: ID de la funcion
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        seat_ids:
+          type: array
+          description: Lista de IDs de asientos a bloquear
+          items:
+            type: string
+            pattern: '^[A-Z][0-9]{1,2}$'
+          minItems: 1
+          maxItems: 10
+          example: ["A1", "A2", "A3"]
+        session_id:
+          type: string
+          description: Identificador de sesion del usuario (para tracking y autorizacion)
+          minLength: 10
+          maxLength: 100
+          example: "sess_abc123xyz"
+
+    HoldResponse:
+      type: object
+      description: Respuesta exitosa de bloqueo de asientos
+      required:
+        - hold_id
+        - showtime_id
+        - seats
+        - expires_at
+        - ttl_seconds
+      properties:
+        hold_id:
+          type: string
+          format: uuid
+          description: ID unico del hold
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        showtime_id:
+          type: string
+          format: uuid
+          description: ID de la funcion
+        seats:
+          type: array
+          description: Asientos bloqueados
+          items:
+            $ref: '#/components/schemas/Seat'
+        expires_at:
+          type: string
+          format: date-time
+          description: Timestamp de expiracion del hold
+          example: "2024-01-15T10:35:00Z"
+        ttl_seconds:
+          type: integer
+          description: Segundos restantes hasta expiracion
+          example: 300
+        message:
+          type: string
+          example: "Seats held successfully. Complete payment within 5 minutes."
+
+    ReserveRequest:
+      type: object
+      description: Solicitud para confirmar reserva de asientos
+      required:
+        - hold_id
+        - booking_id
+      properties:
+        hold_id:
+          type: string
+          format: uuid
+          description: ID del hold a convertir en reserva
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        booking_id:
+          type: string
+          description: ID de la reserva en booking-service
+          example: "booking_789xyz"
+
+    ReservationResponse:
+      type: object
+      description: Respuesta de reserva confirmada
+      required:
+        - reservation_id
+        - booking_id
+        - showtime_id
+        - seats
+        - confirmed_at
+      properties:
+        reservation_id:
+          type: string
+          format: uuid
+          description: ID unico de la reserva
+          example: "987e6543-e21b-12d3-a456-426614174000"
+        booking_id:
+          type: string
+          description: ID de la reserva en booking-service
+          example: "booking_789xyz"
+        showtime_id:
+          type: string
+          format: uuid
+          description: ID de la funcion
+        seats:
+          type: array
+          description: Asientos reservados
+          items:
+            $ref: '#/components/schemas/Seat'
+        confirmed_at:
+          type: string
+          format: date-time
+          description: Timestamp de confirmacion
+          example: "2024-01-15T10:32:00Z"
+        message:
+          type: string
+          example: "Reservation confirmed successfully"
+
+    RoomLayoutRequest:
+      type: object
+      description: Solicitud para crear layout de sala
+      required:
+        - room_id
+        - name
+        - rows
+        - columns
+        - seats
+      properties:
+        room_id:
+          type: string
+          description: ID unico de la sala
+          example: "room_001"
+        name:
+          type: string
+          description: Nombre de la sala
+          example: "Sala Premium 1"
+        rows:
+          type: integer
+          description: Numero de filas
+          minimum: 1
+          maximum: 26
+          example: 10
+        columns:
+          type: integer
+          description: Numero de columnas
+          minimum: 1
+          maximum: 50
+          example: 15
+        seats:
+          type: array
+          description: Definicion de cada asiento
+          items:
+            $ref: '#/components/schemas/SeatDefinition'
+
+    SeatDefinition:
+      type: object
+      description: Definicion de un asiento para el layout
+      required:
+        - id
+        - row
+        - number
+        - type
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Z][0-9]{1,2}$'
+          example: "A1"
+        row:
+          type: string
+          pattern: '^[A-Z]$'
+          example: "A"
+        number:
+          type: integer
+          minimum: 1
+          example: 1
+        type:
+          type: string
+          enum:
+            - regular
+            - vip
+            - wheelchair
+            - unavailable
+          example: "regular"
+        price_modifier:
+          type: number
+          format: float
+          default: 1.0
+          example: 1.5
+
+    RoomLayout:
+      type: object
+      description: Layout completo de una sala
+      properties:
+        room_id:
+          type: string
+          example: "room_001"
+        name:
+          type: string
+          example: "Sala Premium 1"
+        rows:
+          type: integer
+          example: 10
+        columns:
+          type: integer
+          example: 15
+        seats:
+          type: array
+          items:
+            $ref: '#/components/schemas/SeatDefinition'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      description: Respuesta de error estandar
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Codigo de error para manejo programatico
+          example: "INVALID_REQUEST"
+        message:
+          type: string
+          description: Mensaje de error legible
+          example: "Invalid request parameters"
+
+    ConflictError:
+      type: object
+      description: Error de conflicto con detalles de asientos no disponibles
+      required:
+        - code
+        - message
+        - unavailable_seats
+      properties:
+        code:
+          type: string
+          example: "SEATS_UNAVAILABLE"
+        message:
+          type: string
+          example: "One or more seats are not available"
+        unavailable_seats:
+          type: array
+          description: Lista de asientos que causaron el conflicto
+          items:
+            type: object
+            properties:
+              seat_id:
+                type: string
+                example: "A2"
+              status:
+                type: string
+                enum: [held, reserved, occupied]
+                example: "held"
+              held_by:
+                type: string
+                description: Session ID que tiene el hold (si aplica)
+              held_until:
+                type: string
+                format: date-time
+                description: Cuando expira el hold (si aplica)
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token para endpoints admin
+
+security: []

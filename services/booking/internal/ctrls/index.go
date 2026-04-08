@@ -8,15 +8,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// MakePayment processes a payment for the booking.
-func MakePayment(b *models.BookingRequest, c *config.Client) (interface{}, error) {
-	d := fmt.Sprintf(`
-	Tickect(s) for movie %s,
-	with seat(s) %s
-	at time %s`, b.Booking.Movie.Title, strings.Join(b.Booking.Seats, ","), b.Booking.Schedule)
+// MakePayment processes a payment for the booking (v2 with showtime info).
+func MakePayment(b *models.BookingRequest, showtime *models.Showtime, c *config.Client) (interface{}, error) {
+	d := fmt.Sprintf(`Ticket(s) for showtime %s, seats %s`,
+		showtime.ID, strings.Join(b.Booking.Seats, ","))
 
 	p := models.Payment{
 		UserName:    b.User.Name + " " + b.User.LastName,
@@ -32,37 +31,31 @@ func MakePayment(b *models.BookingRequest, c *config.Client) (interface{}, error
 	return c.API.PaymentWall(p)
 }
 
-// CreateTicket creates a ticket in the database after successful payment.
-func CreateTicket(pr interface{}, b *models.BookingRequest, db *mongo.Database) (models.Ticket, error) {
-	u := func() string {
-		if b.User.Membership != "" {
-			return "loyal"
-		}
-		return "normal"
-	}()
-
-	payResponse := *pr.(*map[string]interface{})
-	charge := payResponse["charge"].(map[string]interface{})
+// CreateTicket creates a ticket in the database after successful payment (v2).
+func CreateTicket(
+	b *models.BookingRequest,
+	showtime *models.Showtime,
+	reservation *models.ReservationResponse,
+	payResponse *map[string]interface{},
+	db *mongo.Database,
+) (models.Ticket, error) {
+	charge := (*payResponse)["charge"].(map[string]interface{})
 
 	ticket := models.Ticket{
-		Booking: models.Booking{
-			City:        b.Booking.City,
-			UserType:    u,
-			TotalAmount: b.Booking.TotalAmount,
-			Cinema:      b.Booking.Cinema,
-			CinemaRoom:  b.Booking.CinemaRoom,
-			Seats:       b.Booking.Seats,
-			Movie: models.Movie{
-				Title:   b.Booking.Movie.Title,
-				Formtat: b.Booking.Movie.Formtat,
-			},
-			Schedule: b.Booking.Schedule,
-		},
-		OrderID:     charge["id"].(string),
-		Description: charge["description"].(string),
-		ReceiptURL:  charge["receipt_url"].(string),
-		UserName:    b.User.Name + " " + b.User.LastName,
-		Email:       b.User.Email,
+		BookingID:     "bkg_" + uuid.New().String()[:8],
+		ShowtimeID:    showtime.ID,
+		ReservationID: reservation.ReservationID,
+		MovieTitle:    "", // Will be enriched by caller or movie-service
+		CinemaName:    "", // Will be enriched by caller or cinema-service
+		RoomNumber:    showtime.RoomNumber,
+		StartTime:     showtime.StartTime,
+		Seats:         b.Booking.Seats,
+		TotalAmount:   b.Booking.TotalAmount,
+		OrderID:       charge["id"].(string),
+		ReceiptURL:    getStringOrEmpty(charge, "receipt_url"),
+		UserName:      b.User.Name + " " + b.User.LastName,
+		Email:         b.User.Email,
+		CreatedAt:     time.Now(),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -74,4 +67,14 @@ func CreateTicket(pr interface{}, b *models.BookingRequest, db *mongo.Database) 
 	}
 
 	return ticket, nil
+}
+
+// getStringOrEmpty safely extracts a string from a map
+func getStringOrEmpty(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }

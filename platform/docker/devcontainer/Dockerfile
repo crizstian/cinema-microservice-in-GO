@@ -19,7 +19,7 @@ RUN apk upgrade --no-cache && \
     bat exa coreutils wget curl bash \
     binutils jq sudo g++ py3-pip yq \
     github-cli \
-    nodejs npm shadow docker-cli ca-certificates
+    nodejs npm shadow docker-cli docker-cli-compose ca-certificates
 
 # ---------- Usuario no root ----------
 # Crear usuario

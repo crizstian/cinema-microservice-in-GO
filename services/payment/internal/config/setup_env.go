@@ -10,8 +10,9 @@ import (
 
 // StripeSettings ...
 type StripeSettings struct {
-	Secret string
-	Public string
+	Secret   string
+	Public   string
+	MockMode bool
 }
 
 // GetServiceConfig ...
@@ -39,6 +40,7 @@ func GetServiceConfig() map[string]interface{} {
 
 	ss, ssok := os.LookupEnv("STRIPE_SECRET")
 	stp, stpok := os.LookupEnv("STRIPE_PUBLIC")
+	mockMode := os.Getenv("STRIPE_MOCK") == "true"
 	st := StripeSettings{}
 
 	if !ssok {
@@ -53,6 +55,11 @@ func GetServiceConfig() map[string]interface{} {
 
 	st.Secret = ss
 	st.Public = stp
+	st.MockMode = mockMode
+
+	if mockMode {
+		log.Info("Stripe mock mode enabled - payments will return mock responses")
+	}
 
 	return map[string]interface{}{
 		"dbSettings": conn,

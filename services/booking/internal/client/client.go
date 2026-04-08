@@ -49,12 +49,18 @@ func NewClient() (*Client, error) {
 
 // NewRequest creates a request
 func (c *Client) NewRequest(ctx context.Context, method, urlStr string, body interface{}) (*http.Request, error) {
-	rel, errp := url.Parse(urlStr)
-	if errp != nil {
-		return nil, errp
-	}
+	var finalURL string
 
-	u := c.BaseURL.ResolveReference(rel)
+	if c.BaseURL != nil {
+		rel, errp := url.Parse(urlStr)
+		if errp != nil {
+			return nil, errp
+		}
+		finalURL = c.BaseURL.ResolveReference(rel).String()
+	} else {
+		// If no BaseURL, use the urlStr directly (full URL expected)
+		finalURL = urlStr
+	}
 
 	buf := new(bytes.Buffer)
 
@@ -65,7 +71,7 @@ func (c *Client) NewRequest(ctx context.Context, method, urlStr string, body int
 			return nil, err
 		}
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), buf)
+	req, err := http.NewRequestWithContext(ctx, method, finalURL, buf)
 
 	if err != nil {
 		return nil, err

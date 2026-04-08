@@ -78,11 +78,9 @@
     "Edit",
     "Glob",
     "Grep",
+    "mcp__perplexity__*",
     "mcp__harness__*",
     "mcp__github__*"
   ],
-  "enabledMcpjsonServers": [
-    "harness",
-    "github"
-  ]
+  "enabledMcpjsonServers": ["harness", "github", "perplexity"]
 }

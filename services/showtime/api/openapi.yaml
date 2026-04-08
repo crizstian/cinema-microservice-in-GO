@@ -1,0 +1,571 @@
+openapi: 3.0.3
+info:
+  title: Showtime Service API
+  description: |
+    Servicio de gestion de horarios de peliculas para el sistema de cine.
+
+    Permite:
+    - Consultar horarios disponibles con filtros
+    - Crear, actualizar y cancelar horarios (operaciones admin)
+    - Emitir eventos/webhooks cuando se crean o cancelan funciones
+
+    **Integraciones:**
+    - Valida `movie_id` contra el movie-service
+    - Emite eventos a sistemas suscritos via webhooks
+  version: 1.0.0
+  contact:
+    name: Cinema Microservices Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3003
+    description: Local development server
+  - url: http://showtime-service:3003
+    description: Kubernetes internal service
+
+tags:
+  - name: showtimes
+    description: Operaciones de consulta de horarios
+  - name: admin
+    description: Operaciones administrativas (requieren autenticacion)
+  - name: health
+    description: Health check endpoints
+
+paths:
+  /showtimes:
+    get:
+      tags:
+        - showtimes
+      summary: Listar horarios con filtros
+      description: |
+        Obtiene una lista paginada de horarios de peliculas.
+        Permite filtrar por pelicula, fecha y cine.
+      operationId: listShowtimes
+      parameters:
+        - name: movie_id
+          in: query
+          description: Filtrar por ID de pelicula
+          required: false
+          schema:
+            type: string
+          example: "mov_12345"
+        - name: cinema_id
+          in: query
+          description: Filtrar por ID de cine
+          required: false
+          schema:
+            type: string
+          example: "cin_reforma01"
+        - name: date
+          in: query
+          description: Filtrar por fecha (YYYY-MM-DD)
+          required: false
+          schema:
+            type: string
+            format: date
+          example: "2024-12-20"
+        - name: status
+          in: query
+          description: Filtrar por estado
+          required: false
+          schema:
+            $ref: '#/components/schemas/ShowtimeStatus'
+        - name: page
+          in: query
+          description: Numero de pagina (1-indexed)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Elementos por pagina
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Lista de horarios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShowtimeList'
+        '400':
+          description: Parametros de consulta invalidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - admin
+      summary: Crear nuevo horario
+      description: |
+        Crea un nuevo horario de funcion.
+        Valida que el `movie_id` exista en movie-service.
+        Emite evento `showtime.created` a webhooks suscritos.
+      operationId: createShowtime
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShowtimeRequest'
+            example:
+              movie_id: "mov_12345"
+              cinema_id: "cin_reforma01"
+              room_number: 5
+              start_time: "2024-12-20T19:30:00Z"
+              end_time: "2024-12-20T22:00:00Z"
+              price:
+                regular: 120
+                vip: 200
+                child: 80
+              available_seats: 150
+      responses:
+        '201':
+          description: Horario creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Showtime'
+          headers:
+            Location:
+              description: URL del recurso creado
+              schema:
+                type: string
+        '400':
+          description: Datos de entrada invalidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: No autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: movie_id no encontrado en movie-service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflicto de horario (sala ocupada)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /showtimes/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: ID del horario
+        schema:
+          type: string
+        example: "sht_abc123"
+
+    get:
+      tags:
+        - showtimes
+      summary: Obtener detalle de horario
+      description: Retorna los detalles completos de un horario especifico.
+      operationId: getShowtime
+      responses:
+        '200':
+          description: Detalle del horario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Showtime'
+        '404':
+          description: Horario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - admin
+      summary: Actualizar horario
+      description: |
+        Actualiza un horario existente.
+        No permite cambios si el estado es `completed`.
+      operationId: updateShowtime
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateShowtimeRequest'
+      responses:
+        '200':
+          description: Horario actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Showtime'
+        '400':
+          description: Datos invalidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: No autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Horario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: No se puede modificar un horario completado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - admin
+      summary: Cancelar horario
+      description: |
+        Cancela un horario (soft delete).
+        Cambia el estado a `cancelled`.
+        Emite evento `showtime.cancelled` a webhooks suscritos.
+      operationId: cancelShowtime
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Horario cancelado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Showtime'
+        '401':
+          description: No autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Horario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Horario ya cancelado o completado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ping:
+    get:
+      tags:
+        - health
+      summary: Health check
+      description: Verifica que el servicio esta funcionando.
+      operationId: ping
+      responses:
+        '200':
+          description: Servicio saludable
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "pong .../showtime v1/ ...response"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT para operaciones administrativas
+
+  schemas:
+    ShowtimeStatus:
+      type: string
+      description: Estado del horario
+      enum:
+        - scheduled
+        - cancelled
+        - completed
+      example: scheduled
+
+    Price:
+      type: object
+      description: Precios por tipo de boleto
+      required:
+        - regular
+      properties:
+        regular:
+          type: integer
+          description: Precio regular en centavos
+          minimum: 0
+          example: 12000
+        vip:
+          type: integer
+          description: Precio VIP en centavos
+          minimum: 0
+          example: 20000
+        child:
+          type: integer
+          description: Precio infantil en centavos
+          minimum: 0
+          example: 8000
+
+    Showtime:
+      type: object
+      description: Horario de funcion de pelicula
+      required:
+        - id
+        - movie_id
+        - cinema_id
+        - room_number
+        - start_time
+        - end_time
+        - price
+        - available_seats
+        - status
+      properties:
+        id:
+          type: string
+          description: ID unico del horario
+          example: "sht_abc123"
+        movie_id:
+          type: string
+          description: ID de la pelicula (referencia a movie-service)
+          example: "mov_12345"
+        cinema_id:
+          type: string
+          description: ID del cine
+          example: "cin_reforma01"
+        room_number:
+          type: integer
+          description: Numero de sala
+          minimum: 1
+          example: 5
+        start_time:
+          type: string
+          format: date-time
+          description: Fecha y hora de inicio de la funcion
+          example: "2024-12-20T19:30:00Z"
+        end_time:
+          type: string
+          format: date-time
+          description: Fecha y hora de fin de la funcion
+          example: "2024-12-20T22:00:00Z"
+        price:
+          $ref: '#/components/schemas/Price'
+        available_seats:
+          type: integer
+          description: Asientos disponibles
+          minimum: 0
+          example: 150
+        status:
+          $ref: '#/components/schemas/ShowtimeStatus'
+        created_at:
+          type: string
+          format: date-time
+          description: Fecha de creacion
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          description: Fecha de ultima actualizacion
+          readOnly: true
+
+    ShowtimeList:
+      type: object
+      description: Lista paginada de horarios
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Showtime'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    Pagination:
+      type: object
+      description: Informacion de paginacion
+      required:
+        - page
+        - limit
+        - total
+        - total_pages
+      properties:
+        page:
+          type: integer
+          description: Pagina actual
+          example: 1
+        limit:
+          type: integer
+          description: Elementos por pagina
+          example: 20
+        total:
+          type: integer
+          description: Total de elementos
+          example: 45
+        total_pages:
+          type: integer
+          description: Total de paginas
+          example: 3
+
+    CreateShowtimeRequest:
+      type: object
+      description: Request para crear un horario
+      required:
+        - movie_id
+        - cinema_id
+        - room_number
+        - start_time
+        - end_time
+        - price
+        - available_seats
+      properties:
+        movie_id:
+          type: string
+          description: ID de la pelicula
+          example: "mov_12345"
+        cinema_id:
+          type: string
+          description: ID del cine
+          example: "cin_reforma01"
+        room_number:
+          type: integer
+          description: Numero de sala
+          minimum: 1
+          example: 5
+        start_time:
+          type: string
+          format: date-time
+          description: Fecha y hora de inicio
+          example: "2024-12-20T19:30:00Z"
+        end_time:
+          type: string
+          format: date-time
+          description: Fecha y hora de fin
+          example: "2024-12-20T22:00:00Z"
+        price:
+          $ref: '#/components/schemas/Price'
+        available_seats:
+          type: integer
+          description: Capacidad de asientos
+          minimum: 1
+          example: 150
+
+    UpdateShowtimeRequest:
+      type: object
+      description: Request para actualizar un horario
+      properties:
+        room_number:
+          type: integer
+          description: Numero de sala
+          minimum: 1
+        start_time:
+          type: string
+          format: date-time
+          description: Nueva fecha y hora de inicio
+        end_time:
+          type: string
+          format: date-time
+          description: Nueva fecha y hora de fin
+        price:
+          $ref: '#/components/schemas/Price'
+        available_seats:
+          type: integer
+          description: Asientos disponibles
+          minimum: 0
+        status:
+          $ref: '#/components/schemas/ShowtimeStatus'
+
+    ErrorResponse:
+      type: object
+      description: Respuesta de error
+      required:
+        - type
+        - message
+      properties:
+        type:
+          type: string
+          description: Tipo de error
+          enum:
+            - validation
+            - not_found
+            - conflict
+            - unauthorized
+            - internal
+          example: validation
+        message:
+          type: string
+          description: Mensaje descriptivo del error
+          example: "Invalid movie_id format"
+        details:
+          type: object
+          description: Detalles adicionales del error
+          additionalProperties: true
+
+  # Webhooks para eventos
+  x-webhooks:
+    showtime.created:
+      post:
+        summary: Evento cuando se crea un horario
+        requestBody:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event:
+                    type: string
+                    example: "showtime.created"
+                  timestamp:
+                    type: string
+                    format: date-time
+                  data:
+                    $ref: '#/components/schemas/Showtime'
+    showtime.cancelled:
+      post:
+        summary: Evento cuando se cancela un horario
+        requestBody:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event:
+                    type: string
+                    example: "showtime.cancelled"
+                  timestamp:
+                    type: string
+                    format: date-time
+                  data:
+                    $ref: '#/components/schemas/Showtime'

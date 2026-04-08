@@ -1,3 +1,18 @@
+# ============================================================
+# Docker Compose - Cinema Microservices
+# ============================================================
+# Build: docker compose build
+# Run:   docker compose up -d
+# ============================================================
+
+x-common-env: &common-env
+  DB_USER: "cristian"
+  DB_PASS: "cristianPassword2017"
+  DB_SERVERS: "mongo1:27017,mongo2:27017,mongo3:27017"
+  DB_NAME: "admin"
+  DB_REPLICA: "rs1"
+  SERVICE_PORT: "8000"
+
 services:
   # ============================================================
   # MongoDB Replica Set - 3 nodos
@@ -97,19 +112,21 @@ services:
         ipv4_address: 10.7.0.2
 
   movie:
-    image: crizstian/cinema/movie:v0.1
+    build:
+      context: ../../../services/movie
+      dockerfile: ../../../platform/docker/go-service/Dockerfile
+      args:
+        SERVICE_NAME: movie
+        SERVICE_PORT: 8000
+        VERSION: ${VERSION:-0.1.0}
+    image: ${REGISTRY:-docker.io/crizstian/cinema}/movie:${VERSION:-0.1.0}
     container_name: movie
     hostname: movie
     restart: on-failure
     ports:
       - "8000:8000"
     environment:
-      DB_USER: "cristian"
-      DB_PASS: "cristianPassword2017"
-      DB_SERVERS: "mongo1:27017,mongo2:27017,mongo3:27017"
-      DB_NAME: "admin"
-      DB_REPLICA: "rs1"
-      SERVICE_PORT: "8000"
+      <<: *common-env
     depends_on:
       mongo1:
         condition: service_healthy
@@ -122,19 +139,21 @@ services:
         ipv4_address: 10.7.0.6
 
   payment:
-    image: crizstian/cinema/payment:v0.1
+    build:
+      context: ../../../services/payment
+      dockerfile: ../../../platform/docker/go-service/Dockerfile
+      args:
+        SERVICE_NAME: payment
+        SERVICE_PORT: 8000
+        VERSION: ${VERSION:-0.1.0}
+    image: ${REGISTRY:-docker.io/crizstian/cinema}/payment:${VERSION:-0.1.0}
     container_name: payment
     hostname: payment
     restart: on-failure
     ports:
       - "8100:8000"
     environment:
-      DB_USER: "cristian"
-      DB_PASS: "cristianPassword2017"
-      DB_SERVERS: "mongo1:27017,mongo2:27017,mongo3:27017"
-      DB_NAME: "admin"
-      DB_REPLICA: "rs1"
-      SERVICE_PORT: "8000"
+      <<: *common-env
       STRIPE_PUBLIC: "pk_test_l10342hIODZmOJsBpY6GVPHj"
       STRIPE_SECRET: "sk_test_lPPoJjmmbSjymtgo4r0O3z89"
     depends_on:
@@ -149,7 +168,14 @@ services:
         ipv4_address: 10.7.0.7
 
   notification:
-    image: crizstian/cinema/notification:v0.1
+    build:
+      context: ../../../services/notification
+      dockerfile: ../../../platform/docker/go-service/Dockerfile
+      args:
+        SERVICE_NAME: notification
+        SERVICE_PORT: 8000
+        VERSION: ${VERSION:-0.1.0}
+    image: ${REGISTRY:-docker.io/crizstian/cinema}/notification:${VERSION:-0.1.0}
     container_name: notification
     hostname: notification
     restart: on-failure
@@ -164,19 +190,21 @@ services:
         ipv4_address: 10.7.0.8
 
   booking:
-    image: crizstian/cinema/booking:v0.1
+    build:
+      context: ../../../services/booking
+      dockerfile: ../../../platform/docker/go-service/Dockerfile
+      args:
+        SERVICE_NAME: booking
+        SERVICE_PORT: 8000
+        VERSION: ${VERSION:-0.1.0}
+    image: ${REGISTRY:-docker.io/crizstian/cinema}/booking:${VERSION:-0.1.0}
     container_name: booking
     hostname: booking
     restart: on-failure
     ports:
       - "8300:8000"
     environment:
-      DB_USER: "cristian"
-      DB_PASS: "cristianPassword2017"
-      DB_SERVERS: "mongo1:27017,mongo2:27017,mongo3:27017"
-      DB_NAME: "admin"
-      DB_REPLICA: "rs1"
-      SERVICE_PORT: "8000"
+      <<: *common-env
       PAYMENT_URL: "http://payment:8000"
       NOTIFICATION_URL: "http://notification:8000"
       ENABLE_TRACING: "false"
@@ -186,12 +214,12 @@ services:
       mongo2:
         condition: service_healthy
       mongo3:
-        condition: service_healthy      
+        condition: service_healthy
     networks:
       dc1:
         ipv4_address: 10.7.0.9
 
-# # Tracing and Metrics  
+# # Tracing and Metrics
 #   grafana:
 #     image: grafana/grafana
 #     ports:
@@ -245,8 +273,8 @@ networks:
   dc1:
     driver: bridge
     ipam:
-     config:
-       - subnet: 10.7.0.0/16
+      config:
+        - subnet: 10.7.0.0/16
 
 # ============================================================
 # Volúmenes - Persistencia de datos MongoDB

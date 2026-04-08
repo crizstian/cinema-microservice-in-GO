@@ -1,8 +1,12 @@
-go 1.23.0
+go 1.24.0
 
 use (
 	./services/booking
+	./services/cinema
 	./services/movie
 	./services/notification
 	./services/payment
+	./services/seat
+	./services/showtime
+	./services/user
 )

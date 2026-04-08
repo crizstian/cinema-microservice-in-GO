@@ -11,7 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// BookingService encapsula la lógica de negocio de reservas
+// BookingService encapsula la lógica de negocio de reservas con patrón SAGA
 type BookingService struct {
 	db     *mongo.Database
 	client *config.Client
@@ -25,23 +25,47 @@ func NewBookingService(db *mongo.Database, client *config.Client) *BookingServic
 	}
 }
 
-// CreateBooking orquesta el proceso completo de crear una reserva:
-// 1. Procesar pago
-// 2. Crear ticket en DB
-// 3. Enviar notificación (no bloquea si falla)
+// CreateBooking orquesta el proceso completo de crear una reserva usando SAGA:
+// 1. Validar showtime
+// 2. Verificar hold de asientos
+// 3. Procesar pago
+// 4. Confirmar reserva de asientos
+// 5. Crear ticket en DB
+// 6. Enviar notificación (no bloquea si falla)
 func (s *BookingService) CreateBooking(ctx context.Context, req *models.BookingRequest) (*models.Ticket, error) {
 	// Validación básica
 	if req == nil || req.User.Name == "" {
 		return nil, errors.New("invalid booking request")
 	}
+	if req.Booking.ShowtimeID == "" || req.Booking.HoldID == "" || req.Booking.SessionID == "" {
+		return nil, errors.New("showtime_id, hold_id, and session_id are required")
+	}
 
-	// 1. Procesar pago
-	paymentResp, err := ctrls.MakePayment(req, s.client)
+	// SAGA Step 1: Validar showtime
+	showtime, err := s.client.API.GetShowtime(req.Booking.ShowtimeID)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"user":  req.User.Name,
-			"error": err.Error(),
-		}).Error("Payment failed")
+		return nil, errors.New("showtime not found: " + err.Error())
+	}
+	if showtime.Status != "scheduled" {
+		return nil, errors.New("showtime is not available for booking")
+	}
+
+	// SAGA Step 2: Verificar hold de asientos
+	hold, err := s.client.API.VerifyHold(req.Booking.HoldID, req.Booking.SessionID)
+	if err != nil {
+		return nil, errors.New("hold expired or not found: " + err.Error())
+	}
+	if hold.ShowtimeID != req.Booking.ShowtimeID {
+		return nil, errors.New("hold does not match the requested showtime")
+	}
+
+	// SAGA Step 3: Procesar pago
+	paymentResp, err := ctrls.MakePayment(req, showtime, s.client)
+	if err != nil {
+		// Compensación: liberar hold
+		if releaseErr := s.client.API.ReleaseHold(req.Booking.HoldID, req.Booking.SessionID); releaseErr != nil {
+			log.WithError(releaseErr).Error("Failed to release hold during payment compensation")
+		}
 		return nil, errors.New("payment failed: " + err.Error())
 	}
 
@@ -49,34 +73,41 @@ func (s *BookingService) CreateBooking(ctx context.Context, req *models.BookingR
 	if !ok {
 		return nil, errors.New("invalid payment response format")
 	}
+	charge := (*paymentData)["charge"].(map[string]interface{})
+	chargeID := charge["id"].(string)
 
-	// 2. Crear ticket en DB
-	ticket, err := ctrls.CreateTicket(paymentData, req, s.db)
+	// SAGA Step 4: Confirmar reserva de asientos
+	reservation, err := s.client.API.ReserveSeats(req.Booking.HoldID, "pending_"+chargeID)
 	if err != nil {
-		// TODO: Implementar compensación (reversar pago)
-		log.WithFields(log.Fields{
-			"user":  req.User.Name,
-			"error": err.Error(),
-		}).Error("Ticket creation failed")
+		// Compensación: refund del pago
+		if refundErr := s.client.API.RefundPayment(chargeID, "Seat confirmation failed"); refundErr != nil {
+			log.WithError(refundErr).Error("Failed to refund during seat confirmation compensation")
+		}
+		return nil, errors.New("seat confirmation failed: " + err.Error())
+	}
+
+	// SAGA Step 5: Crear ticket en DB
+	ticket, err := ctrls.CreateTicket(req, showtime, reservation, paymentData, s.db)
+	if err != nil {
+		log.WithError(err).Error("Ticket creation failed - manual intervention may be needed")
 		return nil, errors.New("ticket creation failed: " + err.Error())
 	}
 
-	// 3. Enviar notificación (asíncrono, no bloqueante)
+	// SAGA Step 6: Enviar notificación (asíncrono, no bloqueante)
 	go func() {
 		_, notifErr := s.client.API.NotificationWall(ticket)
 		if notifErr != nil {
 			log.WithFields(log.Fields{
-				"ticket_id": ticket.OrderID,
-				"error":     notifErr.Error(),
+				"booking_id": ticket.BookingID,
+				"error":      notifErr.Error(),
 			}).Warn("Notification failed (non-blocking)")
-			// En producción: enviar a cola de retry
 		}
 	}()
 
 	log.WithFields(log.Fields{
-		"ticket_id": ticket.OrderID,
-		"user":      req.User.Name,
-	}).Info("Booking created successfully")
+		"booking_id": ticket.BookingID,
+		"user":       req.User.Name,
+	}).Info("Booking created successfully via SAGA")
 
 	return &ticket, nil
 }

@@ -1,0 +1,25 @@
+# Spectral Configuration - Cinema Microservices
+# Usage: spectral lint services/*/api/openapi.yaml
+extends:
+  - spectral:oas
+
+rules:
+  # Naming conventions
+  operation-operationId-valid-in-url: true
+  operation-singular-tag: true
+
+  # Documentation
+  operation-description: warn
+  operation-tag-defined: true
+  info-description: warn
+
+  # Schema validation
+  oas3-valid-media-example: true
+  oas3-schema: true
+
+  # Security
+  operation-security-defined: warn
+
+  # Disabled for this project
+  info-contact: off
+  info-license: off

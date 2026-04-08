@@ -63,3 +63,14 @@ Este proyecto usa Harness CI/CD. Tienes acceso al Harness MCP Server (harness-mc
 - Usa `gh` para operaciones rápidas de CLI y fallback local.
 - Usa `git` para estado local, diffs, branches y commits.
 - Si una herramienta MCP no está disponible en la sesión, indícalo explícitamente y valida si el servidor está cargado antes de continuar con un workaround.
+
+## Web search rules
+
+- Para cualquier búsqueda de información en la web, noticias recientes, documentación externa o datos no presentes en este repo:
+  - Usa primero las herramientas MCP del servidor `perplexity` (por ejemplo `perplexity_search` o `perplexity_deep_research`), en lugar de intentar responder sin herramientas.
+- Solo responde sin usar Perplexity cuando:
+  - La respuesta se pueda deducir completamente del contexto local del proyecto (código, docs, etc.).
+- Cuando uses Perplexity:
+  1. Formula una query clara y específica.
+  2. Resume los hallazgos relevantes para la tarea actual.
+  3. Referencia explícitamente si la información es reciente o puede estar sujeta a cambios.

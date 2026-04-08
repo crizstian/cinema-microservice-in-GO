@@ -1,0 +1,324 @@
+# https://taskfile.dev
+version: "3"
+
+vars:
+  REGISTRY: '{{.REGISTRY | default "docker.io/crizstian/cinema"}}'
+  VERSION:
+    sh: cat VERSION 2>/dev/null || echo "0.0.0-dev"
+  COMMIT_SHA:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+  BUILD_DATE:
+    sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
+  SERVICES:
+    sh: ls -d services/*/go.mod 2>/dev/null | xargs -I{} dirname {} | xargs -I{} basename {} | tr '\n' ' ' | sed 's/ $//'
+  SCRIPTS_DIR: platform/scripts/taskfile
+  COMPOSE_E2E: platform/docker/testing/docker-compose.e2e.yml
+
+tasks:
+  default:
+    desc: "Show all available tasks"
+    cmds:
+      - task --list
+
+  # ============================================================
+  # VERSION MANAGEMENT
+  # ============================================================
+
+  version:
+    desc: "Display current version"
+    cmds:
+      - echo "{{.VERSION}}"
+
+  version:bump-patch:
+    desc: "Increment PATCH version (x.x.X)"
+    cmds:
+      - |
+        current=$(cat VERSION 2>/dev/null || echo "0.0.0")
+        IFS='.' read -r major minor patch <<< "$current"
+        echo "$major.$minor.$((patch + 1))" > VERSION
+        cat VERSION
+
+  version:bump-minor:
+    desc: "Increment MINOR version (x.X.0)"
+    cmds:
+      - |
+        current=$(cat VERSION 2>/dev/null || echo "0.0.0")
+        IFS='.' read -r major minor patch <<< "$current"
+        echo "$major.$((minor + 1)).0" > VERSION
+        cat VERSION
+
+  version:bump-major:
+    desc: "Increment MAJOR version (X.0.0)"
+    cmds:
+      - |
+        current=$(cat VERSION 2>/dev/null || echo "0.0.0")
+        IFS='.' read -r major minor patch <<< "$current"
+        echo "$((major + 1)).0.0" > VERSION
+        cat VERSION
+
+  version:set:
+    desc: "Set version manually: task version:set -- 1.2.3"
+    cmds:
+      - echo "{{.CLI_ARGS}}" > VERSION
+      - cat VERSION
+
+  version:tag:
+    desc: "Create git tag for current version"
+    cmds:
+      - git tag -a "v{{.VERSION}}" -m "Release v{{.VERSION}}"
+      - echo "Created tag v{{.VERSION}}"
+
+  # ============================================================
+  # BUILD
+  # ============================================================
+
+  build:
+    desc: "Build Docker image: task build SERVICE=booking"
+    vars:
+      SERVICE: '{{.SERVICE | default "booking"}}'
+      TAG: "{{.TAG | default .VERSION}}"
+    cmds:
+      - |
+        docker build \
+          --file platform/docker/go-service/Dockerfile \
+          --build-arg SERVICE_NAME={{.SERVICE}} \
+          --build-arg SERVICE_PORT=8000 \
+          --build-arg VERSION={{.TAG}} \
+          --build-arg BUILD_DATE={{.BUILD_DATE}} \
+          --build-arg COMMIT_SHA={{.COMMIT_SHA}} \
+          --tag {{.REGISTRY}}/{{.SERVICE}}:{{.TAG}} \
+          --tag {{.REGISTRY}}/{{.SERVICE}}:latest \
+          services/{{.SERVICE}}
+
+  build:all:
+    desc: "Build Docker images for all services"
+    cmds:
+      - for: { var: SERVICES, split: " " }
+        task: build
+        vars:
+          SERVICE: "{{.ITEM}}"
+
+  # ============================================================
+  # PUSH
+  # ============================================================
+
+  push:
+    desc: "Push image to registry: task push SERVICE=booking"
+    vars:
+      SERVICE: '{{.SERVICE | default "booking"}}'
+      TAG: "{{.TAG | default .VERSION}}"
+    cmds:
+      - docker push {{.REGISTRY}}/{{.SERVICE}}:{{.TAG}}
+      - docker push {{.REGISTRY}}/{{.SERVICE}}:latest
+
+  push:all:
+    desc: "Push all service images to registry"
+    cmds:
+      - for: { var: SERVICES, split: " " }
+        task: push
+        vars:
+          SERVICE: "{{.ITEM}}"
+
+  # ============================================================
+  # COMPOSE
+  # ============================================================
+
+  compose:update:
+    desc: "Update image tag in docker-compose.yml"
+    vars:
+      SERVICE: "{{.SERVICE}}"
+    requires:
+      vars: [SERVICE]
+    cmds:
+      - yq -i '.services.{{.SERVICE}}.image = "{{.REGISTRY}}/{{.SERVICE}}:{{.VERSION}}"' platform/deploy/docker-compose/docker-compose.yml
+
+  compose:update-all:
+    desc: "Update all service image tags"
+    cmds:
+      - for: { var: SERVICES, split: " " }
+        task: compose:update
+        vars:
+          SERVICE: "{{.ITEM}}"
+
+  # ============================================================
+  # RELEASE
+  # ============================================================
+
+  release:patch:
+    desc: "Release bug fix"
+    cmds:
+      - task: version:bump-patch
+      - task: build:all
+      - task: compose:update-all
+      - echo "Release v$(cat VERSION) ready. Run 'task push:all' to publish."
+
+  release:minor:
+    desc: "Release new feature"
+    cmds:
+      - task: version:bump-minor
+      - task: build:all
+      - task: compose:update-all
+      - echo "Release v$(cat VERSION) ready. Run 'task push:all' to publish."
+
+  release:major:
+    desc: "Release breaking change"
+    cmds:
+      - task: version:bump-major
+      - task: build:all
+      - task: compose:update-all
+      - echo "Release v$(cat VERSION) ready. Run 'task push:all' to publish."
+
+  # ============================================================
+  # DEV
+  # ============================================================
+
+  dev:up:
+    desc: "Start all services locally"
+    cmds:
+      - docker compose -f platform/deploy/docker-compose/docker-compose.yml up -d
+
+  dev:down:
+    desc: "Stop all local services"
+    cmds:
+      - docker compose -f platform/deploy/docker-compose/docker-compose.yml down
+
+  dev:logs:
+    desc: "Stream logs from services"
+    vars:
+      SERVICE: '{{.SERVICE | default ""}}'
+    cmds:
+      - docker compose -f platform/deploy/docker-compose/docker-compose.yml logs -f {{.SERVICE}}
+
+  # ============================================================
+  # LINT & FORMAT
+  # ============================================================
+
+  lint:
+    desc: "Run all linters"
+    cmds:
+      - task: lint:go
+      - task: lint:openapi
+
+  lint:go:
+    desc: "Lint Go code with go vet"
+    cmds:
+      - "{{.SCRIPTS_DIR}}/lint-go.sh"
+
+  lint:openapi:
+    desc: "Validate OpenAPI specs with Spectral"
+    cmds:
+      - spectral lint services/*/api/openapi.yaml --ruleset .spectral.yaml 2>/dev/null || echo "No specs found"
+
+  fmt:
+    desc: "Format all Go code"
+    cmds:
+      - |
+        for svc in {{.SERVICES}}; do
+          echo "=== $svc ==="
+          (cd services/$svc && go fmt ./...)
+        done
+
+  # ============================================================
+  # TEST
+  # ============================================================
+
+  test:unit:
+    desc: "Run unit tests: task test:unit SERVICE=booking"
+    vars:
+      SERVICE: '{{.SERVICE | default "booking"}}'
+    cmds:
+      - "{{.SCRIPTS_DIR}}/test-unit.sh {{.SERVICE}}"
+
+  test:unit:all:
+    desc: "Run unit tests for all services"
+    cmds:
+      - "{{.SCRIPTS_DIR}}/test-unit-all.sh"
+
+  test:integration:
+    desc: "Run integration tests"
+    deps: [infra:up]
+    cmds:
+      - "{{.SCRIPTS_DIR}}/test-integration.sh"
+
+  test:e2e:
+    desc: "Run E2E tests (full system)"
+    cmds:
+      - "{{.SCRIPTS_DIR}}/test-e2e.sh"
+
+  test:ci:
+    desc: "CI pipeline: lint + unit tests + OpenAPI"
+    cmds:
+      - "{{.SCRIPTS_DIR}}/test-ci.sh"
+
+  # ============================================================
+  # INFRASTRUCTURE
+  # ============================================================
+
+  infra:up:
+    desc: "Start test infrastructure"
+    cmds:
+      - "{{.SCRIPTS_DIR}}/infra-up.sh"
+
+  infra:down:
+    desc: "Stop test infrastructure"
+    cmds:
+      - docker compose -f {{.COMPOSE_E2E}} down -v
+
+  infra:logs:
+    desc: "Stream infrastructure logs"
+    cmds:
+      - docker compose -f {{.COMPOSE_E2E}} logs -f
+
+  infra:reset:
+    desc: "Restart test infrastructure"
+    cmds:
+      - task: infra:down
+      - task: infra:up
+
+  # ============================================================
+  # COVERAGE
+  # ============================================================
+
+  coverage:
+    desc: "Generate HTML coverage report"
+    cmds:
+      - "{{.SCRIPTS_DIR}}/coverage.sh"
+
+  # ============================================================
+  # CONTRACTS
+  # ============================================================
+
+  contract:consumer:
+    desc: "Run consumer contract tests"
+    cmds:
+      - "{{.SCRIPTS_DIR}}/contract-consumer.sh"
+
+  contract:verify:
+    desc: "Verify provider contracts"
+    cmds:
+      - "{{.SCRIPTS_DIR}}/contract-verify.sh"
+
+  contract:clean:
+    desc: "Delete generated pact files"
+    cmds:
+      - rm -f contracts/*.json
+
+  # ============================================================
+  # UTILITIES
+  # ============================================================
+
+  images:
+    desc: "List project Docker images"
+    cmds:
+      - docker images --filter "reference={{.REGISTRY}}/*" --format "table {{`{{.Repository}}`}}\t{{`{{.Tag}}`}}\t{{`{{.Size}}`}}\t{{`{{.CreatedAt}}`}}"
+
+  clean:
+    desc: "Remove project Docker images"
+    cmds:
+      - docker images --filter "reference={{.REGISTRY}}/*" -q | xargs -r docker rmi -f
+      - docker builder prune -f
+
+  health:
+    desc: "Check health of infrastructure and services"
+    cmds:
+      - "{{.SCRIPTS_DIR}}/health.sh"

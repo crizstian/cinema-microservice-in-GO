@@ -37,6 +37,13 @@
               "GH_TOKEN": "${containerEnv:GH_TOKEN}",
               "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}"
             }
+          },
+          "perplexity": {
+            "command": "npx",
+            "args": ["-y", "@perplexity-ai/mcp-server"],
+            "env": {
+              "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}"
+            }
           }
         }
       }
@@ -57,7 +64,8 @@
     "GIT_USER_EMAIL": "${containerEnv:GIT_USER_EMAIL}",
     "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
     "GH_TOKEN": "${containerEnv:GH_TOKEN}",
-    "GITHUB_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}"
+    "GITHUB_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
+    "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}"
   },
   "remoteUser": "devuser",
   "postCreateCommand": "sh /workspace/platform/scripts/devcontainer/post-create.sh",

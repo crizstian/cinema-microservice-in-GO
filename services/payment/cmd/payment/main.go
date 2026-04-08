@@ -47,7 +47,7 @@ func startServer(di *config.DI, se chan error) {
 
 	client = di.Database.Client
 
-	r, err := api.Connect(di.Database.Database, di.Stripe)
+	r, err := api.Connect(di.Database.Database, di.Stripe, di.MockMode)
 
 	if err != nil {
 		mainErrorHandler(fmt.Sprintf("[ERROR] Could not connect to Repo -> %s", err))

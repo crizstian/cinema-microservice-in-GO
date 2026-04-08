@@ -1,0 +1,594 @@
+openapi: 3.0.3
+info:
+  title: Cinema Booking Service API
+  description: |
+    API para gestionar reservas de boletos de cine. Este servicio coordina
+    la creación de bookings usando el patrón SAGA para orquestar:
+
+    1. Validación de showtime via showtime-service
+    2. Verificación de hold de asientos via seat-service
+    3. Procesamiento del pago via payment-service
+    4. Confirmación de asientos via seat-service
+    5. Creación del ticket en MongoDB
+    6. Envío de confirmación por email via notification-service
+
+    ## Patrón SAGA - Compensaciones
+
+    Si el pago falla → se libera el hold de asientos automáticamente
+    Si la confirmación de asientos falla → se ejecuta refund del pago
+
+    ## Flujo de Reserva
+
+    ```
+    Cliente                    booking-service               seat-service
+       |                             |                            |
+       |-- POST /seats/hold -------->|                            |
+       |                             |                            |
+       |<-- hold_id, expires_at -----|                            |
+       |                             |                            |
+       |-- POST /booking ----------->|                            |
+       |   (con hold_id)             |                            |
+       |                             |-- GET /showtimes/:id ----->| showtime-service
+       |                             |<-- showtime data ----------|
+       |                             |                            |
+       |                             |-- verify hold ------------>|
+       |                             |<-- hold valid -------------|
+       |                             |                            |
+       |                             |-- process payment -------->| payment-service
+       |                             |<-- payment ok -------------|
+       |                             |                            |
+       |                             |-- POST /seats/reserve ---->|
+       |                             |<-- reservation confirmed --|
+       |                             |                            |
+       |<-- booking response --------|                            |
+    ```
+  version: 2.0.0
+  contact:
+    name: Cinema Engineering Team
+    email: engineering@cinema.local
+
+servers:
+  - url: http://localhost:8082
+    description: Local development server
+  - url: http://booking-service:8082
+    description: Kubernetes internal service
+
+tags:
+  - name: Booking
+    description: Operaciones de reserva de boletos
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /booking:
+    post:
+      tags:
+        - Booking
+      summary: Create a new booking
+      description: |
+        Crea una nueva reserva de boletos de cine.
+
+        **Prerrequisito**: El cliente debe tener un hold activo de asientos
+        (obtenido via POST /seats/hold en seat-service).
+
+        **Flujo SAGA**:
+        1. Validar showtime_id con showtime-service
+        2. Verificar que los asientos están en HOLD para este session_id
+        3. Procesar pago via payment-service
+        4. Confirmar reserva de asientos via seat-service POST /seats/reserve
+        5. Crear ticket en MongoDB
+        6. Enviar notificación via notification-service
+
+        **Compensaciones**:
+        - Si pago falla → liberar hold de asientos
+        - Si confirmación de asientos falla → hacer refund del pago
+      operationId: makeBooking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequest'
+            example:
+              user:
+                name: Juan
+                lastName: Perez
+                email: juan.perez@email.com
+                phoneNumber: "+52 55 1234 5678"
+                creditCard:
+                  number: "4242424242424242"
+                  cvc: "123"
+                  exp_month: "12"
+                  exp_year: "2027"
+                membership: gold
+              booking:
+                showtime_id: "sht_abc123"
+                hold_id: "123e4567-e89b-12d3-a456-426614174000"
+                session_id: "sess_xyz789"
+                seats:
+                  - "F12"
+                  - "F13"
+                totalAmount: 450
+      responses:
+        '201':
+          description: Booking created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+              example:
+                msg: Booking has been created successfully
+                notification: Email sent successfully
+                ticket:
+                  booking_id: "bkg_abc123xyz"
+                  showtime_id: "sht_abc123"
+                  reservation_id: "987e6543-e21b-12d3-a456-426614174000"
+                  movie_title: "Dune Part Two"
+                  cinema_name: "Cinepolis Perisur"
+                  room_number: 5
+                  start_time: "2024-12-25T18:30:00Z"
+                  seats:
+                    - "F12"
+                    - "F13"
+                  total_amount: 450
+                  order_id: "ord_abc123xyz"
+                  receipt_url: "https://pay.stripe.com/receipts/abc123"
+                  user_name: Juan Perez
+                  email: juan.perez@email.com
+                payment: Payment has been charged successfully with Stripe v2024.10
+        '400':
+          description: Bad request - invalid booking data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "INVALID_REQUEST"
+                message: "Could not get Booking Request data, verify your data."
+        '404':
+          description: Showtime or hold not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                showtimeNotFound:
+                  value:
+                    code: "SHOWTIME_NOT_FOUND"
+                    message: "Showtime sht_abc123 not found"
+                holdExpired:
+                  value:
+                    code: "HOLD_EXPIRED"
+                    message: "Hold has expired. Please select seats again."
+        '409':
+          description: Conflict - seats not held by this session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "HOLD_MISMATCH"
+                message: "Seats are not held by this session"
+        '500':
+          description: Internal server error - payment or notification failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PAYMENT_FAILED"
+                message: "An error occurred with the Payment Wall. Something went wrong, please contact your administrator."
+        '502':
+          description: Bad gateway - dependent service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "SERVICE_UNAVAILABLE"
+                message: "seat-service is not responding"
+
+  /booking/{orderId}:
+    get:
+      tags:
+        - Booking
+      summary: Get booking by order ID
+      description: Recupera los detalles de una reserva existente usando su ID de orden.
+      operationId: getOrderById
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: Unique order identifier
+          schema:
+            type: string
+          example: ord_abc123xyz
+      responses:
+        '200':
+          description: Booking found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+              example:
+                msg: ticket details
+                ticket:
+                  booking_id: "bkg_abc123xyz"
+                  showtime_id: "sht_abc123"
+                  reservation_id: "987e6543-e21b-12d3-a456-426614174000"
+                  movie_title: "Dune Part Two"
+                  cinema_name: "Cinepolis Perisur"
+                  room_number: 5
+                  start_time: "2024-12-25T18:30:00Z"
+                  seats:
+                    - "F12"
+                    - "F13"
+                  total_amount: 450
+                  order_id: "ord_abc123xyz"
+                  receipt_url: "https://pay.stripe.com/receipts/abc123"
+                  user_name: "Juan Perez"
+                  email: "juan.perez@email.com"
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "NOT_FOUND"
+                message: "Order not found"
+        '500':
+          description: Database error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "INTERNAL_ERROR"
+                message: "Database error. Something went wrong, please contact your administrator."
+
+  /ping:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Endpoint para verificar que el servicio esta activo.
+      operationId: ping
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: pong
+
+components:
+  schemas:
+    BookingDetails:
+      type: object
+      description: Detalles de la reserva de asientos (nuevo formato v2)
+      required:
+        - showtime_id
+        - hold_id
+        - session_id
+        - seats
+        - totalAmount
+      properties:
+        showtime_id:
+          type: string
+          description: ID del horario/funcion (de showtime-service)
+          example: "sht_abc123"
+        hold_id:
+          type: string
+          format: uuid
+          description: ID del hold de asientos (de seat-service)
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        session_id:
+          type: string
+          description: Session ID del usuario que tiene el hold
+          minLength: 10
+          maxLength: 100
+          example: "sess_xyz789"
+        seats:
+          type: array
+          description: Lista de asientos reservados
+          items:
+            type: string
+            pattern: '^[A-Z][0-9]{1,2}$'
+          minItems: 1
+          maxItems: 10
+          example:
+            - "F12"
+            - "F13"
+        totalAmount:
+          type: integer
+          description: Monto total en centavos o unidad monetaria local
+          minimum: 1
+          example: 450
+
+    CreditCard:
+      type: object
+      description: Informacion de tarjeta de credito para el pago
+      required:
+        - number
+        - cvc
+        - exp_month
+        - exp_year
+      properties:
+        number:
+          type: string
+          description: Numero de tarjeta (16 digitos)
+          pattern: '^\d{13,19}$'
+          example: "4242424242424242"
+          x-sensitive: true
+        cvc:
+          type: string
+          description: Codigo de seguridad (3-4 digitos)
+          pattern: '^\d{3,4}$'
+          example: "123"
+          x-sensitive: true
+        exp_month:
+          type: string
+          description: Mes de expiracion (01-12)
+          pattern: '^(0[1-9]|1[0-2])$'
+          example: "12"
+        exp_year:
+          type: string
+          description: Ano de expiracion (4 digitos)
+          pattern: '^\d{4}$'
+          example: "2027"
+      x-security-note: |
+        En produccion, los datos de tarjeta deben ser tokenizados usando
+        Stripe.js o similar. Nunca enviar datos PAN en texto plano.
+
+    UserMember:
+      type: object
+      description: Informacion del usuario que realiza la reserva
+      required:
+        - name
+        - lastName
+        - email
+        - creditCard
+      properties:
+        name:
+          type: string
+          description: Nombre del usuario
+          example: Juan
+        lastName:
+          type: string
+          description: Apellido del usuario
+          example: Perez
+        email:
+          type: string
+          format: email
+          description: Correo electronico para enviar confirmacion
+          example: juan.perez@email.com
+        phoneNumber:
+          type: string
+          description: Numero de telefono (opcional)
+          example: "+52 55 1234 5678"
+        creditCard:
+          $ref: '#/components/schemas/CreditCard'
+        membership:
+          type: string
+          description: Nivel de membresia (gold, silver, bronze, none)
+          enum:
+            - gold
+            - silver
+            - bronze
+            - none
+          example: gold
+
+    BookingRequest:
+      type: object
+      description: Request body para crear una nueva reserva (v2 con hold_id)
+      required:
+        - user
+        - booking
+      properties:
+        user:
+          $ref: '#/components/schemas/UserMember'
+        booking:
+          $ref: '#/components/schemas/BookingDetails'
+
+    Ticket:
+      type: object
+      description: Ticket generado despues de una reserva exitosa (v2)
+      required:
+        - booking_id
+        - showtime_id
+        - reservation_id
+        - order_id
+        - seats
+        - total_amount
+        - user_name
+        - email
+      properties:
+        booking_id:
+          type: string
+          description: ID unico del booking
+          example: "bkg_abc123xyz"
+        showtime_id:
+          type: string
+          description: ID del showtime
+          example: "sht_abc123"
+        reservation_id:
+          type: string
+          format: uuid
+          description: ID de la reserva de asientos en seat-service
+          example: "987e6543-e21b-12d3-a456-426614174000"
+        movie_title:
+          type: string
+          description: Titulo de la pelicula
+          example: "Dune Part Two"
+        cinema_name:
+          type: string
+          description: Nombre del cine
+          example: "Cinepolis Perisur"
+        room_number:
+          type: integer
+          description: Numero de sala
+          example: 5
+        start_time:
+          type: string
+          format: date-time
+          description: Fecha y hora de la funcion
+          example: "2024-12-25T18:30:00Z"
+        seats:
+          type: array
+          description: Lista de asientos reservados
+          items:
+            type: string
+          example:
+            - "F12"
+            - "F13"
+        total_amount:
+          type: integer
+          description: Monto total cobrado
+          example: 450
+        order_id:
+          type: string
+          description: ID del cargo en Stripe
+          example: "ord_abc123xyz"
+        receipt_url:
+          type: string
+          format: uri
+          description: URL del recibo de pago (Stripe)
+          example: "https://pay.stripe.com/receipts/abc123"
+        user_name:
+          type: string
+          description: Nombre completo del usuario
+          example: "Juan Perez"
+        email:
+          type: string
+          format: email
+          description: Email del usuario
+          example: "juan.perez@email.com"
+        created_at:
+          type: string
+          format: date-time
+          description: Fecha de creacion del ticket
+          readOnly: true
+
+    BookingResponse:
+      type: object
+      description: Respuesta exitosa al crear una reserva
+      properties:
+        msg:
+          type: string
+          description: Mensaje de confirmacion
+          example: Booking has been created successfully
+        notification:
+          type: string
+          description: Estado del envio de notificacion
+          example: Email sent successfully
+        ticket:
+          $ref: '#/components/schemas/Ticket'
+        payment:
+          type: string
+          description: Mensaje de confirmacion del pago
+          example: Payment has been charged successfully with Stripe v2024.10
+
+    OrderResponse:
+      type: object
+      description: Respuesta al consultar una orden existente
+      properties:
+        msg:
+          type: string
+          description: Mensaje descriptivo
+          example: ticket details
+        ticket:
+          $ref: '#/components/schemas/Ticket'
+
+    ErrorResponse:
+      type: object
+      description: Respuesta de error estandar
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Codigo de error para manejo programatico
+          enum:
+            - INVALID_REQUEST
+            - NOT_FOUND
+            - SHOWTIME_NOT_FOUND
+            - HOLD_EXPIRED
+            - HOLD_MISMATCH
+            - PAYMENT_FAILED
+            - SEAT_CONFIRMATION_FAILED
+            - SERVICE_UNAVAILABLE
+            - INTERNAL_ERROR
+          example: "INVALID_REQUEST"
+        message:
+          type: string
+          description: Descripcion del error legible para humanos
+          example: "Could not get Booking Request data, verify your data."
+        details:
+          type: object
+          description: Detalles adicionales del error
+          additionalProperties: true
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for authenticated endpoints (future implementation)
+
+x-integrations:
+  showtime-service:
+    description: Servicio de gestion de horarios de peliculas
+    endpoints:
+      - GET /showtimes/{id}
+    timeout: 3s
+    required: true
+  seat-service:
+    description: Servicio de gestion de asientos y disponibilidad
+    endpoints:
+      - GET /seats/availability?showtime_id={id}
+      - POST /seats/hold
+      - DELETE /seats/hold/{hold_id}
+      - POST /seats/reserve
+    timeout: 5s
+    required: true
+  payment-service:
+    description: Servicio de procesamiento de pagos via Stripe
+    endpoints:
+      - POST /payment/makePurchase
+      - POST /payment/refund
+    timeout: 5s
+    required: true
+  notification-service:
+    description: Servicio de envio de emails de confirmacion
+    endpoints:
+      - POST /notification/sendEmail
+    timeout: 3s
+    required: false
+
+x-saga-compensations:
+  description: Acciones de compensacion en caso de fallo
+  steps:
+    - step: 1
+      action: Validate showtime
+      compensation: none
+    - step: 2
+      action: Verify seat hold
+      compensation: none
+    - step: 3
+      action: Process payment
+      compensation: Release seat hold (DELETE /seats/hold/{hold_id})
+    - step: 4
+      action: Confirm seat reservation
+      compensation: Refund payment (POST /payment/refund)
+    - step: 5
+      action: Create ticket in DB
+      compensation: Cancel seat reservation + Refund payment
+    - step: 6
+      action: Send notification
+      compensation: none (non-critical)

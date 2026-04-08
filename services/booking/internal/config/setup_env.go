@@ -69,6 +69,8 @@ func initTracingEnvironment() (string, error) {
 func initUpstreamsURIEnvironment(c *Client) error {
 	pu, puok := os.LookupEnv("PAYMENT_URL")
 	nu, nuok := os.LookupEnv("NOTIFICATION_URL")
+	su, suok := os.LookupEnv("SEAT_SERVICE_URL")
+	stu, stuok := os.LookupEnv("SHOWTIME_SERVICE_URL")
 
 	if !puok {
 		return errors.New("[ERROR] NO PAYMENT_URL defined")
@@ -78,12 +80,27 @@ func initUpstreamsURIEnvironment(c *Client) error {
 		return errors.New("[ERROR] NO NOTIFICATION_URL defined")
 	}
 
+	// Seat and showtime URLs are optional but recommended
+	if !suok {
+		su = "http://localhost:3004"
+		log.Warn("SEAT_SERVICE_URL not defined, using default: " + su)
+	}
+
+	if !stuok {
+		stu = "http://localhost:3003"
+		log.Warn("SHOWTIME_SERVICE_URL not defined, using default: " + stu)
+	}
+
 	c.API.SetBasePaymentURL(pu)
 	c.API.SetNotificationURL(nu)
+	c.API.SetBaseSeatURL(su)
+	c.API.SetBaseShowtimeURL(stu)
 
 	log.WithFields(log.Fields{
 		"payment_url":      c.API.GetBasePaymentURL(),
 		"notification_url": c.API.GetNotificationURL(),
+		"seat_url":         c.API.GetBaseSeatURL(),
+		"showtime_url":     c.API.GetBaseShowtimeURL(),
 	}).Info("External services configured")
 
 	return nil
