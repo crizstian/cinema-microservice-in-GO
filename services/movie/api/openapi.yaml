@@ -1,0 +1,305 @@
+openapi: 3.0.3
+info:
+  title: Movie Service API
+  description: |
+    Cinema ticketing system - Movie catalog microservice.
+
+    Provides read-only access to the movie catalog including:
+    - List all movies
+    - Get movie premieres (recent releases)
+    - Get movie by ID
+  version: 1.0.0
+  contact:
+    name: Cinema Ticketing Team
+    email: team@cinema.local
+
+servers:
+  - url: http://localhost:8001
+    description: Local development server
+  - url: http://movie-service:8001
+    description: Docker/Kubernetes internal
+
+tags:
+  - name: movies
+    description: Movie catalog operations
+  - name: health
+    description: Service health check
+
+paths:
+  /ping:
+    get:
+      tags:
+        - health
+      summary: Health check endpoint
+      description: Returns "pong" if the service is healthy
+      operationId: ping
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: pong
+
+  /movies/all:
+    get:
+      tags:
+        - movies
+      summary: Get all movies
+      description: Retrieves the complete list of movies from the catalog
+      operationId: getAllMovies
+      responses:
+        '200':
+          description: List of all movies retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovieListResponse'
+              example:
+                movies:
+                  - _id: "tt0111161"
+                    Title: "The Shawshank Redemption"
+                    Runtime: "142 min"
+                    Format: "IMAX"
+                    Plot: "Two imprisoned men bond over a number of years..."
+                    ReleaseYear: 2024
+                    ReleaseMonth: 3
+                    ReleaseDay: 15
+                    Director: "Frank Darabont"
+                    Genres:
+                      - "Drama"
+                      - "Crime"
+                  - _id: "tt0068646"
+                    Title: "The Godfather"
+                    Runtime: "175 min"
+                    Format: "Standard"
+                    Plot: "The aging patriarch of an organized crime dynasty..."
+                    ReleaseYear: 2024
+                    ReleaseMonth: 4
+                    ReleaseDay: 1
+                    Director: "Francis Ford Coppola"
+                    Genres:
+                      - "Crime"
+                      - "Drama"
+                msg: "list of movies"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Failed GetAllMovies"
+                type: "external"
+
+  /movies/premieres:
+    get:
+      tags:
+        - movies
+      summary: Get movie premieres
+      description: |
+        Retrieves movies that have premiered recently.
+
+        Filters movies where:
+        - Release year is current year or previous year
+        - Release month is within current month +/- 1
+        - Release day is up to current day
+      operationId: getMoviePremieres
+      responses:
+        '200':
+          description: List of premiere movies retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovieListResponse'
+              example:
+                movies:
+                  - _id: "tt1234567"
+                    Title: "New Release Movie"
+                    Runtime: "120 min"
+                    Format: "IMAX 3D"
+                    Plot: "An exciting new adventure..."
+                    ReleaseYear: 2026
+                    ReleaseMonth: 4
+                    ReleaseDay: 5
+                    Director: "John Director"
+                    Genres:
+                      - "Action"
+                      - "Adventure"
+                msg: "list of movies"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /movies/{id}:
+    get:
+      tags:
+        - movies
+      summary: Get movie by ID
+      description: Retrieves a specific movie by its unique identifier
+      operationId: getMovieById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique movie identifier (e.g., IMDB ID format)
+          schema:
+            type: string
+          example: "tt0111161"
+      responses:
+        '200':
+          description: Movie retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovieResponse'
+              example:
+                movies:
+                  _id: "tt0111161"
+                  Title: "The Shawshank Redemption"
+                  Runtime: "142 min"
+                  Format: "IMAX"
+                  Plot: "Two imprisoned men bond over a number of years, finding solace and eventual redemption through acts of common decency."
+                  ReleaseYear: 2024
+                  ReleaseMonth: 3
+                  ReleaseDay: 15
+                  Director: "Frank Darabont"
+                  Genres:
+                    - "Drama"
+                    - "Crime"
+                msg: "list of movies"
+        '404':
+          description: Movie not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Movie not found"
+                type: "external"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    Movie:
+      type: object
+      description: Represents a movie in the catalog
+      required:
+        - _id
+        - Title
+      properties:
+        _id:
+          type: string
+          description: Unique movie identifier (stored as _id in MongoDB)
+          example: "tt0111161"
+        Title:
+          type: string
+          description: Movie title
+          example: "The Shawshank Redemption"
+        Runtime:
+          type: string
+          description: Movie duration (e.g., "142 min")
+          example: "142 min"
+        Format:
+          type: string
+          description: Screening format (e.g., Standard, IMAX, 3D, IMAX 3D, 4DX)
+          example: "IMAX"
+          enum:
+            - Standard
+            - IMAX
+            - 3D
+            - IMAX 3D
+            - 4DX
+        Plot:
+          type: string
+          description: Brief plot summary
+          example: "Two imprisoned men bond over a number of years..."
+        ReleaseYear:
+          type: integer
+          description: Year of release
+          example: 2024
+          minimum: 1900
+          maximum: 2100
+        ReleaseMonth:
+          type: integer
+          description: Month of release (1-12)
+          example: 3
+          minimum: 1
+          maximum: 12
+        ReleaseDay:
+          type: integer
+          description: Day of release (1-31)
+          example: 15
+          minimum: 1
+          maximum: 31
+        Director:
+          type: string
+          description: Movie director name
+          example: "Frank Darabont"
+        Genres:
+          type: array
+          description: List of movie genres
+          items:
+            type: string
+          example:
+            - "Drama"
+            - "Crime"
+
+    MovieListResponse:
+      type: object
+      description: Response containing a list of movies
+      required:
+        - movies
+        - msg
+      properties:
+        movies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Movie'
+        msg:
+          type: string
+          description: Response message
+          example: "list of movies"
+
+    MovieResponse:
+      type: object
+      description: Response containing a single movie
+      required:
+        - movies
+        - msg
+      properties:
+        movies:
+          $ref: '#/components/schemas/Movie'
+        msg:
+          type: string
+          description: Response message
+          example: "list of movies"
+
+    ErrorResponse:
+      type: object
+      description: Error response structure
+      required:
+        - error
+        - type
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Failed to retrieve data"
+        type:
+          type: string
+          description: Error type (internal, external, user)
+          enum:
+            - internal
+            - external
+            - user
+          example: "external"

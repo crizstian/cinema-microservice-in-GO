@@ -1,18 +1,73 @@
 {
-    "name": "Go & Terraform DevContainer",
-    "dockerComposeFile": [
-        "docker-compose.devcontainer.yml"
-    ],
-    "service": "cinemas_microservice_go",
-    "workspaceFolder": "/workspace",
-    "settings": {
-        "go.useLanguageServer": true,
-        "go.lintTool": "golangci-lint",
-        "editor.formatOnSave": true
-    },
-    "extensions": [
-        "golang.Go",
-        "hashicorp.terraform"
-    ],
-    "remoteUser": "devuser"
+  "name": "cinemas_microservice_go",
+  "dockerComposeFile": ["docker-compose.devcontainer.yml"],
+  "service": "cinemas_microservice_go",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "golang.go",
+        "redhat.vscode-yaml",
+        "humao.rest-client",
+        "ms-vscode-remote.remote-containers",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "sh"
+      },
+      "mcp": {
+        "servers": {
+          "harness": {
+            "command": "npx",
+            "args": ["-y", "harness-mcp-v2"],
+            "env": {
+              "HARNESS_API_KEY": "${containerEnv:HARNESS_API_KEY}",
+              "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
+              "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
+              "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
+              "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}",
+              "HARNESS_SKIP_ELICITATION": "false"
+            }
+          },
+          "github": {
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+            "env": {
+              "GH_TOKEN": "${containerEnv:GH_TOKEN}",
+              "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}"
+            }
+          },
+          "perplexity": {
+            "command": "npx",
+            "args": ["-y", "@perplexity-ai/mcp-server"],
+            "env": {
+              "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}"
+            }
+          }
+        }
+      }
+    }
+  },
+  "remoteEnv": {
+    "HARNESS_API_KEY": "${containerEnv:HARNESS_API_KEY}",
+    "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
+    "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
+    "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
+    "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}",
+    "CLAUDE_CODE_USE_VERTEX": "${containerEnv:CLAUDE_CODE_USE_VERTEX}",
+    "ANTHROPIC_VERTEX_PROJECT_ID": "${containerEnv:ANTHROPIC_VERTEX_PROJECT_ID}",
+    "GOOGLE_CLOUD_PROJECT": "${containerEnv:GOOGLE_CLOUD_PROJECT}",
+    "CLOUD_ML_REGION": "${containerEnv:CLOUD_ML_REGION}",
+    "GOOGLE_APPLICATION_CREDENTIALS": "${containerEnv:GOOGLE_APPLICATION_CREDENTIALS}",
+    "GIT_USER_NAME": "${containerEnv:GIT_USER_NAME}",
+    "GIT_USER_EMAIL": "${containerEnv:GIT_USER_EMAIL}",
+    "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
+    "GH_TOKEN": "${containerEnv:GH_TOKEN}",
+    "GITHUB_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
+    "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}"
+  },
+  "remoteUser": "devuser",
+  "postCreateCommand": "sh /workspace/platform/scripts/devcontainer/post-create.sh",
+  "postStartCommand": "sh /workspace/platform/scripts/devcontainer/post-start.sh"
 }

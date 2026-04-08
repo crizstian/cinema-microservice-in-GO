@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx @stoplight/spectral-cli lint openapi.yaml)",
+      "Bash(npm install:*)",
+      "Bash(npm init:*)"
+    ]
+  }
+}

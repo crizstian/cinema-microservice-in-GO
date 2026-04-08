@@ -31,6 +31,48 @@ func TestCreateBooking_ValidationErrors(t *testing.T) {
 			wantErr: true,
 			errMsg:  "invalid booking request",
 		},
+		{
+			name: "missing showtime_id",
+			request: &models.BookingRequest{
+				User: models.UserMember{
+					Name: "John",
+				},
+				Booking: models.BookingDetails{
+					HoldID:    "hold_123",
+					SessionID: "sess_123",
+				},
+			},
+			wantErr: true,
+			errMsg:  "showtime_id, hold_id, and session_id are required",
+		},
+		{
+			name: "missing hold_id",
+			request: &models.BookingRequest{
+				User: models.UserMember{
+					Name: "John",
+				},
+				Booking: models.BookingDetails{
+					ShowtimeID: "sht_123",
+					SessionID:  "sess_123",
+				},
+			},
+			wantErr: true,
+			errMsg:  "showtime_id, hold_id, and session_id are required",
+		},
+		{
+			name: "missing session_id",
+			request: &models.BookingRequest{
+				User: models.UserMember{
+					Name: "John",
+				},
+				Booking: models.BookingDetails{
+					ShowtimeID: "sht_123",
+					HoldID:     "hold_123",
+				},
+			},
+			wantErr: true,
+			errMsg:  "showtime_id, hold_id, and session_id are required",
+		},
 	}
 
 	for _, tt := range tests {

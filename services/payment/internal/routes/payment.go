@@ -10,6 +10,7 @@ import (
 func PaymentAPI(app *echo.Group, repo api.Repository) {
 	app.POST("/makePurchase", repo.RegisterPurchase)
 	app.GET("/:id", repo.GetPurchaseByID)
+	app.POST("/:id/refund", repo.RefundPayment)
 }
 
 // HealthyAPI ...

@@ -1,6 +1,9 @@
 **/test_env.sh
 .DS_STORE
 
+# Test results
+tests/test-results/
+
 **/.terraform
 **/ubuntu*
 **/.vagrant
@@ -31,3 +34,4 @@ Thumbs.db
 .vscode/
 .idea/
 .env
+node_modules

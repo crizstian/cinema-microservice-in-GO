@@ -15,7 +15,7 @@ func main() {
 	log.Info("--- Notification Service ---")
 
 	di := make(chan *config.DI)
-	quit := make(chan os.Signal)
+	quit := make(chan os.Signal, 1)
 	serverError := make(chan error)
 	signal.Notify(quit, os.Interrupt)
 

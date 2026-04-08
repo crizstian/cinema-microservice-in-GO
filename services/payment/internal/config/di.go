@@ -12,6 +12,7 @@ type DI struct {
 	Database       *db.MongoConnection
 	ServerSettings map[string]interface{}
 	Stripe         *client.API
+	MockMode       bool
 }
 
 // InitDI ...
@@ -30,14 +31,15 @@ func InitDI(di chan *DI) {
 		log.Fatalf("Error connecting to Mongo in payment: %v", mongoConn.Err)
 	}
 
-	secret := settings["stripeSettings"].(StripeSettings).Secret
+	stripeSettings := settings["stripeSettings"].(StripeSettings)
 	sc := &client.API{}
-	sc.Init(secret, nil)
+	sc.Init(stripeSettings.Secret, nil)
 
 	// return di object
 	di <- &DI{
 		Database:       mongoConn,
 		ServerSettings: settings["serverSettings"].(map[string]interface{}),
 		Stripe:         sc,
+		MockMode:       stripeSettings.MockMode,
 	}
 }

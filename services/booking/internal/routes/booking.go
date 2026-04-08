@@ -8,6 +8,8 @@ import (
 
 // BookingAPI ...
 func BookingAPI(app *echo.Group, repo api.Repository) {
+	// Support both /booking and /booking/ for POST
+	app.POST("", repo.MakeBooking)
 	app.POST("/", repo.MakeBooking)
 	app.GET("/:orderId", repo.GetOrderByID)
 }

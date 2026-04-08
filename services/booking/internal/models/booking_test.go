@@ -2,39 +2,49 @@ package models
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBookingModel(t *testing.T) {
-	booking := Booking{
-		UserType:    "normal",
-		City:        "CDMX",
-		Cinema:      "Cinepolis",
-		Schedule:    "2026-01-25 19:00",
+func TestBookingDetailsModel(t *testing.T) {
+	booking := BookingDetails{
+		ShowtimeID:  "sht_abc123",
+		HoldID:      "hold_xyz789",
+		SessionID:   "sess_123456",
 		TotalAmount: 150,
-		CinemaRoom:  5,
 		Seats:       []string{"A1", "A2"},
 	}
 
-	assert.Equal(t, "normal", booking.UserType)
-	assert.Equal(t, "CDMX", booking.City)
+	assert.Equal(t, "sht_abc123", booking.ShowtimeID)
+	assert.Equal(t, "hold_xyz789", booking.HoldID)
 	assert.Equal(t, 2, len(booking.Seats))
 	assert.Greater(t, booking.TotalAmount, 0)
 }
 
 func TestTicketModel(t *testing.T) {
 	ticket := Ticket{
-		OrderID:     "order-123",
-		Description: "Test ticket",
-		ReceiptURL:  "https://example.com/receipt",
-		UserName:    "John Doe",
-		Email:       "john@example.com",
+		BookingID:     "bkg_123",
+		ShowtimeID:    "sht_abc",
+		ReservationID: "res_xyz",
+		MovieTitle:    "Test Movie",
+		CinemaName:    "Test Cinema",
+		RoomNumber:    5,
+		StartTime:     time.Now(),
+		Seats:         []string{"A1", "A2"},
+		TotalAmount:   450,
+		OrderID:       "order-123",
+		ReceiptURL:    "https://example.com/receipt",
+		UserName:      "John Doe",
+		Email:         "john@example.com",
+		CreatedAt:     time.Now(),
 	}
 
+	assert.NotEmpty(t, ticket.BookingID)
 	assert.NotEmpty(t, ticket.OrderID)
 	assert.NotEmpty(t, ticket.Email)
 	assert.Contains(t, ticket.Email, "@")
+	assert.Equal(t, 2, len(ticket.Seats))
 }
 
 func TestUserMemberModel(t *testing.T) {

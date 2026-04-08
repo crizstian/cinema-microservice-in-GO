@@ -1,308 +1,241 @@
-# Cinemas Microservices - Go Monorepo
+<p align="center">
+  <img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.22+"/>
+  <img src="https://img.shields.io/badge/MongoDB-8.0-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB 8.0"/>
+  <img src="https://img.shields.io/badge/Redis-7.x-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis 7"/>
+  <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
+  <img src="https://img.shields.io/badge/Harness-CI%2FCD-0078D4?style=for-the-badge&logo=harness&logoColor=white" alt="Harness CI/CD"/>
+</p>
 
-Monorepo de microservicios para gestión de cines, construido con Go 1.21 y arquitectura de servicios distribuidos.
+<h1 align="center">Cinema Microservices Platform</h1>
 
-## 📁 Estructura del Monorepo
+<p align="center">
+  <strong>Enterprise-grade cinema ticketing system built with Go microservices</strong><br/>
+  Featuring real-time seat reservations, payment processing, and event-driven notifications
+</p>
 
-```
-.
-├── go.work                       # Go workspace (monorepo)
-│
-├── services/                     # 🚀 SERVICIOS / APLICACIONES
-│   ├── booking/                 # Servicio de reservas
-│   │   ├── cmd/booking/         # Punto de entrada
-│   │   ├── internal/            # Código privado del servicio
-│   │   ├── go.mod
-│   │   └── README.md
-│   ├── movie/                   # Servicio de películas
-│   ├── payment/                 # Servicio de pagos
-│   └── notification/            # Servicio de notificaciones
-│
-├── platform/                     # 🏗️ INFRAESTRUCTURA Y TOOLING
-│   ├── docker/
-│   │   ├── base/               # Alpine base image
-│   │   ├── mongodb/            # MongoDB replica set
-│   │   └── webserver/          # Nginx
-│   ├── deploy/
-│   │   ├── docker-compose/     # Configuración local
-│   │   └── hashicorp/          # Nomad + Consul + Vault
-│   └── scripts/                # Build scripts, validation
-│
-├── docs/                         # 📖 DOCUMENTACIÓN
-│   ├── DOCKER-BUILD.md
-│   ├── MONGODB-VALIDATION.md
-│   └── REFACTOR-ANALYSIS.md
-│
-├── Makefile                      # Targets de alto nivel
-└── README.md                     # Este archivo
-```
-
-## 🚀 Servicios
-
-| Servicio | Puerto | Descripción | Path |
-|----------|--------|-------------|------|
-| **booking** | 8300 | Reservas (orquesta payment + notification) | `services/booking/` |
-| **movie** | 8000 | Gestión de películas y carteleras | `services/movie/` |
-| **payment** | 8100 | Procesamiento de pagos (Stripe) | `services/payment/` |
-| **notification** | 8200 | Envío de notificaciones por email | `services/notification/` |
-| **mongodb** | 27017-27019 | MongoDB replica set (3 nodos) | `platform/docker/mongodb/` |
-
-## 📋 Requisitos
-
-- **Go 1.21+** (para desarrollo local)
-- **Docker** y **Docker Compose** (para deployment)
-- **Make** (opcional, para comandos de build)
-
-## 🛠️ Comandos Principales
-
-### Desarrollo Local (sin Docker)
-
-```bash
-# Sincronizar dependencias del workspace
-go work sync
-
-# Ejecutar un servicio específico
-cd services/booking
-go run ./cmd/booking
-
-# Ejecutar tests unitarios
-go test ./services/booking/internal/...
-go test ./services/movie/internal/...
-
-# Ejecutar tests de integración (requiere MongoDB en docker-compose)
-docker compose -f platform/deploy/docker-compose/docker-compose.yml up -d mongo1 mongo2 mongo3
-go test -tags=integration ./...
-
-# Build de un servicio
-cd services/booking
-go build -o booking ./cmd/booking
-```
-
-### Build de Imágenes Docker
-
-```bash
-# ✅ Usando script optimizado (recomendado)
-SERVICE=booking VERSION=v1.0.0 platform/scripts/build-go-service.sh
-
-# Alternativa: Docker directo con Dockerfile genérico
-docker build -f platform/docker/go-service/Dockerfile \
-  --build-arg SERVICE_NAME=booking \
-  --build-arg VERSION=v1.0.0 \
-  -t crizstian/cinema/booking:v1.0.0 \
-  services/booking/
-
-# Usando Makefile (legacy)
-make build SERVICE=booking VERSION=v1.0.0
-```
-
-📖 **Ver documentación completa**:
-- Dockerfiles: [platform/docker/README.md](./platform/docker/README.md)
-- MongoDB Replica Set: [docs/MONGODB-VALIDATION.md](./docs/MONGODB-VALIDATION.md)
-- Análisis de Refactor: [docs/REFACTOR-ANALYSIS.md](./docs/REFACTOR-ANALYSIS.md)
-- DevContainer: [platform/docker/devcontainer/README.md](./platform/docker/devcontainer/README.md)
-
-### Deployment con Docker Compose
-
-```bash
-# Levantar todos los servicios
-cd platform/deploy/docker-compose
-docker compose up -d
-
-# Ver logs
-docker compose logs -f booking
-
-# Detener servicios
-docker compose down
-
-# Rebuild y restart
-docker compose up -d --build
-```
-
-### Deployment con Hashicorp Stack
-
-Para entorno simulado con Nomad, Consul y Vault:
-
-```bash
-cd platform/deploy/hashicorp
-vagrant up
-# Ver platform/deploy/hashicorp/readme.md para detalles
-```
-
-## 🔧 Variables de Entorno
-
-### booking service
-```env
-DB_USER=cristian
-DB_PASS=cristianPassword2017
-DB_SERVERS=10.7.0.3:27017,10.7.0.4:27017,10.7.0.5:27017
-DB_NAME=booking
-DB_REPLICA=rs1
-SERVICE_PORT=8000
-PAYMENT_URL=http://10.7.0.7:8000
-NOTIFICATION_URL=http://10.7.0.8:8000
-```
-
-### notification service
-```env
-SERVICE_PORT=8000
-EMAIL=your-email@gmail.com
-EMAIL_PASS=your-app-password
-```
-
-### movie / payment services
-```env
-DB_USER=cristian
-DB_PASS=cristianPassword2017
-DB_SERVERS=10.7.0.3:27017,10.7.0.4:27017,10.7.0.5:27017
-DB_NAME=movies  # o "payment"
-DB_REPLICA=rs1
-SERVICE_PORT=8000
-```
-
-## 🏗️ Arquitectura
-
-- **Framework Web**: Echo v3/v4
-- **Base de datos**: MongoDB (replica set de 3 nodos)
-- **Logging**: Logrus (structured logging)
-- **Tracing**: OpenTracing + Jaeger (opcional)
-- **Deployment**: Docker multi-stage builds
-- **Orquestación**: Docker Compose / Nomad
-
-## 📝 Convenciones del Monorepo
-
-### Estructura de Servicios
-
-Cada servicio sigue la estructura estándar de Go:
-
-```
-services/<service-name>/
-├── cmd/
-│   └── <service-name>/
-│       └── main.go        # Punto de entrada
-├── internal/              # Código privado del servicio
-│   ├── api/              # HTTP handlers
-│   ├── models/           # Estructuras de datos
-│   ├── db/               # Acceso a datos
-│   ├── routes/           # Definición de rutas
-│   └── server/           # Setup del servidor
-├── go.mod                # Módulo Go independiente
-├── Dockerfile
-└── README.md
-```
-
-### Agregar un Nuevo Servicio
-
-1. Crear estructura en `services/<new-service>/`:
-   ```bash
-   mkdir -p services/newservice/cmd/newservice
-   mkdir -p services/newservice/internal/{api,models,db,routes,server}
-   ```
-
-2. Crear `go.mod`:
-   ```bash
-   cd services/newservice
-   go mod init cinemas/services/newservice
-   ```
-
-3. Crear `main.go` en `cmd/newservice/`
-
-4. Añadir al workspace:
-   ```bash
-   # Editar go.work en la raíz
-   use (
-       ./services/booking
-       ./services/movie
-       ./services/payment
-       ./services/notification
-       ./services/newservice  # <- Añadir aquí
-   )
-   ```
-
-5. Crear Dockerfile siguiendo el patrón de otros servicios
-
-6. Sincronizar:
-   ```bash
-   go work sync
-   ```
-
-## 🧪 Testing
-
-### Tests Unitarios
-Los tests unitarios NO requieren MongoDB ni servicios externos:
-```bash
-# Ejecutar solo tests unitarios de un servicio
-go test ./services/booking/internal/service/...
-go test ./services/payment/internal/models/...
-
-# Todos los servicios
-go test ./services/*/internal/...
-```
-
-### Tests de Integración
-Los tests de integración están marcados con build tag `integration`:
-```bash
-# Primero levantar MongoDB
-cd platform/deploy/docker-compose
-docker compose up -d mongo1 mongo2 mongo3
-
-# Ejecutar tests de integración
-go test -tags=integration ./services/booking/internal/db/...
-go test -tags=integration ./services/movie/internal/db/...
-```
-
-### Cobertura
-```bash
-go test -cover ./...
-```
-
-## 🔒 Seguridad
-
-- **NO commitear** credenciales reales en docker-compose.yml
-- Usar variables de entorno o secrets management (Vault) en producción
-- El notification-service requiere contraseñas de aplicación (no contraseñas de cuenta)
-
-## 🚀 Mejoras Recientes
-
-- ✅ Refactor a estructura monorepo moderna (services / platform)
-- ✅ Convenciones Go estándar (cmd/ + internal/)
-- ✅ Dockerfiles centralizados y optimizados en platform/docker/
-- ✅ Dockerfile genérico para todos los servicios Go
-- ✅ DevContainer para desarrollo local en VS Code
-- ✅ Context timeouts en HTTP clients (previene bloqueos)
-- ✅ Service layer en booking-service (mejor arquitectura)
-- ✅ Logging estructurado (compatible con ELK/Datadog)
-- ✅ Tests unitarios separados de integración
-- ✅ Go 1.21 con workspace multi-módulo
-- ✅ MongoDB Replica Set validado y optimizado
-
-## 📚 Documentación
-
-### Docker
-- [Platform Docker - README](./platform/docker/README.md) - Índice de Dockerfiles
-- [Go Service Dockerfile](./platform/docker/go-service/README.md) - Dockerfile genérico
-- [DevContainer](./platform/docker/devcontainer/README.md) - Desarrollo local
-- [Análisis de Dockerfiles](./docs/DOCKERFILE-ANALYSIS.md)
-- [Mejoras de Dockerfiles](./docs/DOCKERFILE-IMPROVEMENTS.md)
-- [Centralización Docker](./docs/DOCKER-CENTRALIZATION.md)
-- [⚠️ Cleanup Checklist](./docs/CLEANUP-CHECKLIST.md) - Archivos pendientes de eliminación
-
-### Monorepo
-- [Análisis de Refactor](./docs/REFACTOR-ANALYSIS.md)
-- [MongoDB Replica Set](./docs/MONGODB-VALIDATION.md)
-
-## 🤝 Contribuir
-
-1. Sigue las convenciones de estructura documentadas arriba
-2. Ejecuta tests antes de commit: `go test ./...`
-3. Documenta cambios significativos en `docs/`
-4. Usa conventional commits para mensajes de commit
-
-## 📄 Licencia
-
-[Definir licencia del proyecto]
+<p align="center">
+  <a href="./docs/README.md">Documentation</a> &bull;
+  <a href="./docs/architecture/README.md">Architecture</a> &bull;
+  <a href="./docs/api/README.md">API Reference</a> &bull;
+  <a href="./docs/development/README.md">Development Guide</a>
+</p>
 
 ---
 
-**Versión**: 2.0 (Refactorizado 2026-01)
-**Arquitectura**: Monorepo moderno con Go Workspaces
-**Mantenedor**: [Nombre/Organización]
+## Overview
+
+This platform implements a complete cinema ticketing workflow using a distributed microservices architecture. Each service is independently deployable, follows domain-driven design principles, and communicates via both synchronous REST APIs and asynchronous NATS messaging.
+
+**Key Capabilities:**
+- Real-time seat availability with distributed locking
+- SAGA-based booking orchestration with automatic rollback
+- Stripe payment integration with idempotency guarantees
+- Event-driven notifications (email, SMS, push)
+- Contract testing with Pact for service compatibility
+
+---
+
+## Architecture
+
+```
+                                    ┌─────────────────────────────────────────────────────────┐
+                                    │                      CLIENTS                            │
+                                    │              Web App  /  Mobile  /  Kiosk               │
+                                    └─────────────────────────┬───────────────────────────────┘
+                                                              │
+                                    ┌─────────────────────────▼───────────────────────────────┐
+                                    │                    API GATEWAY                          │
+                                    │              Load Balancing / Auth / Rate Limit         │
+                                    └─────────────────────────┬───────────────────────────────┘
+                                                              │
+          ┌───────────────┬───────────────┬──────────────────┼────────────────┬───────────────┬───────────────┐
+          │               │               │                  │                │               │               │
+          ▼               ▼               ▼                  ▼                ▼               ▼               ▼
+    ┌──────────┐   ┌──────────┐   ┌──────────┐        ┌──────────┐    ┌──────────┐   ┌──────────┐   ┌──────────┐
+    │  USER    │   │  MOVIE   │   │  CINEMA  │        │ SHOWTIME │    │   SEAT   │   │ BOOKING  │   │ PAYMENT  │
+    │ :8004    │   │ :8000    │   │ :8085    │        │ :3003    │    │ :3004    │   │ :8082    │   │ :8001    │
+    │          │   │          │   │          │        │          │    │          │   │  (SAGA)  │   │          │
+    └────┬─────┘   └────┬─────┘   └────┬─────┘        └────┬─────┘    └────┬─────┘   └────┬─────┘   └────┬─────┘
+         │              │              │                   │               │              │              │
+         └──────────────┴──────────────┴───────────────────┴───────────────┴──────────────┴──────────────┘
+                                                           │
+                                    ┌──────────────────────▼──────────────────────┐
+                                    │                    NATS                     │
+                                    │           Event Bus / JetStream             │
+                                    └──────────────────────┬──────────────────────┘
+                                                           │
+                                    ┌──────────────────────▼──────────────────────┐
+                                    │              NOTIFICATION :8002             │
+                                    │           Email / SMS / Push                │
+                                    └─────────────────────────────────────────────┘
+```
+
+---
+
+## Services
+
+| Service | Port | Domain | Description |
+|:--------|:----:|:-------|:------------|
+| **user** | 8004 | Identity | Authentication, JWT tokens, user profiles |
+| **movie** | 8000 | Catalog | Movie metadata, search, recommendations |
+| **cinema** | 8085 | Catalog | Cinema locations, rooms, amenities |
+| **showtime** | 3003 | Schedule | Show schedules, pricing, availability windows |
+| **seat** | 3004 | Inventory | Seat maps, real-time holds, distributed locks |
+| **booking** | 8082 | Transaction | SAGA orchestrator, reservation lifecycle |
+| **payment** | 8001 | Financial | Stripe integration, refunds, receipts |
+| **notification** | 8002 | Communication | Multi-channel delivery, templates, tracking |
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Go 1.22+
+- Docker & Docker Compose
+- [Task](https://taskfile.dev) (recommended) or Make
+
+### Development Environment
+
+```bash
+# Clone repository
+git clone https://github.com/crizstian/cinema-microservices.git
+cd cinema-microservices
+
+# Option 1: DevContainer (recommended)
+# Open in VS Code → "Reopen in Container"
+
+# Option 2: Local setup
+go work sync
+
+# Start infrastructure (MongoDB + Redis + NATS)
+task infra:up
+
+# Run any service
+cd services/booking && go run ./cmd/booking
+```
+
+### Running Tests
+
+```bash
+# Unit tests (fast, no infrastructure)
+task test:unit:all
+
+# Integration tests (requires infra:up)
+task test:integration
+
+# Full E2E tests (starts everything)
+task test:e2e
+
+# CI pipeline (lint + unit + coverage)
+task test:ci
+```
+
+---
+
+## Technology Stack
+
+| Layer | Technology | Purpose |
+|:------|:-----------|:--------|
+| **Language** | Go 1.22 | Performance, concurrency, type safety |
+| **Framework** | Echo v4 | Lightweight HTTP routing, middleware |
+| **Database** | MongoDB 8.0 | Document store, replica set transactions |
+| **Cache** | Redis 7 | Session management, distributed locks |
+| **Messaging** | NATS JetStream | Event streaming, pub/sub |
+| **Payments** | Stripe | PCI-compliant payment processing |
+| **API Specs** | OpenAPI 3.0 | Contract-first design |
+| **Contracts** | Pact | Consumer-driven contract testing |
+| **CI/CD** | Harness | Test Intelligence, deployment pipelines |
+| **Containers** | Docker | Standardized builds, orchestration |
+
+---
+
+## Project Structure
+
+```
+cinema-microservices/
+├── services/                    # Microservices (Go modules)
+│   ├── booking/                 # SAGA orchestrator
+│   ├── movie/                   # Movie catalog
+│   ├── payment/                 # Payment processing
+│   ├── notification/            # Notification delivery
+│   ├── user/                    # User management
+│   ├── cinema/                  # Cinema catalog
+│   ├── showtime/                # Schedule management
+│   └── seat/                    # Seat inventory
+├── platform/                    # Infrastructure
+│   ├── docker/                  # Dockerfiles
+│   ├── deploy/                  # Docker Compose, K8s manifests
+│   └── scripts/                 # Build & test scripts
+├── tests/                       # Integration & E2E tests
+├── docs/                        # Documentation hub
+├── go.work                      # Go workspace configuration
+├── Taskfile.yml                 # Task automation
+└── VERSION                      # Semantic versioning
+```
+
+---
+
+## Task Automation
+
+All common operations are automated via [Taskfile](https://taskfile.dev):
+
+```bash
+task                    # List all available tasks
+
+# Build & Deploy
+task build SERVICE=booking      # Build single service image
+task build:all                  # Build all service images
+task push:all                   # Push to container registry
+
+# Testing Pyramid
+task test:unit:all              # Unit tests (fast, isolated)
+task test:integration           # Integration tests (with DB)
+task test:e2e                   # End-to-end tests (full system)
+task coverage                   # Generate HTML coverage report
+
+# Versioning
+task version                    # Show current version
+task version:bump-patch         # Increment patch (bug fixes)
+task version:bump-minor         # Increment minor (features)
+task release:patch              # Full release workflow
+
+# Development
+task dev:up                     # Start all services locally
+task dev:logs                   # Stream service logs
+task lint                       # Run Go vet + OpenAPI linting
+```
+
+---
+
+## Documentation
+
+| Section | Description |
+|:--------|:------------|
+| [Documentation Hub](./docs/README.md) | Start here — system overview and navigation |
+| [Architecture](./docs/architecture/README.md) | C4 diagrams, data flows, ADRs |
+| [Services](./docs/services/README.md) | Detailed service specifications |
+| [API Reference](./docs/api/README.md) | OpenAPI specs, error handling |
+| [Development](./docs/development/README.md) | Setup, testing, code style |
+| [Operations](./docs/operations/README.md) | CI/CD pipelines, deployment |
+| [Contracts](./docs/api/contracts.md) | Pact testing, consumer/provider |
+
+---
+
+## Contributing
+
+1. Review the [Development Guide](./docs/development/README.md)
+2. Create a feature branch from `main`
+3. Write tests following the testing pyramid
+4. Run `task test:ci` before submitting
+5. Open a Pull Request with a clear description
+
+---
+
+## Version
+
+**Current**: 0.1.0 | **License**: MIT
+
+<p align="center">
+  <sub>Built with precision for scalability and maintainability</sub>
+</p>

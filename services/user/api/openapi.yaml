@@ -1,0 +1,638 @@
+openapi: 3.0.3
+info:
+  title: User Service API
+  description: |
+    Cinema ticketing system - User authentication and profile microservice.
+
+    Handles user registration, authentication (JWT), and profile management.
+
+    **Authentication Flow:**
+    1. Register with POST /users/register
+    2. Login with POST /users/login to get JWT tokens
+    3. Use Bearer token in Authorization header for protected endpoints
+    4. Refresh token with POST /users/refresh when access_token expires
+    5. Logout with POST /users/logout to invalidate tokens
+
+    **Security:**
+    - Passwords are hashed with bcrypt (cost 10)
+    - JWT tokens expire in 15 minutes (access) / 7 days (refresh)
+    - Tokens stored in Redis for invalidation support
+  version: 1.0.0
+  contact:
+    name: Cinema Ticketing Team
+    email: team@cinema.local
+
+servers:
+  - url: http://localhost:8004
+    description: Local development server
+  - url: http://user-service:8004
+    description: Docker/Kubernetes internal
+
+tags:
+  - name: auth
+    description: Authentication operations
+  - name: profile
+    description: User profile operations
+  - name: health
+    description: Service health check
+
+paths:
+  /ping:
+    get:
+      tags:
+        - health
+      summary: Health check endpoint
+      operationId: ping
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: pong
+
+  /users/register:
+    post:
+      tags:
+        - auth
+      summary: Register a new user
+      description: Creates a new user account with the provided information
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistration'
+            example:
+              name: "John Doe"
+              email: "john.doe@example.com"
+              password: "SecureP@ss123"
+              phone: "+52 555 123 4567"
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                user:
+                  id: "usr_abc123xyz"
+                  name: "John Doe"
+                  email: "john.doe@example.com"
+                  phone: "+52 555 123 4567"
+                  membership_type: "normal"
+                  created_at: "2026-04-07T12:00:00Z"
+                msg: "User registered successfully"
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid email format"
+                type: "user"
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Email already registered"
+                type: "user"
+
+  /users/login:
+    post:
+      tags:
+        - auth
+      summary: Authenticate user
+      description: Validates credentials and returns JWT tokens
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLogin'
+            example:
+              email: "john.doe@example.com"
+              password: "SecureP@ss123"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                token_type: "Bearer"
+                expires_in: 900
+                user:
+                  id: "usr_abc123xyz"
+                  name: "John Doe"
+                  email: "john.doe@example.com"
+                  phone: "+52 555 123 4567"
+                  membership_type: "loyal"
+                  created_at: "2026-04-07T12:00:00Z"
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid email or password"
+                type: "user"
+
+  /users/refresh:
+    post:
+      tags:
+        - auth
+      summary: Refresh access token
+      description: Uses refresh token to get a new access token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            example:
+              refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              example:
+                access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                token_type: "Bearer"
+                expires_in: 900
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/logout:
+    post:
+      tags:
+        - auth
+      summary: Logout user
+      description: Invalidates the current access and refresh tokens
+      operationId: logoutUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                msg: "Logged out successfully"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me:
+    get:
+      tags:
+        - profile
+      summary: Get current user profile
+      description: Returns the profile of the authenticated user
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                user:
+                  id: "usr_abc123xyz"
+                  name: "John Doe"
+                  email: "john.doe@example.com"
+                  phone: "+52 555 123 4567"
+                  membership_type: "loyal"
+                  created_at: "2026-04-07T12:00:00Z"
+                msg: "User profile"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - profile
+      summary: Update current user profile
+      description: Updates the profile of the authenticated user
+      operationId: updateCurrentUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+            example:
+              name: "John D. Doe"
+              phone: "+52 555 987 6543"
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                user:
+                  id: "usr_abc123xyz"
+                  name: "John D. Doe"
+                  email: "john.doe@example.com"
+                  phone: "+52 555 987 6543"
+                  membership_type: "loyal"
+                  created_at: "2026-04-07T12:00:00Z"
+                msg: "Profile updated successfully"
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/bookings:
+    get:
+      tags:
+        - profile
+      summary: Get user's booking history
+      description: Returns list of bookings for the authenticated user
+      operationId: getUserBookings
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of bookings to return
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of bookings to skip
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Bookings retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingHistoryResponse'
+              example:
+                bookings:
+                  - order_id: "ch_3PxyzABC123"
+                    movie_title: "The Shawshank Redemption"
+                    cinema: "Cinepolis Reforma"
+                    schedule: "2026-04-10 19:30"
+                    seats: ["A1", "A2"]
+                    total_amount: 350
+                    created_at: "2026-04-07T10:00:00Z"
+                total: 1
+                limit: 10
+                offset: 0
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from /users/login
+
+  schemas:
+    UserRegistration:
+      type: object
+      description: User registration request
+      required:
+        - name
+        - email
+        - password
+      properties:
+        name:
+          type: string
+          description: User's full name
+          minLength: 2
+          maxLength: 100
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          description: User's email address (must be unique)
+          example: "john.doe@example.com"
+        password:
+          type: string
+          format: password
+          description: Password (min 8 chars, must include uppercase, lowercase, number)
+          minLength: 8
+          maxLength: 72
+          example: "SecureP@ss123"
+          x-sensitive: true
+        phone:
+          type: string
+          description: Phone number (optional)
+          example: "+52 555 123 4567"
+
+    UserLogin:
+      type: object
+      description: User login request
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: Registered email address
+          example: "john.doe@example.com"
+        password:
+          type: string
+          format: password
+          description: User's password
+          example: "SecureP@ss123"
+          x-sensitive: true
+
+    UserProfile:
+      type: object
+      description: User profile information
+      required:
+        - id
+        - name
+        - email
+        - membership_type
+        - created_at
+      properties:
+        id:
+          type: string
+          description: Unique user identifier
+          example: "usr_abc123xyz"
+        name:
+          type: string
+          description: User's full name
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "john.doe@example.com"
+        phone:
+          type: string
+          description: Phone number
+          example: "+52 555 123 4567"
+        membership_type:
+          type: string
+          description: Membership level
+          enum:
+            - normal
+            - loyal
+            - vip
+          example: "loyal"
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+          example: "2026-04-07T12:00:00Z"
+
+    UserUpdate:
+      type: object
+      description: User profile update request
+      properties:
+        name:
+          type: string
+          description: New name
+          minLength: 2
+          maxLength: 100
+          example: "John D. Doe"
+        phone:
+          type: string
+          description: New phone number
+          example: "+52 555 987 6543"
+        password:
+          type: string
+          format: password
+          description: New password (optional)
+          minLength: 8
+          maxLength: 72
+          x-sensitive: true
+
+    AuthToken:
+      type: object
+      description: JWT token pair
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+      properties:
+        access_token:
+          type: string
+          description: JWT access token (short-lived)
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          description: JWT refresh token (long-lived)
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          description: Token type (always "Bearer")
+          example: "Bearer"
+        expires_in:
+          type: integer
+          description: Access token expiration time in seconds
+          example: 900
+
+    RefreshRequest:
+      type: object
+      description: Token refresh request
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          description: Valid refresh token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    TokenResponse:
+      type: object
+      description: New access token response
+      required:
+        - access_token
+        - token_type
+        - expires_in
+      properties:
+        access_token:
+          type: string
+          description: New JWT access token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          example: "Bearer"
+        expires_in:
+          type: integer
+          example: 900
+
+    AuthResponse:
+      type: object
+      description: Login response with tokens and user info
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+        - user
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          example: "Bearer"
+        expires_in:
+          type: integer
+          example: 900
+        user:
+          $ref: '#/components/schemas/UserProfile'
+
+    UserResponse:
+      type: object
+      description: User profile response
+      required:
+        - user
+        - msg
+      properties:
+        user:
+          $ref: '#/components/schemas/UserProfile'
+        msg:
+          type: string
+          example: "User profile"
+
+    BookingSummary:
+      type: object
+      description: Summary of a booking
+      properties:
+        order_id:
+          type: string
+          example: "ch_3PxyzABC123"
+        movie_title:
+          type: string
+          example: "The Shawshank Redemption"
+        cinema:
+          type: string
+          example: "Cinepolis Reforma"
+        schedule:
+          type: string
+          example: "2026-04-10 19:30"
+        seats:
+          type: array
+          items:
+            type: string
+          example: ["A1", "A2"]
+        total_amount:
+          type: integer
+          example: 350
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-07T10:00:00Z"
+
+    BookingHistoryResponse:
+      type: object
+      description: Paginated booking history
+      required:
+        - bookings
+        - total
+        - limit
+        - offset
+      properties:
+        bookings:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingSummary'
+        total:
+          type: integer
+          description: Total number of bookings
+          example: 15
+        limit:
+          type: integer
+          example: 10
+        offset:
+          type: integer
+          example: 0
+
+    MessageResponse:
+      type: object
+      description: Simple message response
+      required:
+        - msg
+      properties:
+        msg:
+          type: string
+          example: "Operation successful"
+
+    ErrorResponse:
+      type: object
+      description: Error response
+      required:
+        - error
+        - type
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Invalid credentials"
+        type:
+          type: string
+          description: Error type
+          enum:
+            - internal
+            - external
+            - user
+          example: "user"

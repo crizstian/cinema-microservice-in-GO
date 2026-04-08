@@ -1,0 +1,579 @@
+openapi: 3.0.3
+info:
+  title: Cinema Catalog Service API
+  description: |
+    API para gestionar el catalogo de cines y salas. Permite consultar
+    cines disponibles por ciudad, ver detalles de cada cine y sus salas.
+  version: 1.0.0
+  contact:
+    name: Cinema Engineering Team
+    email: engineering@cinema.local
+
+servers:
+  - url: http://localhost:8085
+    description: Local development server
+  - url: http://cinema-service:8085
+    description: Kubernetes internal service
+
+tags:
+  - name: Cinemas
+    description: Operaciones sobre cines
+  - name: Rooms
+    description: Operaciones sobre salas de cine
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /cinemas:
+    get:
+      tags:
+        - Cinemas
+      summary: List all cinemas
+      description: Obtiene la lista de cines, con filtro opcional por ciudad.
+      operationId: listCinemas
+      parameters:
+        - name: city
+          in: query
+          description: Filtrar cines por ciudad
+          required: false
+          schema:
+            type: string
+          example: Ciudad de Mexico
+        - name: limit
+          in: query
+          description: Numero maximo de resultados
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Offset para paginacion
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Lista de cines
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CinemaListResponse'
+              example:
+                cinemas:
+                  - id: cin_001
+                    name: Cinepolis Perisur
+                    address: Periferico Sur 4690
+                    city: Ciudad de Mexico
+                    country: Mexico
+                    location:
+                      lat: 19.3032
+                      lng: -99.1906
+                    amenities:
+                      - parking
+                      - food_court
+                      - imax
+                      - 3d
+                total: 1
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Cinemas
+      summary: Create a new cinema
+      description: Crea un nuevo cine en el catalogo. Requiere rol de administrador.
+      operationId: createCinema
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCinemaRequest'
+            example:
+              name: Cinepolis Perisur
+              address: Periferico Sur 4690
+              city: Ciudad de Mexico
+              country: Mexico
+              location:
+                lat: 19.3032
+                lng: -99.1906
+              amenities:
+                - parking
+                - food_court
+                - imax
+                - 3d
+      responses:
+        '201':
+          description: Cinema created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cinema'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized - missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cinemas/{id}:
+    get:
+      tags:
+        - Cinemas
+      summary: Get cinema details
+      description: Obtiene los detalles de un cine especifico incluyendo sus salas.
+      operationId: getCinema
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Cinema unique identifier
+          schema:
+            type: string
+          example: cin_001
+      responses:
+        '200':
+          description: Cinema details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CinemaWithRooms'
+              example:
+                id: cin_001
+                name: Cinepolis Perisur
+                address: Periferico Sur 4690
+                city: Ciudad de Mexico
+                country: Mexico
+                location:
+                  lat: 19.3032
+                  lng: -99.1906
+                amenities:
+                  - parking
+                  - food_court
+                  - imax
+                rooms:
+                  - id: room_001
+                    cinema_id: cin_001
+                    name: Sala 1
+                    room_number: 1
+                    capacity: 150
+                    type: standard
+                  - id: room_002
+                    cinema_id: cin_001
+                    name: Sala IMAX
+                    room_number: 2
+                    capacity: 300
+                    type: imax
+        '404':
+          description: Cinema not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cinemas/{id}/rooms:
+    get:
+      tags:
+        - Rooms
+      summary: List rooms for a cinema
+      description: Obtiene todas las salas de un cine especifico.
+      operationId: listRooms
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Cinema unique identifier
+          schema:
+            type: string
+          example: cin_001
+        - name: type
+          in: query
+          description: Filtrar por tipo de sala
+          required: false
+          schema:
+            $ref: '#/components/schemas/RoomType'
+      responses:
+        '200':
+          description: List of rooms
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomListResponse'
+              example:
+                rooms:
+                  - id: room_001
+                    cinema_id: cin_001
+                    name: Sala 1
+                    room_number: 1
+                    capacity: 150
+                    type: standard
+                  - id: room_002
+                    cinema_id: cin_001
+                    name: Sala IMAX
+                    room_number: 2
+                    capacity: 300
+                    type: imax
+                total: 2
+        '404':
+          description: Cinema not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Rooms
+      summary: Create a new room
+      description: Crea una nueva sala en un cine. Requiere rol de administrador.
+      operationId: createRoom
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Cinema unique identifier
+          schema:
+            type: string
+          example: cin_001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+            example:
+              name: Sala VIP 1
+              room_number: 10
+              capacity: 50
+              type: vip
+              seat_layout_id: layout_vip_50
+      responses:
+        '201':
+          description: Room created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Cinema not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ping:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Verifica que el servicio esta activo.
+      operationId: ping
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: pong
+
+components:
+  schemas:
+    Location:
+      type: object
+      description: Coordenadas geograficas del cine
+      required:
+        - lat
+        - lng
+      properties:
+        lat:
+          type: number
+          format: double
+          description: Latitud
+          minimum: -90
+          maximum: 90
+          example: 19.3032
+        lng:
+          type: number
+          format: double
+          description: Longitud
+          minimum: -180
+          maximum: 180
+          example: -99.1906
+
+    Amenity:
+      type: string
+      description: Amenidad disponible en el cine
+      enum:
+        - parking
+        - food_court
+        - 3d
+        - imax
+        - 4dx
+        - vip_lounge
+        - wheelchair_access
+        - dolby_atmos
+
+    RoomType:
+      type: string
+      description: Tipo de sala
+      enum:
+        - standard
+        - vip
+        - imax
+        - 4dx
+
+    Cinema:
+      type: object
+      description: Informacion de un cine
+      required:
+        - id
+        - name
+        - address
+        - city
+        - country
+      properties:
+        id:
+          type: string
+          description: Identificador unico del cine
+          example: cin_001
+        name:
+          type: string
+          description: Nombre del cine
+          example: Cinepolis Perisur
+        address:
+          type: string
+          description: Direccion completa
+          example: Periferico Sur 4690
+        city:
+          type: string
+          description: Ciudad
+          example: Ciudad de Mexico
+        country:
+          type: string
+          description: Pais
+          example: Mexico
+        location:
+          $ref: '#/components/schemas/Location'
+        amenities:
+          type: array
+          description: Lista de amenidades disponibles
+          items:
+            $ref: '#/components/schemas/Amenity'
+          example:
+            - parking
+            - food_court
+            - imax
+
+    CinemaWithRooms:
+      allOf:
+        - $ref: '#/components/schemas/Cinema'
+        - type: object
+          properties:
+            rooms:
+              type: array
+              description: Salas del cine
+              items:
+                $ref: '#/components/schemas/Room'
+
+    CreateCinemaRequest:
+      type: object
+      description: Request para crear un nuevo cine
+      required:
+        - name
+        - address
+        - city
+        - country
+      properties:
+        name:
+          type: string
+          description: Nombre del cine
+          minLength: 1
+          maxLength: 200
+          example: Cinepolis Perisur
+        address:
+          type: string
+          description: Direccion completa
+          minLength: 1
+          maxLength: 500
+          example: Periferico Sur 4690
+        city:
+          type: string
+          description: Ciudad
+          minLength: 1
+          maxLength: 100
+          example: Ciudad de Mexico
+        country:
+          type: string
+          description: Pais
+          minLength: 1
+          maxLength: 100
+          example: Mexico
+        location:
+          $ref: '#/components/schemas/Location'
+        amenities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Amenity'
+
+    Room:
+      type: object
+      description: Informacion de una sala de cine
+      required:
+        - id
+        - cinema_id
+        - name
+        - room_number
+        - capacity
+        - type
+      properties:
+        id:
+          type: string
+          description: Identificador unico de la sala
+          example: room_001
+        cinema_id:
+          type: string
+          description: ID del cine al que pertenece
+          example: cin_001
+        name:
+          type: string
+          description: Nombre de la sala
+          example: Sala IMAX
+        room_number:
+          type: integer
+          description: Numero de sala
+          minimum: 1
+          example: 1
+        capacity:
+          type: integer
+          description: Capacidad de asientos
+          minimum: 1
+          example: 150
+        type:
+          $ref: '#/components/schemas/RoomType'
+        seat_layout_id:
+          type: string
+          description: Referencia al layout de asientos en seat-service
+          example: layout_imax_300
+
+    CreateRoomRequest:
+      type: object
+      description: Request para crear una nueva sala
+      required:
+        - name
+        - room_number
+        - capacity
+        - type
+      properties:
+        name:
+          type: string
+          description: Nombre de la sala
+          minLength: 1
+          maxLength: 100
+          example: Sala VIP 1
+        room_number:
+          type: integer
+          description: Numero de sala
+          minimum: 1
+          example: 10
+        capacity:
+          type: integer
+          description: Capacidad de asientos
+          minimum: 1
+          maximum: 1000
+          example: 50
+        type:
+          $ref: '#/components/schemas/RoomType'
+        seat_layout_id:
+          type: string
+          description: Referencia al layout de asientos en seat-service
+          example: layout_vip_50
+
+    CinemaListResponse:
+      type: object
+      properties:
+        cinemas:
+          type: array
+          items:
+            $ref: '#/components/schemas/Cinema'
+        total:
+          type: integer
+          description: Total de cines encontrados
+          example: 10
+
+    RoomListResponse:
+      type: object
+      properties:
+        rooms:
+          type: array
+          items:
+            $ref: '#/components/schemas/Room'
+        total:
+          type: integer
+          description: Total de salas
+          example: 5
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Codigo de error
+          example: not_found
+        message:
+          type: string
+          description: Descripcion del error
+          example: Cinema not found
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token para endpoints administrativos

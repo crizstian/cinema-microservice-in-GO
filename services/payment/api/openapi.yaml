@@ -1,0 +1,471 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  description: |
+    API de procesamiento de pagos para el sistema Cinema.
+
+    Este servicio maneja pagos a través de Stripe y almacena los registros en MongoDB.
+
+    **Consideraciones de Seguridad:**
+    - En produccion, los datos sensibles de tarjeta (number, cvc) deben ser tokenizados usando Stripe Elements o similar.
+    - Nunca almacene numeros de tarjeta completos en logs o bases de datos propias.
+    - Este servicio debe ejecutarse sobre HTTPS en produccion.
+  version: 1.0.0
+  contact:
+    name: Cinema DevOps Team
+    email: devops@cinema.local
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3001/payment
+    description: Development server
+  - url: https://api.cinema.local/payment
+    description: Production server
+
+tags:
+  - name: payment
+    description: Operaciones de procesamiento de pagos
+  - name: health
+    description: Health checks
+
+paths:
+  /makePurchase:
+    post:
+      tags:
+        - payment
+      summary: Procesar un pago
+      description: |
+        Procesa un cargo a tarjeta de credito/debito usando Stripe y almacena el resultado.
+
+        **Nota de Seguridad:** En produccion, use tokenizacion de tarjetas (Stripe Elements)
+        en lugar de enviar datos de tarjeta directamente.
+      operationId: registerPurchase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+            examples:
+              validPayment:
+                summary: Pago valido
+                value:
+                  userName: "john_doe"
+                  currency: "usd"
+                  number: "4242424242424242"
+                  cvc: "123"
+                  exp_month: "12"
+                  exp_year: "2025"
+                  amount: 50
+                  description: "Movie tickets - Avengers Endgame x2"
+      responses:
+        '201':
+          description: Pago procesado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+              example:
+                user: "john_doe"
+                amount: 50
+                charge:
+                  id: "ch_3ABC123xyz"
+                  amount: 5000
+                  currency: "usd"
+                  status: "succeeded"
+                  description: "Movie tickets - Avengers Endgame x2"
+        '400':
+          description: Datos de pago invalidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidAmount:
+                  summary: Monto invalido
+                  value:
+                    message: "Invalid amount, must be greater than 0, verify your data.: amount must be > 0"
+                invalidData:
+                  summary: Datos faltantes
+                  value:
+                    message: "Could not get Payment data, verify your data.: missing required field"
+        '500':
+          description: Error externo (Stripe o base de datos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                stripeError:
+                  summary: Error de Stripe
+                  value:
+                    message: "Stripe Error Something went wrong, please contact you're administrator.: card_declined"
+                dbError:
+                  summary: Error de base de datos
+                  value:
+                    message: "Could not insert payment into DB Something went wrong, please contact you're administrator.: connection timeout"
+
+  /{id}:
+    get:
+      tags:
+        - payment
+      summary: Obtener pago por ID
+      description: Recupera los detalles de un pago procesado usando el ID de cargo de Stripe.
+      operationId: getPurchaseById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID del cargo de Stripe (ej. ch_3ABC123xyz)
+          schema:
+            type: string
+            pattern: '^ch_[a-zA-Z0-9]+$'
+          example: "ch_3ABC123xyz"
+      responses:
+        '200':
+          description: Detalles del pago encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentDetailsResponse'
+              example:
+                payment:
+                  id: "ch_3ABC123xyz"
+                  amount: 5000
+                  currency: "usd"
+                  status: "succeeded"
+                  description: "Movie tickets - Avengers Endgame x2"
+                  created: 1699876543
+                msg: "payment details"
+        '500':
+          description: Pago no encontrado o error de base de datos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  summary: Pago no encontrado
+                  value:
+                    message: "Payment not found Something went wrong, please contact you're administrator.: mongo: no documents in result"
+                dbError:
+                  summary: Error de consulta
+                  value:
+                    message: "Failed to GetPurchaseByID Something went wrong, please contact you're administrator.: connection refused"
+
+  /{id}/refund:
+    post:
+      tags:
+        - payment
+      summary: Procesar reembolso
+      description: |
+        Procesa un reembolso total o parcial de un cargo existente usando Stripe Refunds API.
+
+        - Si no se especifica `amount`, se reembolsa el monto total del cargo.
+        - Si se especifica `amount`, se realiza un reembolso parcial.
+        - Un cargo puede tener multiples reembolsos parciales hasta alcanzar el monto total.
+      operationId: refundPayment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID del cargo de Stripe a reembolsar (ej. ch_3ABC123xyz)
+          schema:
+            type: string
+            pattern: '^ch_[a-zA-Z0-9]+$'
+          example: "ch_3ABC123xyz"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequest'
+            examples:
+              fullRefund:
+                summary: Reembolso completo
+                value:
+                  reason: "requested_by_customer"
+              partialRefund:
+                summary: Reembolso parcial
+                value:
+                  reason: "duplicate"
+                  amount: 2500
+      responses:
+        '200':
+          description: Reembolso procesado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundResponse'
+              example:
+                refund_id: "re_3XYZ789abc"
+                status: "succeeded"
+                amount_refunded: 5000
+                charge_id: "ch_3ABC123xyz"
+                reason: "customer_request"
+                created_at: "2024-12-20T15:30:00Z"
+        '400':
+          description: Datos de reembolso invalidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidAmount:
+                  summary: Monto excede el disponible
+                  value:
+                    message: "Refund amount exceeds available balance"
+                invalidReason:
+                  summary: Razon invalida
+                  value:
+                    message: "Invalid refund reason"
+        '404':
+          description: Cargo no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: "Charge not found"
+        '500':
+          description: Error de Stripe o base de datos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: "Stripe Error: refund failed"
+
+  /ping:
+    get:
+      tags:
+        - health
+      summary: Health check
+      description: Verifica que el servicio esta respondiendo.
+      operationId: ping
+      responses:
+        '200':
+          description: Servicio saludable
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "pong"
+
+components:
+  schemas:
+    PaymentRequest:
+      type: object
+      description: Datos requeridos para procesar un pago
+      required:
+        - userName
+        - currency
+        - number
+        - cvc
+        - exp_month
+        - exp_year
+        - amount
+        - description
+      properties:
+        userName:
+          type: string
+          description: Nombre del usuario que realiza el pago
+          example: "john_doe"
+          minLength: 1
+        currency:
+          type: string
+          description: Codigo ISO 4217 de la moneda (3 caracteres)
+          example: "usd"
+          pattern: '^[a-z]{3}$'
+          minLength: 3
+          maxLength: 3
+        number:
+          type: string
+          description: |
+            Numero de tarjeta de credito/debito.
+            **ADVERTENCIA:** En produccion, use tokenizacion en lugar de este campo.
+          example: "4242424242424242"
+          pattern: '^\d{13,19}$'
+          x-sensitive: true
+        cvc:
+          type: string
+          description: |
+            Codigo de verificacion de la tarjeta (3-4 digitos).
+            **ADVERTENCIA:** Nunca almacene este valor.
+          example: "123"
+          pattern: '^\d{3,4}$'
+          x-sensitive: true
+        exp_month:
+          type: string
+          description: Mes de expiracion (01-12)
+          example: "12"
+          pattern: '^(0[1-9]|1[0-2])$'
+        exp_year:
+          type: string
+          description: Anio de expiracion (4 digitos)
+          example: "2025"
+          pattern: '^\d{4}$'
+        amount:
+          type: integer
+          format: int64
+          description: Monto a cobrar en unidades de la moneda (no centavos). Debe ser mayor a 0.
+          example: 50
+          minimum: 1
+        description:
+          type: string
+          description: Descripcion del cargo que aparecera en el estado de cuenta
+          example: "Movie tickets - Avengers Endgame x2"
+          minLength: 1
+          maxLength: 500
+
+    PaymentResponse:
+      type: object
+      description: Respuesta exitosa de procesamiento de pago
+      properties:
+        user:
+          type: string
+          description: Nombre del usuario que realizo el pago
+          example: "john_doe"
+        amount:
+          type: integer
+          format: int64
+          description: Monto cobrado en unidades de moneda
+          example: 50
+        charge:
+          $ref: '#/components/schemas/StripeCharge'
+
+    PaymentDetailsResponse:
+      type: object
+      description: Respuesta con detalles de un pago
+      properties:
+        payment:
+          $ref: '#/components/schemas/StripeCharge'
+        msg:
+          type: string
+          description: Mensaje descriptivo
+          example: "payment details"
+
+    StripeCharge:
+      type: object
+      description: Objeto de cargo de Stripe (campos principales)
+      properties:
+        id:
+          type: string
+          description: ID unico del cargo en Stripe
+          example: "ch_3ABC123xyz"
+          pattern: '^ch_[a-zA-Z0-9]+$'
+        amount:
+          type: integer
+          format: int64
+          description: Monto cobrado en centavos
+          example: 5000
+        currency:
+          type: string
+          description: Codigo de moneda ISO 4217
+          example: "usd"
+        status:
+          type: string
+          description: Estado del cargo
+          enum:
+            - pending
+            - succeeded
+            - failed
+          example: "succeeded"
+        description:
+          type: string
+          description: Descripcion del cargo
+          example: "Movie tickets - Avengers Endgame x2"
+        created:
+          type: integer
+          format: int64
+          description: Timestamp Unix de creacion
+          example: 1699876543
+
+    RefundRequest:
+      type: object
+      description: Datos para solicitar un reembolso
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          description: |
+            Razon del reembolso. Valores permitidos por Stripe:
+            - duplicate: Cargo duplicado
+            - fraudulent: Cargo fraudulento
+            - requested_by_customer: Solicitud del cliente
+          enum:
+            - duplicate
+            - fraudulent
+            - requested_by_customer
+          example: "requested_by_customer"
+        amount:
+          type: integer
+          format: int64
+          description: |
+            Monto a reembolsar en centavos (opcional).
+            Si no se especifica, se reembolsa el monto total disponible.
+          example: 2500
+          minimum: 1
+
+    RefundResponse:
+      type: object
+      description: Respuesta de reembolso procesado
+      properties:
+        refund_id:
+          type: string
+          description: ID unico del reembolso en Stripe
+          example: "re_3XYZ789abc"
+          pattern: '^re_[a-zA-Z0-9]+$'
+        status:
+          type: string
+          description: Estado del reembolso
+          enum:
+            - pending
+            - succeeded
+            - failed
+            - canceled
+          example: "succeeded"
+        amount_refunded:
+          type: integer
+          format: int64
+          description: Monto reembolsado en centavos
+          example: 5000
+        charge_id:
+          type: string
+          description: ID del cargo original
+          example: "ch_3ABC123xyz"
+        reason:
+          type: string
+          description: Razon del reembolso
+          example: "requested_by_customer"
+        created_at:
+          type: string
+          format: date-time
+          description: Fecha de creacion del reembolso
+          example: "2024-12-20T15:30:00Z"
+
+    Error:
+      type: object
+      description: Respuesta de error estandar de Echo
+      properties:
+        message:
+          type: string
+          description: Mensaje de error descriptivo
+          example: "Error description here"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Autenticacion JWT (pendiente de implementacion).
+        En produccion, todos los endpoints deben requerir autenticacion.
+
+security: []
+# Nota: Actualmente el servicio no requiere autenticacion.
+# En produccion, descomentar la siguiente linea:
+# - bearerAuth: []

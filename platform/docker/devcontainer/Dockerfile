@@ -18,7 +18,8 @@ RUN apk upgrade --no-cache && \
     git build-base findutils make \
     bat exa coreutils wget curl bash \
     binutils jq sudo g++ py3-pip yq \
-    nodejs npm shadow docker-cli ca-certificates
+    github-cli \
+    nodejs npm shadow docker-cli docker-cli-compose ca-certificates
 
 # ---------- Usuario no root ----------
 # Crear usuario
@@ -87,6 +88,10 @@ RUN gcloud components install gke-gcloud-auth-plugin --quiet || true
 
 # ---------- Claude Code (CLI vía npm) ----------
 RUN npm install -g @anthropic-ai/claude-code
+RUN npm install -g harness-mcp-v2
+
+# Dentro del DevContainer
+RUN git clone --depth=1 https://github.com/harness/harness-skills.git .harness-skills
 
 # ---------- Workspace ----------
 RUN mkdir -p /workspace && chown -R devuser:devuser /workspace

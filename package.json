@@ -1,0 +1,23 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "description": "Monorepo de microservicios para gestión de cines, construido con Go 1.21 y arquitectura de servicios distribuidos.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://git.harness.io/6_vVHzo9Qeu9fXvj-AcbCQ/default/Platform_Demo/cinema-microservice-in-GO.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@stoplight/spectral-cli": "^6.15.0"
+  }
+}

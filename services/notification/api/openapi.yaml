@@ -1,0 +1,267 @@
+openapi: 3.0.3
+info:
+  title: Notification Service API
+  description: |
+    Servicio de notificaciones para el sistema de cine.
+    Permite enviar emails con información de tickets de compra.
+
+    **Nota:** El endpoint sendSMS es actualmente un stub y no tiene implementación real.
+  version: 2.0.0
+  contact:
+    name: Cinema Microservices Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3002
+    description: Local development server
+  - url: http://notification-service:3002
+    description: Kubernetes internal service
+
+tags:
+  - name: notification
+    description: Operaciones de notificación (email, SMS)
+  - name: health
+    description: Health check endpoints
+
+paths:
+  /notification/sendEmail:
+    post:
+      tags:
+        - notification
+      summary: Enviar email de confirmacion de compra
+      description: |
+        Envia un email HTML al usuario con los detalles del ticket de cine comprado.
+        Incluye informacion de la pelicula, sala, asientos, total y recibo de pago.
+      operationId: sendEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+            example:
+              booking:
+                userType: member
+                city: Mexico City
+                cinema: Cinepolis Reforma
+                schedule: "2024-12-20T19:30:00Z"
+                movie:
+                  title: Dune Part Two
+                  format: IMAX
+                cinemaRoom: 5
+                seats:
+                  - A1
+                  - A2
+                totalAmount: 450
+              orderId: "ord_12345678"
+              description: "2 boletos IMAX - Dune Part Two"
+              receipt_url: "https://pay.stripe.com/receipts/abc123"
+              userName: Juan Perez
+              email: juan.perez@example.com
+      responses:
+        '201':
+          description: Email enviado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                msg: "Mail sent successfully to juan.perez@example.com"
+        '400':
+          description: Error en los datos de entrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                type: User
+                message: Could not get Notification data
+        '500':
+          description: Error al enviar el email (SMTP failure)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                type: External
+                message: An error occured sending an email
+
+  /notification/sendSMS:
+    post:
+      tags:
+        - notification
+      summary: Enviar SMS de confirmacion (STUB)
+      description: |
+        **STUB - NO IMPLEMENTADO**
+
+        Este endpoint es un placeholder para futuras implementaciones de SMS.
+        Actualmente solo retorna un mensaje de exito sin realizar ninguna accion real.
+      operationId: sendSMS
+      deprecated: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Payload no procesado actualmente (stub)
+      responses:
+        '200':
+          description: Respuesta stub exitosa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                msg: "SMS Sent"
+      x-stub: true
+      x-implementation-status: not-implemented
+
+  /ping:
+    get:
+      tags:
+        - health
+      summary: Health check endpoint
+      description: Verifica que el servicio esta funcionando correctamente.
+      operationId: ping
+      responses:
+        '200':
+          description: Servicio saludable
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "pong .../notification v2/ ...response"
+
+components:
+  schemas:
+    Movie:
+      type: object
+      description: Informacion de la pelicula
+      required:
+        - title
+        - format
+      properties:
+        title:
+          type: string
+          description: Titulo de la pelicula
+          example: Dune Part Two
+        format:
+          type: string
+          description: Formato de proyeccion (2D, 3D, IMAX, etc.)
+          example: IMAX
+
+    Booking:
+      type: object
+      description: Detalles de la reservacion
+      required:
+        - userType
+        - city
+        - cinema
+        - schedule
+        - movie
+        - cinemaRoom
+        - seats
+        - totalAmount
+      properties:
+        userType:
+          type: string
+          description: Tipo de usuario (member, guest)
+          enum:
+            - member
+            - guest
+          example: member
+        city:
+          type: string
+          description: Ciudad del cine
+          example: Mexico City
+        cinema:
+          type: string
+          description: Nombre del cine
+          example: Cinepolis Reforma
+        schedule:
+          type: string
+          format: date-time
+          description: Fecha y hora de la funcion
+          example: "2024-12-20T19:30:00Z"
+        movie:
+          $ref: '#/components/schemas/Movie'
+        cinemaRoom:
+          type: integer
+          description: Numero de sala
+          minimum: 1
+          example: 5
+        seats:
+          type: array
+          description: Lista de asientos reservados
+          items:
+            type: string
+          minItems: 1
+          example:
+            - A1
+            - A2
+        totalAmount:
+          type: integer
+          description: Monto total en centavos o unidad monetaria local
+          minimum: 0
+          example: 450
+
+    Ticket:
+      type: object
+      description: Ticket completo con datos de booking y usuario
+      required:
+        - booking
+        - orderId
+        - email
+      properties:
+        booking:
+          $ref: '#/components/schemas/Booking'
+        orderId:
+          type: string
+          description: ID unico del pedido
+          example: ord_12345678
+        description:
+          type: string
+          description: Descripcion del pedido
+          example: "2 boletos IMAX - Dune Part Two"
+        receipt_url:
+          type: string
+          format: uri
+          description: URL del recibo de pago (Stripe)
+          example: "https://pay.stripe.com/receipts/abc123"
+        userName:
+          type: string
+          description: Nombre del usuario
+          example: Juan Perez
+        email:
+          type: string
+          format: email
+          description: Email del usuario para enviar la confirmacion
+          example: juan.perez@example.com
+
+    SuccessResponse:
+      type: object
+      description: Respuesta exitosa generica
+      properties:
+        msg:
+          type: string
+          description: Mensaje de exito
+          example: "Mail sent successfully to user@example.com"
+
+    ErrorResponse:
+      type: object
+      description: Respuesta de error
+      properties:
+        type:
+          type: string
+          description: Tipo de error (User, External, Internal)
+          enum:
+            - User
+            - External
+            - Internal
+          example: User
+        message:
+          type: string
+          description: Descripcion del error
+          example: Could not get Notification data

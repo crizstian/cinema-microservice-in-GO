@@ -8,6 +8,8 @@ import (
 
 // MoviesAPI ...
 func MoviesAPI(app *echo.Group, repo api.Repository) {
+	// GET /movies - returns all movies (E2E test expects this)
+	app.GET("", repo.GetAllMovies)
 	app.GET("/all", repo.GetAllMovies)
 	app.GET("/premieres", repo.GetMoviePremiers)
 	app.GET("/:id", repo.GetMovieByID)

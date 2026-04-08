@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "harness": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "harness-mcp-v2"],
+      "env": {
+        "HARNESS_API_KEY": "${HARNESS_API_KEY}",
+        "HARNESS_DEFAULT_ORG_ID": "${HARNESS_DEFAULT_ORG_ID}",
+        "HARNESS_DEFAULT_PROJECT_ID": "${HARNESS_DEFAULT_PROJECT_ID}",
+        "HARNESS_BASE_URL": "${HARNESS_BASE_URL}",
+        "HARNESS_TOOLSETS": "${HARNESS_TOOLSETS}"
+      }
+    },
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}",
+        "GH_TOKEN": "${GH_TOKEN}"
+      }
+    },
+    "perplexity": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@perplexity-ai/mcp-server"],
+      "env": {
+        "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}"
+      }
+    }
+  }
+}

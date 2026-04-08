@@ -23,14 +23,26 @@ import (
 // MOCK CLIENT FOR EXTERNAL SERVICES
 // ========================================
 
-// MockAPIClient mocks the client.Services interface
+// MockAPIClient mocks the client.Services interface with SAGA support
 type MockAPIClient struct {
 	paymentResp      map[string]interface{}
 	notificationResp map[string]interface{}
+	showtimeResp     *models.Showtime
+	holdResp         *models.HoldResponse
+	reservationResp  *models.ReservationResponse
+
 	paymentErr       error
 	notificationErr  error
-	paymentURL       string
-	notificationURL  string
+	showtimeErr      error
+	holdErr          error
+	reservationErr   error
+	refundErr        error
+	releaseHoldErr   error
+
+	paymentURL      string
+	notificationURL string
+	seatURL         string
+	showtimeURL     string
 }
 
 func (m *MockAPIClient) PaymentWall(createRequest interface{}) (interface{}, error) {
@@ -47,6 +59,35 @@ func (m *MockAPIClient) NotificationWall(createRequest interface{}) (interface{}
 	return &m.notificationResp, nil
 }
 
+func (m *MockAPIClient) GetShowtime(showtimeID string) (*models.Showtime, error) {
+	if m.showtimeErr != nil {
+		return nil, m.showtimeErr
+	}
+	return m.showtimeResp, nil
+}
+
+func (m *MockAPIClient) VerifyHold(holdID, sessionID string) (*models.HoldResponse, error) {
+	if m.holdErr != nil {
+		return nil, m.holdErr
+	}
+	return m.holdResp, nil
+}
+
+func (m *MockAPIClient) ReserveSeats(holdID, bookingID string) (*models.ReservationResponse, error) {
+	if m.reservationErr != nil {
+		return nil, m.reservationErr
+	}
+	return m.reservationResp, nil
+}
+
+func (m *MockAPIClient) ReleaseHold(holdID, sessionID string) error {
+	return m.releaseHoldErr
+}
+
+func (m *MockAPIClient) RefundPayment(chargeID, reason string) error {
+	return m.refundErr
+}
+
 func (m *MockAPIClient) SetBasePaymentURL(url string) {
 	m.paymentURL = url
 }
@@ -55,12 +96,28 @@ func (m *MockAPIClient) SetNotificationURL(url string) {
 	m.notificationURL = url
 }
 
+func (m *MockAPIClient) SetBaseSeatURL(url string) {
+	m.seatURL = url
+}
+
+func (m *MockAPIClient) SetBaseShowtimeURL(url string) {
+	m.showtimeURL = url
+}
+
 func (m *MockAPIClient) GetBasePaymentURL() string {
 	return m.paymentURL
 }
 
 func (m *MockAPIClient) GetNotificationURL() string {
 	return m.notificationURL
+}
+
+func (m *MockAPIClient) GetBaseSeatURL() string {
+	return m.seatURL
+}
+
+func (m *MockAPIClient) GetBaseShowtimeURL() string {
+	return m.showtimeURL
 }
 
 // ========================================
@@ -97,16 +154,52 @@ func setupMockDB(t *testing.T) (*mongo.Database, func()) {
 func setupMockClient() *config.Client {
 	mockAPI := &MockAPIClient{
 		paymentResp: map[string]interface{}{
-			"msg":    "Payment successful",
-			"charge": "ch_12345",
+			"msg": "Payment successful",
+			"charge": map[string]interface{}{
+				"id":          "ch_12345",
+				"amount":      5000,
+				"status":      "succeeded",
+				"receipt_url": "https://pay.stripe.com/receipts/test",
+			},
+			"version": "Stripe v2024.10",
 		},
 		notificationResp: map[string]interface{}{
 			"msg": "Email sent successfully",
+		},
+		showtimeResp: &models.Showtime{
+			ID:             "sht_test123",
+			MovieID:        "mov_test",
+			CinemaID:       "cin_test",
+			RoomNumber:     5,
+			StartTime:      time.Now().Add(24 * time.Hour),
+			EndTime:        time.Now().Add(26 * time.Hour),
+			AvailableSeats: 100,
+			Status:         "scheduled",
+		},
+		holdResp: &models.HoldResponse{
+			HoldID:     "hold_test123",
+			ShowtimeID: "sht_test123",
+			Seats:      []string{"A1", "A2"},
+			SessionID:  "sess_test",
+			ExpiresAt:  time.Now().Add(5 * time.Minute),
+			TTLSeconds: 300,
+		},
+		reservationResp: &models.ReservationResponse{
+			ReservationID: "res_test123",
+			BookingID:     "bkg_test",
+			ShowtimeID:    "sht_test123",
+			Seats: []models.SeatInfo{
+				{ID: "A1", Row: "A", Number: 1, Type: "regular", Status: "reserved"},
+				{ID: "A2", Row: "A", Number: 2, Type: "regular", Status: "reserved"},
+			},
+			ConfirmedAt: time.Now(),
 		},
 		paymentErr:      nil,
 		notificationErr: nil,
 		paymentURL:      "http://localhost:8100",
 		notificationURL: "http://localhost:8200",
+		seatURL:         "http://localhost:8300",
+		showtimeURL:     "http://localhost:8400",
 	}
 
 	return &config.Client{
@@ -326,7 +419,7 @@ func TestBookingRequestValidation(t *testing.T) {
 		errorMsg    string
 	}{
 		{
-			name: "Valid booking request",
+			name: "Valid booking request (v2 with showtime_id and hold_id)",
 			payload: `{
 				"user": {
 					"name": "John",
@@ -342,14 +435,11 @@ func TestBookingRequestValidation(t *testing.T) {
 					"membership": "gold"
 				},
 				"booking": {
-					"userType": "member",
-					"city": "New York",
-					"cinema": "Cinema 1",
-					"schedule": "2026-2-25T18:00:00Z",
-					"movie": {"title": "The Matrix", "format": "IMAX"},
-					"cinemaRoom": 1,
+					"showtime_id": "sht_abc123",
+					"hold_id": "123e4567-e89b-12d3-a456-426614174000",
+					"session_id": "sess_xyz789",
 					"seats": ["A1", "A2"],
-					"totalAmount": 50
+					"totalAmount": 450
 				}
 			}`,
 			shouldError: false,
@@ -384,6 +474,99 @@ func TestBookingRequestValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ========================================
+// SAGA FLOW TESTS
+// ========================================
+
+func TestMakeBookingSAGASuccess(t *testing.T) {
+	db, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	mockClient := setupMockClient()
+	api := API{db: db, client: mockClient}
+
+	payload := `{
+		"user": {
+			"name": "John",
+			"lastName": "Doe",
+			"email": "john@example.com",
+			"creditCard": {
+				"number": "4242424242424242",
+				"cvc": "123",
+				"exp_month": "12",
+				"exp_year": "2026"
+			}
+		},
+		"booking": {
+			"showtime_id": "sht_test123",
+			"hold_id": "hold_test123",
+			"session_id": "sess_test",
+			"seats": ["A1", "A2"],
+			"totalAmount": 450
+		}
+	}`
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/booking", strings.NewReader(payload))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	err := api.MakeBooking(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusCreated, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Booking has been created successfully", response["msg"])
+	assert.NotNil(t, response["ticket"])
+	assert.Contains(t, response["payment"].(string), "Payment has been charged successfully")
+}
+
+func TestMakeBookingSAGAMissingRequiredFields(t *testing.T) {
+	db, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	mockClient := setupMockClient()
+	api := API{db: db, client: mockClient}
+
+	// Missing showtime_id, hold_id, session_id
+	payload := `{
+		"user": {
+			"name": "John",
+			"lastName": "Doe",
+			"email": "john@example.com",
+			"creditCard": {
+				"number": "4242424242424242",
+				"cvc": "123",
+				"exp_month": "12",
+				"exp_year": "2026"
+			}
+		},
+		"booking": {
+			"seats": ["A1", "A2"],
+			"totalAmount": 450
+		}
+	}`
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/booking", strings.NewReader(payload))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	err := api.MakeBooking(c)
+	require.NoError(t, err) // Handler returns JSON error, not error
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response models.BookingError
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "INVALID_REQUEST", response.Code)
 }
 
 // ========================================

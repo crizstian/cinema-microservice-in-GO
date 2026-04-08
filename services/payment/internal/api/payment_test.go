@@ -195,14 +195,14 @@ func TestConnectWithValidDB(t *testing.T) {
 	db, cleanup := setupMockDB(t)
 	defer cleanup()
 
-	// Note: Using nil for stripe client in test
-	repo, err := Connect(db, nil)
+	// Note: Using nil for stripe client in test, mockMode=true
+	repo, err := Connect(db, nil, true)
 	require.NoError(t, err)
 	assert.NotNil(t, repo)
 }
 
 func TestConnectWithNilDB(t *testing.T) {
-	repo, err := Connect(nil, nil)
+	repo, err := Connect(nil, nil, true)
 	require.Error(t, err)
 	assert.Nil(t, repo)
 	assert.Contains(t, err.Error(), "db object is empty")
@@ -593,4 +593,189 @@ func TestMultipleCurrencies(t *testing.T) {
 			assert.Equal(t, tt.valid, isValid)
 		})
 	}
+}
+
+// ========================================
+// REFUND TESTS
+// ========================================
+
+func TestRefundRequestValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		payload     string
+		shouldError bool
+	}{
+		{
+			name:        "Valid full refund",
+			payload:     `{"reason": "requested_by_customer"}`,
+			shouldError: false,
+		},
+		{
+			name:        "Valid partial refund",
+			payload:     `{"reason": "duplicate", "amount": 2500}`,
+			shouldError: false,
+		},
+		{
+			name:        "Valid fraudulent refund",
+			payload:     `{"reason": "fraudulent"}`,
+			shouldError: false,
+		},
+		{
+			name:        "Missing reason",
+			payload:     `{}`,
+			shouldError: true,
+		},
+		{
+			name:        "Invalid reason",
+			payload:     `{"reason": "invalid_reason"}`,
+			shouldError: true,
+		},
+		{
+			name:        "Zero amount",
+			payload:     `{"reason": "duplicate", "amount": 0}`,
+			shouldError: true,
+		},
+		{
+			name:        "Negative amount",
+			payload:     `{"reason": "duplicate", "amount": -100}`,
+			shouldError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPost, "/payments/ch_123/refund", strings.NewReader(tt.payload))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			refundReq := new(models.RefundRequest)
+			err := c.Bind(refundReq)
+			require.NoError(t, err, "Binding should not fail")
+
+			err = refundReq.Validate()
+			if tt.shouldError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestRefundPaymentMissingChargeID(t *testing.T) {
+	db, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	api := API{db: db, stripe: nil}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/payments//refund", strings.NewReader(`{"reason": "duplicate"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/payments/:id/refund")
+	c.SetParamNames("id")
+	c.SetParamValues("")
+
+	err := api.RefundPayment(c)
+	require.Error(t, err)
+}
+
+func TestRefundPaymentInvalidPayload(t *testing.T) {
+	db, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	api := API{db: db, stripe: nil}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/payments/ch_123/refund", strings.NewReader(`invalid json`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/payments/:id/refund")
+	c.SetParamNames("id")
+	c.SetParamValues("ch_123")
+
+	err := api.RefundPayment(c)
+	require.Error(t, err)
+}
+
+func TestRefundPaymentWithMockStripe(t *testing.T) {
+	t.Skip("Requires proper Stripe client interface mocking - demonstration only")
+
+	// This demonstrates the test structure for RefundPayment
+	// In production, you would:
+	// 1. Create a proper interface for the Stripe Refunds service
+	// 2. Implement a mock that satisfies that interface
+	// 3. Inject the mock into the API
+
+	_, cleanup := setupMockDB(t)
+	defer cleanup()
+
+	t.Log("RefundPayment requires complex mocking of Stripe Refunds API")
+	t.Log("Would need to:")
+	t.Log("  1. Create interface for Stripe refunds client")
+	t.Log("  2. Implement mock that returns refund object")
+	t.Log("  3. Test success, charge not found, and refund failed scenarios")
+}
+
+func TestRefundReasonValues(t *testing.T) {
+	// Test that all valid reasons are accepted
+	validReasons := []string{"duplicate", "fraudulent", "requested_by_customer"}
+
+	for _, reason := range validReasons {
+		t.Run(reason, func(t *testing.T) {
+			req := models.RefundRequest{Reason: reason}
+			err := req.Validate()
+			assert.NoError(t, err)
+		})
+	}
+
+	// Test invalid reasons
+	invalidReasons := []string{"", "invalid", "customer_request", "other"}
+
+	for _, reason := range invalidReasons {
+		t.Run("invalid_"+reason, func(t *testing.T) {
+			req := models.RefundRequest{Reason: reason}
+			err := req.Validate()
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestRefundPartialAmounts(t *testing.T) {
+	tests := []struct {
+		name        string
+		amount      *int64
+		shouldError bool
+	}{
+		{"nil amount (full refund)", nil, false},
+		{"valid partial amount", ptrInt64(2500), false},
+		{"minimum valid amount", ptrInt64(1), false},
+		{"large amount", ptrInt64(999999), false},
+		{"zero amount", ptrInt64(0), true},
+		{"negative amount", ptrInt64(-100), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := models.RefundRequest{
+				Reason: "duplicate",
+				Amount: tt.amount,
+			}
+			err := req.Validate()
+			if tt.shouldError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// Helper function for creating int64 pointers in tests
+func ptrInt64(v int64) *int64 {
+	return &v
 }
