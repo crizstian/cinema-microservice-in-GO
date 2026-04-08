@@ -124,7 +124,7 @@ When analyzing this codebase, start with these files in order:
 | **Set up dev environment** | [Development Guide](./development/README.md) |
 | **Understand the architecture** | [Architecture](./architecture/README.md) |
 | **Add a new feature** | [Services](./services/README.md) |
-| **Write tests** | [Testing Guide](./development/testing.md) |
+| **Write tests** | [Development Guide](./development/README.md#testing-strategy) |
 | **Deploy changes** | [Operations](./operations/README.md) |
 
 ### For DevOps/SRE
@@ -132,8 +132,8 @@ When analyzing this codebase, start with these files in order:
 | Task | Go To |
 |------|-------|
 | **CI/CD pipelines** | [Operations](./operations/README.md) |
-| **Docker builds** | [Docker Guide](./development/docker.md) |
-| **Deployment** | [Deployment Guide](./operations/deployment.md) |
+| **Docker builds** | [Platform Docker](../platform/docker/README.md) |
+| **Deployment** | [Operations](./operations/README.md#deployment) |
 
 ---
 
@@ -155,21 +155,21 @@ When analyzing this codebase, start with these files in order:
 │   ├── docker/                  # Dockerfiles
 │   │   ├── go-service/          # Generic service Dockerfile
 │   │   ├── devcontainer/        # VS Code devcontainer
-│   │   └── mongodb/             # MongoDB replica set
+│   │   ├── mongodb/             # MongoDB replica set
+│   │   └── testing/             # E2E test infrastructure
 │   ├── deploy/
 │   │   ├── docker-compose/      # Local deployment
-│   │   └── hashicorp/           # Nomad/Consul/Vault
-│   └── scripts/                 # Build scripts
+│   │   └── hashicorp/           # Nomad/Consul/Vault (legacy)
+│   └── scripts/                 # Build & test scripts
 │
 ├── docs/                        # Documentation (you are here)
 │   ├── README.md                # This file
 │   ├── architecture/            # System design
 │   ├── services/                # Service specifications
-│   ├── api/                     # API documentation
+│   ├── api/                     # API documentation & contracts
 │   ├── development/             # Developer guides
 │   └── operations/              # DevOps guides
 │
-├── contracts/                   # Pact contract files
 ├── tests/                       # Integration/E2E tests
 ├── go.work                      # Go workspace config
 ├── Taskfile.yml                 # Task automation

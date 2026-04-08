@@ -165,8 +165,8 @@ cinema-microservices/
 │   └── seat/                    # Seat inventory
 ├── platform/                    # Infrastructure
 │   ├── docker/                  # Dockerfiles
-│   └── deploy/                  # Docker Compose, K8s manifests
-├── contracts/                   # Pact contract files
+│   ├── deploy/                  # Docker Compose, K8s manifests
+│   └── scripts/                 # Build & test scripts
 ├── tests/                       # Integration & E2E tests
 ├── docs/                        # Documentation hub
 ├── go.work                      # Go workspace configuration
@@ -218,7 +218,7 @@ task lint                       # Run Go vet + OpenAPI linting
 | [API Reference](./docs/api/README.md) | OpenAPI specs, error handling |
 | [Development](./docs/development/README.md) | Setup, testing, code style |
 | [Operations](./docs/operations/README.md) | CI/CD pipelines, deployment |
-| [Contracts](./docs/contracts/README.md) | Pact testing, consumer/provider |
+| [Contracts](./docs/api/contracts.md) | Pact testing, consumer/provider |
 
 ---
 
