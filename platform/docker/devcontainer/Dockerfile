@@ -19,7 +19,7 @@ RUN apk upgrade --no-cache && \
     bat exa coreutils wget curl bash \
     binutils jq sudo g++ py3-pip yq \
     github-cli \
-    nodejs npm shadow docker-cli docker-cli-compose ca-certificates
+    nodejs npm shadow docker-cli docker-cli-buildx docker-cli-compose ca-certificates
 
 # ---------- Usuario no root ----------
 # Crear usuario
@@ -56,6 +56,7 @@ RUN set -eux; \
     go install github.com/terraform-linters/tflint@latest || true; \
     go install github.com/zricethezav/gitleaks/v8@latest || true; \
     go install github.com/terraform-docs/terraform-docs@v0.21.0 || true; \
+    go install github.com/jstemmer/go-junit-report/v2@latest || true; \
     rm -rf "$GOPATH/pkg"/* "$GOPATH/src"/* /root/.cache/go-build || true
 
 # GOPRIVATE para tus módulos
@@ -86,9 +87,15 @@ ENV PATH="${PATH}:/usr/local/gcloud/google-cloud-sdk/bin"
 
 RUN gcloud components install gke-gcloud-auth-plugin --quiet || true
 
-# ---------- Claude Code (CLI vía npm) ----------
-RUN npm install -g @anthropic-ai/claude-code
-RUN npm install -g harness-mcp-v2
+# ---------- Docker buildx (manual install as fallback) ----------
+ARG BUILDX_VERSION=v0.17.1
+RUN mkdir -p /usr/lib/docker/cli-plugins && \
+    curl -sSL "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64" \
+      -o /usr/lib/docker/cli-plugins/docker-buildx && \
+    chmod +x /usr/lib/docker/cli-plugins/docker-buildx
+
+# ---------- CLI tools via npm ----------
+RUN npm install -g @anthropic-ai/claude-code harness-mcp-v2 @stoplight/spectral-cli
 
 # Dentro del DevContainer
 RUN git clone --depth=1 https://github.com/harness/harness-skills.git .harness-skills

@@ -1,6 +1,16 @@
 #!/bin/sh
 set -e
 
+echo "[post-start] configuring Docker socket permissions..."
+if [ -S /var/run/docker.sock ]; then
+  DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+  if ! getent group docker >/dev/null 2>&1; then
+    sudo addgroup -g "$DOCKER_GID" docker 2>/dev/null || true
+  fi
+  sudo addgroup devuser docker 2>/dev/null || true
+  sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+fi
+
 echo "[post-start] validating devtoolchain..."
 
 for cmd in claude harness-mcp-v2 gh gcloud kubectl terraform; do

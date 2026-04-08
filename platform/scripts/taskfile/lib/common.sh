@@ -52,9 +52,10 @@ get_services() {
 # Sets: TEST_PASSED, TEST_FAILED, TEST_SKIPPED, TEST_TOTAL
 parse_test_results() {
   local output="$1"
-  TEST_PASSED=$(echo "$output" | grep -c "^--- PASS" 2>/dev/null | tr -d '[:space:]') || TEST_PASSED=0
-  TEST_FAILED=$(echo "$output" | grep -c "^--- FAIL" 2>/dev/null | tr -d '[:space:]') || TEST_FAILED=0
-  TEST_SKIPPED=$(echo "$output" | grep -c "^--- SKIP" 2>/dev/null | tr -d '[:space:]') || TEST_SKIPPED=0
+  # Match both top-level tests and subtests (subtests have leading whitespace)
+  TEST_PASSED=$(echo "$output" | grep -cE "^\s*--- PASS" 2>/dev/null | tr -d '[:space:]') || TEST_PASSED=0
+  TEST_FAILED=$(echo "$output" | grep -cE "^\s*--- FAIL" 2>/dev/null | tr -d '[:space:]') || TEST_FAILED=0
+  TEST_SKIPPED=$(echo "$output" | grep -cE "^\s*--- SKIP" 2>/dev/null | tr -d '[:space:]') || TEST_SKIPPED=0
   TEST_TOTAL=$((TEST_PASSED + TEST_FAILED + TEST_SKIPPED))
 }
 
@@ -108,7 +109,7 @@ ensure_test_results_dir() {
 # DOCKER COMPOSE HELPERS
 # ============================================================
 
-readonly COMPOSE_FILE="${DOCKER_TESTING_DIR}/docker-compose.e2e.yml"
+readonly COMPOSE_FILE="${PROJECT_ROOT}/platform/deploy/docker-compose/docker-compose.yml"
 
 docker_compose() {
   docker compose -f "${COMPOSE_FILE}" "$@"
@@ -119,20 +120,21 @@ docker_compose() {
 wait_for_services() {
   local expected_count="${1:-8}"
   local timeout="${2:-90}"
+  local profile="${ENV_PREFIX:-test}"
 
   for i in $(seq 1 "$timeout"); do
     local healthy
-    healthy=$(docker_compose --profile full ps --format json 2>/dev/null | grep -c '"Health":"healthy"' || echo 0)
+    healthy=$(docker_compose --profile "$profile" ps --format json 2>/dev/null | grep -c '"Health":"healthy"' || echo 0)
     if [ "$healthy" -ge "$expected_count" ]; then
-      echo "  ✅ All $expected_count services healthy!"
+      echo "  All $expected_count services healthy!"
       return 0
     fi
-    printf "  ⏳ %d/%d services healthy, waiting... (%d/%d)\r" "$healthy" "$expected_count" "$i" "$timeout"
+    printf "  %d/%d services healthy, waiting... (%d/%d)\r" "$healthy" "$expected_count" "$i" "$timeout"
     sleep 2
   done
 
   echo ""
-  echo "  ❌ Services failed to become healthy"
+  echo "  Services failed to become healthy"
   return 1
 }
 

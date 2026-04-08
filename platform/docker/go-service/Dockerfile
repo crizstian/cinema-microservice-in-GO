@@ -1,7 +1,7 @@
 # ============================================================
 # Common Dockerfile for all Go microservices
-# Context must be the service directory (e.g., services/movie)
-# Usage: docker build -f platform/docker/go-service/Dockerfile --build-arg SERVICE_NAME=movie services/movie
+# Context: project root (for Docker-outside-of-Docker compatibility)
+# Usage: docker build -f platform/docker/go-service/Dockerfile --build-arg SERVICE_NAME=movie .
 # ============================================================
 
 ARG GO_VERSION=1.24
@@ -26,13 +26,13 @@ RUN apk add --no-cache git
 ENV GOWORK=off
 
 # Copy go.mod and go.sum first for better caching
-COPY go.mod go.sum ./
+COPY services/${SERVICE_NAME}/go.mod services/${SERVICE_NAME}/go.sum ./
 
 # Download dependencies
 RUN go mod download && go mod verify
 
-# Copy source code
-COPY . ./
+# Copy service source code
+COPY services/${SERVICE_NAME}/ ./
 
 # Build binary with version info
 RUN CGO_ENABLED=0 GOOS=linux \

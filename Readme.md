@@ -108,26 +108,32 @@ cd cinema-microservices
 # Option 2: Local setup
 go work sync
 
-# Start infrastructure (MongoDB + Redis + NATS)
-task infra:up
+# Start full dev environment (MongoDB 3-node replica + Redis + NATS + all services)
+task dev:up
 
-# Run any service
-cd services/booking && go run ./cmd/booking
+# View logs
+task dev:log
+
+# Stop environment
+task dev:down
 ```
 
 ### Running Tests
 
 ```bash
-# Unit tests (fast, no infrastructure)
-task test:unit:all
+# Unit tests for single service
+task test SERVICE=booking
 
-# Integration tests (requires infra:up)
-task test:integration
+# Unit tests for all services
+task test:all
 
-# Full E2E tests (starts everything)
+# Contract tests (Pact consumer + provider)
+task test:contract
+
+# Full E2E tests (starts test environment automatically)
 task test:e2e
 
-# CI pipeline (lint + unit + coverage)
+# CI pipeline (lint + unit + contracts + coverage)
 task test:ci
 ```
 
@@ -156,18 +162,25 @@ task test:ci
 cinema-microservices/
 ├── services/                    # Microservices (Go modules)
 │   ├── booking/                 # SAGA orchestrator
+│   ├── cinema/                  # Cinema locations
 │   ├── movie/                   # Movie catalog
-│   ├── payment/                 # Payment processing
-│   ├── notification/            # Notification delivery
-│   ├── user/                    # User management
-│   ├── cinema/                  # Cinema catalog
+│   ├── notification/            # Multi-channel notifications
+│   ├── payment/                 # Stripe integration
+│   ├── seat/                    # Real-time seat inventory
 │   ├── showtime/                # Schedule management
-│   └── seat/                    # Seat inventory
-├── platform/                    # Infrastructure
-│   ├── docker/                  # Dockerfiles
-│   ├── deploy/                  # Docker Compose, K8s manifests
-│   └── scripts/                 # Build & test scripts
-├── tests/                       # Integration & E2E tests
+│   └── user/                    # Authentication & profiles
+├── platform/
+│   ├── docker/                  # All Dockerfiles
+│   │   ├── devcontainer/        # Development container
+│   │   ├── e2e-runner/          # E2E test runner
+│   │   ├── go-service/          # Service build template
+│   │   └── mongodb/             # MongoDB init + seeds
+│   ├── deploy/
+│   │   └── docker-compose/      # Docker Compose (dev + test profiles)
+│   └── scripts/                 # Build & test automation
+├── tests/
+│   ├── contracts/               # Pact contract tests
+│   └── integration/             # E2E test suite
 ├── docs/                        # Documentation hub
 ├── go.work                      # Go workspace configuration
 ├── Taskfile.yml                 # Task automation
@@ -181,29 +194,24 @@ cinema-microservices/
 All common operations are automated via [Taskfile](https://taskfile.dev):
 
 ```bash
-task                    # List all available tasks
+task --list             # List all available tasks
 
-# Build & Deploy
-task build SERVICE=booking      # Build single service image
+# Build
+task build SERVICE=booking      # Build single service Docker image
 task build:all                  # Build all service images
-task push:all                   # Push to container registry
 
-# Testing Pyramid
-task test:unit:all              # Unit tests (fast, isolated)
-task test:integration           # Integration tests (with DB)
+# Development Environment
+task dev:up                     # Start dev environment (3 MongoDB replicas)
+task dev:down                   # Stop and clean volumes
+task dev:log                    # Stream logs (optionally: SERVICE=booking)
+task dev:clean                  # Remove images and build cache
+
+# Testing
+task test SERVICE=booking       # Unit tests for single service
+task test:all                   # Unit tests for all services
+task test:contract              # Pact contract tests
 task test:e2e                   # End-to-end tests (full system)
-task coverage                   # Generate HTML coverage report
-
-# Versioning
-task version                    # Show current version
-task version:bump-patch         # Increment patch (bug fixes)
-task version:bump-minor         # Increment minor (features)
-task release:patch              # Full release workflow
-
-# Development
-task dev:up                     # Start all services locally
-task dev:logs                   # Stream service logs
-task lint                       # Run Go vet + OpenAPI linting
+task test:ci                    # CI pipeline (lint + unit + coverage)
 ```
 
 ---

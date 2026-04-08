@@ -18,7 +18,10 @@ print_banner "🔄 CI PIPELINE EXECUTION"
 # Phase 1: Lint
 print_phase "Phase 1: Linting"
 lint_status="✅ PASS"
-"${SCRIPT_DIR}/lint-go.sh" 2>&1 || lint_status="❌ FAIL"
+for svc in $(get_services); do
+  echo "  Linting: $svc"
+  (cd "${SERVICES_DIR}/$svc" && go vet ./... 2>&1) || lint_status="❌ FAIL"
+done
 
 # Phase 2: Unit Tests
 print_phase "Phase 2: Unit Tests"
