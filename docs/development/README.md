@@ -38,18 +38,16 @@ cd cinema-microservices
 
 # Install dependencies
 go work sync
-npm install  # For Spectral
 
-# Start infrastructure
-cd platform/deploy/docker-compose
-docker compose up -d mongo1 mongo2 mongo3
+# Start full development environment
+task dev:up
 
-# Run a service locally
+# Or run a single service locally (requires MongoDB)
 cd services/booking
 go run ./cmd/booking
 
 # Run tests
-go test ./...
+task test:all
 ```
 
 ### VS Code DevContainer (Recommended)
@@ -190,25 +188,24 @@ task build:all
 
 ```bash
 # List all commands
-task
-
-# Version management
-task version              # Show current version
-task version:bump-patch   # Bump patch (x.x.X)
-task version:bump-minor   # Bump minor (x.X.0)
-task version:bump-major   # Bump major (X.0.0)
+task --list
 
 # Building
-task build SERVICE=movie  # Build single service
-task build:all            # Build all services
+task build SERVICE=movie  # Build single service image
+task build:all            # Build all service images
 
-# Docker Compose
-task compose:up           # Start all services
-task compose:down         # Stop all services
-task compose:logs         # View logs
+# Development Environment
+task dev:up               # Start dev environment (3 MongoDB replicas)
+task dev:down             # Stop and clean volumes
+task dev:log              # Stream logs
+task dev:clean            # Remove images and build cache
 
-# Release workflow
-task release:patch        # Bump + build + update compose
+# Testing
+task test SERVICE=booking # Unit tests for single service
+task test:all             # Unit tests for all services
+task test:contract        # Pact contract tests
+task test:e2e             # E2E tests (full system)
+task test:ci              # CI pipeline
 ```
 
 ---
@@ -328,23 +325,19 @@ All critical steps must succeed for tests to pass.
 ### Test Commands (Taskfile)
 
 ```bash
-# Unit tests
-task test:unit SERVICE=booking
-task test:unit:all
+# Unit tests for single service
+task test SERVICE=booking
 
-# Integration tests
-task test:integration
+# Unit tests for all services
+task test:all
 
-# Contract tests
+# Contract tests (Pact consumer + provider)
 task test:contract
 
-# E2E tests
+# E2E tests (starts full environment)
 task test:e2e
 
-# Full pipeline
-task test:pipeline
-
-# CI mode (with JUnit output)
+# CI pipeline (lint + unit + coverage)
 task test:ci
 ```
 

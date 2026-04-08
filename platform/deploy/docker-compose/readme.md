@@ -1,93 +1,140 @@
-# Cinema Microservice written in GO
+# Docker Compose - Cinema Microservices
 
-![](../../images/Group5.png)
+Unified Docker Compose configuration for development and testing environments.
 
-
-The architecture of the following `docker-compose.yml` consists of:
-
-- **1 consul server**
-
-  This consul server has a port mapping in the following config `18500:8500` so we can access `consul-ui` from our browser `http://localhost:18500`
-
-- **3 mongodb containers**
-  
-  The mongodb cluster is configured as a replica set, and is the database for the cinema microservices each service has its own db
-
-- **1 payment-sercice**
-  
-  The payment service has Stripe configuration, in order to start this container you need to set the following two env variables:
-
-  -- ${STRIPE_SECRET}
-  
-  -- ${STRIPE_PUBLIC}
-
-- **1 notification-service**
-
-  The notification service has a smtp configuration under the hood, so that when a payment has been successfully the booking service can send the ticket generated through the notification service, in order to start this container there are two env variables to set:
-
-  -- ${EMAIL}
-
-  -- ${EMAIL_PASS}
-
-  smtp service is only configured to accept gmail config
-
-- **1 booking-service**
-  
-  The booking service is the orchestrator of this architecture, this container is listening through port 8000 and url /booking/ to generate a ticket, then process a payment through the payment service, and once paid, send the ticket via email through the notification service.
-
-## Deploy the architecture using Docker Compose V3
-
-In Order to deploy this architecture, first 4 ENV variables mentioned above, must be setup in your terminal so that docker-compose can read them, then run the `docker-compose.yml` file:
+## Quick Start
 
 ```bash
-cinemas-microservices/deploy/docker-compose/service-mesh-connect$ docker-compose up
+# Start development environment
+task dev:up
+
+# Stop and clean
+task dev:down
+
+# View logs
+task dev:log
 ```
 
-Once the container has been started, please wait until all mongo replicas are synced, once synced all micro services will be running without issues.
+## Profiles
 
-## Testing the architecture
+The compose file uses profiles to support multiple environments:
 
-There are two ways to test the whole architecture:
+| Profile | MongoDB | Storage | Use Case |
+|---------|---------|---------|----------|
+| `dev` | 3-node replica set | Persistent volumes | Local development |
+| `test` | Single node | tmpfs (ephemeral) | Fast E2E testing |
+| `e2e` | - | - | Test runner only |
 
-#### 1] through `go test` with the following command:
-  ```bash
-  cinemas-microservices/booking-service/$ go test -v -timeout 30s integration_test -run TestBookingEndpoint -count=1
-  ```
+### Development Profile
 
-The `booking-service` project has an `integration test` config files, the file to test is `http_test` which is the one that is configured to test the booking-service endpoint, which is the frontdoor for this microservices. In order to test it, you can run the command above.
+```bash
+# Start with 3 MongoDB replicas
+docker compose --profile dev up -d
 
-
-#### 2] through some REST API tool like `postman` 
-
-set the body like the following
-
-```json
-{
-  "user": {
-    "name": "Cristian",
-    "lastName": "Ramirez",
-    "email": "cristiano.rosetti@gmail.com",
-    "creditCard": {
-      "number": "4242424242424242",
-      "cvc": "123",
-      "exp_month": "12",
-      "exp_year": "2019"
-    },
-    "membership": "7777888899990000"
-  },
-  "booking": {
-    "city": "Morelia",
-    "cinema": "Plaza Morelia",
-    "movie": {
-      "title": "Assasins Creed",
-      "format": "IMAX"
-    },
-    "schedule": "1569600200785",
-    "cinemaRoom": 7,
-    "seats": ["45"],
-    "totalAmount": 71
-  }
-}
+# Or via Task
+task dev:up
 ```
 
-and set the endpoint to `http://localhost:8000/booking/`
+Services:
+- MongoDB: mongo1:27017, mongo2:27018, mongo3:27019
+- Redis: localhost:6379
+- NATS: localhost:4222 (JetStream enabled)
+- All 8 microservices with health checks
+
+### Test Profile
+
+```bash
+# Start test environment
+docker compose --profile test up -d
+
+# Run E2E tests
+docker compose --profile test --profile e2e run --rm e2e-runner
+
+# Or via Task (handles everything)
+task test:e2e
+```
+
+Uses tmpfs for fast, disposable test runs.
+
+## Services
+
+| Service | Port | Health Check |
+|---------|------|--------------|
+| movie | 8000 | `/ping` |
+| cinema | 8085 | `/ping` |
+| user | 8004 | `/ping` |
+| showtime | 3003 | `/ping` |
+| seat | 3004 | `/ping` |
+| payment | 8001 | `/ping` |
+| notification | 8002 | `/ping` |
+| booking | 8082 | `/ping` |
+
+## Environment Variables
+
+Override defaults with environment variables:
+
+```bash
+# Container name prefix
+ENV_PREFIX=myenv docker compose --profile dev up -d
+
+# MongoDB servers (for services)
+MONGO_SERVERS=mongo1:27017,mongo2:27017 docker compose --profile dev up -d
+
+# Registry and version
+REGISTRY=myregistry VERSION=1.0.0 docker compose --profile dev up -d
+```
+
+## Manual Commands
+
+```bash
+# Validate configuration
+docker compose config
+
+# List profiles
+docker compose config --profiles
+
+# List services in profile
+docker compose --profile dev config --services
+
+# Build specific service
+docker compose --profile dev build movie
+
+# View logs for specific service
+docker compose --profile dev logs -f booking
+
+# Execute command in running container
+docker compose --profile dev exec movie sh
+```
+
+## Troubleshooting
+
+### Services not becoming healthy
+
+```bash
+# Check health status
+docker compose --profile dev ps
+
+# View service logs
+docker compose --profile dev logs movie
+
+# Check MongoDB replica set
+docker exec dev-mongo1 mongosh --eval "rs.status()"
+```
+
+### Port conflicts
+
+If ports are in use, stop existing containers or change the port mapping:
+
+```bash
+# Find what's using a port
+lsof -i :27017
+
+# Stop all cinema containers
+docker compose --profile dev --profile test down
+```
+
+## Related
+
+- [Dockerfiles](../../docker/)
+- [Taskfile.yml](../../../Taskfile.yml)
+- [Development Guide](../../../docs/development/README.md)

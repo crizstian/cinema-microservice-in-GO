@@ -1,8 +1,6 @@
 # Platform Docker
 
-This directory contains Docker configurations for the Cinema Microservices platform.
-
-**Last Updated**: 2026-04-08
+All Dockerfiles for the Cinema Microservices platform.
 
 ---
 
@@ -10,22 +8,19 @@ This directory contains Docker configurations for the Cinema Microservices platf
 
 ```
 platform/docker/
-├── devcontainer/          # VS Code DevContainer configuration
-│   ├── Dockerfile         # Development environment image
-│   └── README.md          # DevContainer usage guide
-├── go-service/            # Generic Go service Dockerfile
-│   ├── Dockerfile         # Multi-stage build for all Go services
-│   ├── .dockerignore      # Build exclusions
-│   └── README.md          # Build instructions
-├── mongodb/               # MongoDB replica set configuration
-│   ├── Dockerfile         # MongoDB with replica set support
-│   ├── Dockerfile.local   # Local development variant
-│   ├── files/             # Initialization scripts
-│   └── startup/           # Container startup scripts
-└── testing/               # E2E testing infrastructure
-    ├── docker-compose.e2e.yml  # Full test environment
-    ├── e2e-runner.Dockerfile   # Test runner image
-    └── mongo-init/             # Test data initialization
+├── devcontainer/          # VS Code DevContainer
+│   └── Dockerfile         # Development environment image
+├── e2e-runner/            # E2E test runner
+│   └── Dockerfile         # Go test container
+├── go-service/            # Service build template
+│   └── Dockerfile         # Multi-stage build for all Go services
+└── mongodb/               # MongoDB initialization
+    ├── Dockerfile         # Replica set init + seeding
+    └── seed/              # Database seed scripts
+        ├── 01-init-replica.js
+        ├── 02-create-databases.js
+        ├── 03-create-indexes.js
+        └── 04-seed-test-data.js
 ```
 
 ---
@@ -34,61 +29,87 @@ platform/docker/
 
 ### Go Service Dockerfile
 
-The centralized Dockerfile for all Go microservices:
+Centralized multi-stage build for all microservices:
 
 ```bash
-# Build a service
+# Build via Task
 task build SERVICE=booking
 
 # Or directly
 docker build \
   -f platform/docker/go-service/Dockerfile \
   --build-arg SERVICE_NAME=booking \
-  -t cinema/booking:latest \
-  services/booking
+  --build-arg SERVICE_PORT=8082 \
+  -t cinema/booking:latest .
 ```
 
-See: [go-service/README.md](./go-service/README.md)
+Features:
+- Multi-stage build (builder + runtime)
+- Non-root user for security
+- Health check endpoint
+- Build metadata labels
 
 ### DevContainer
 
-Development environment for VS Code:
+Development environment for VS Code / Claude Code:
 
 ```bash
-# Open project in VS Code
-# Press F1 → "Dev Containers: Reopen in Container"
+# Open in VS Code → "Reopen in Container"
+# Or use Claude Code desktop with devcontainer support
 ```
 
-Includes: Go 1.22+, Docker CLI, kubectl, Task, Spectral, pact-go
+Includes:
+- Go 1.24
+- Docker CLI + BuildX
+- kubectl, Task, Spectral
+- pact-go, go-junit-report
+- MongoDB Shell
 
-See: [devcontainer/README.md](./devcontainer/README.md)
+### MongoDB Init
 
-### MongoDB
-
-MongoDB 8.0 replica set configuration for local development:
+Single Dockerfile supporting both dev and test environments:
 
 ```bash
-# Start MongoDB cluster
-cd platform/deploy/docker-compose
-docker compose up -d mongo1 mongo2 mongo3 mongo-init
+# Environment variables:
+# - MONGO_HOST: Primary MongoDB host
+# - REPLICA_SET: Replica set name (default: rs0)
+# - REPLICA_MEMBERS: Comma-separated members (empty = single node)
+# - AUTH_ENABLED: Enable authentication (default: false)
 ```
 
-### Testing Infrastructure
+Used by docker-compose profiles:
+- `dev`: 3-node replica set (mongo1, mongo2, mongo3)
+- `test`: Single node with tmpfs
 
-E2E test environment with all services:
+### E2E Runner
+
+Runs integration tests inside the Docker network:
 
 ```bash
-# Run E2E tests
-task test:e2e
-
-# Or manually
-docker compose -f platform/docker/testing/docker-compose.e2e.yml up
+# Used by test:e2e task
+docker compose --profile test --profile e2e run --rm e2e-runner
 ```
 
 ---
 
-## Related Documentation
+## Docker Compose
 
+The unified docker-compose is located at:
+```
+platform/deploy/docker-compose/docker-compose.yml
+```
+
+Available profiles:
+| Profile | Description |
+|---------|-------------|
+| `dev` | 3 MongoDB replicas, persistent volumes |
+| `test` | 1 MongoDB node, tmpfs (ephemeral) |
+| `e2e` | E2E test runner container |
+
+---
+
+## Related
+
+- [Docker Compose](../deploy/docker-compose/)
 - [Development Guide](../../docs/development/README.md)
-- [Operations Guide](../../docs/operations/README.md)
-- [Docker Compose](../deploy/docker-compose/readme.md)
+- [Taskfile.yml](../../Taskfile.yml)

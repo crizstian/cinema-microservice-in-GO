@@ -1,95 +1,108 @@
 # ============================================================
 # Docker Compose - Cinema Microservices
 # ============================================================
-# Build: docker compose build
-# Run:   docker compose up -d
+# Unified compose file with profiles for dev and test environments.
+#
+# Profiles:
+#   - dev:  3 MongoDB replicas, persistent volumes (production-like)
+#   - test: 1 MongoDB node, tmpfs (fast, ephemeral)
+#
+# Usage:
+#   task dev:up          # Start dev environment
+#   task dev:down        # Stop dev environment
+#   task test:e2e        # Run E2E tests
+#
+# Manual:
+#   docker compose --profile dev up -d
+#   docker compose --profile test up -d
+#   docker compose --profile test --profile e2e up
 # ============================================================
 
-x-common-env: &common-env
-  DB_USER: "cristian"
-  DB_PASS: "cristianPassword2017"
-  DB_SERVERS: "mongo1:27017,mongo2:27017,mongo3:27017"
-  DB_NAME: "admin"
-  DB_REPLICA: "rs1"
-  SERVICE_PORT: "8000"
+x-healthcheck: &healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 10s
+
+x-service-healthcheck: &service-healthcheck
+  interval: 5s
+  timeout: 3s
+  retries: 10
+  start_period: 15s
+
+x-mongo-env: &mongo-env
+  DB_USER: ""
+  DB_PASS: ""
+  DB_NAME: "cinema"
+  DB_REPLICA: "rs0"
+
+x-nats-env: &nats-env
+  NATS_URL: "nats://nats:4222"
 
 services:
   # ============================================================
-  # MongoDB Replica Set - 3 nodos
+  # MongoDB - Dev (3 replicas with persistent volumes)
   # ============================================================
 
   mongo1:
     image: mongo:8.0
-    container_name: mongo1
+    container_name: ${ENV_PREFIX:-dev}-mongo1
     hostname: mongo1
-    restart: unless-stopped
-    command: mongod --replSet rs1 --bind_ip_all --port 27017
+    profiles: [dev]
+    command: mongod --replSet rs0 --bind_ip_all
     ports:
       - "27017:27017"
-    environment:
-      MONGO_INITDB_DATABASE: admin
-    volumes:
-      - mongodb1_data:/data/db
-      - mongodb1_config:/data/configdb
     healthcheck:
+      <<: *healthcheck
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
+    volumes:
+      - mongo1_data:/data/db
     networks:
-      dc1:
-        ipv4_address: 10.7.0.3
+      - cinema-network
 
   mongo2:
     image: mongo:8.0
-    container_name: mongo2
+    container_name: ${ENV_PREFIX:-dev}-mongo2
     hostname: mongo2
-    restart: unless-stopped
-    command: mongod --replSet rs1 --bind_ip_all --port 27017
+    profiles: [dev]
+    command: mongod --replSet rs0 --bind_ip_all
     ports:
       - "27018:27017"
-    volumes:
-      - mongodb2_data:/data/db
-      - mongodb2_config:/data/configdb
     healthcheck:
+      <<: *healthcheck
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
+    volumes:
+      - mongo2_data:/data/db
     networks:
-      dc1:
-        ipv4_address: 10.7.0.4
+      - cinema-network
 
   mongo3:
     image: mongo:8.0
-    container_name: mongo3
+    container_name: ${ENV_PREFIX:-dev}-mongo3
     hostname: mongo3
-    restart: unless-stopped
-    command: mongod --replSet rs1 --bind_ip_all --port 27017
+    profiles: [dev]
+    command: mongod --replSet rs0 --bind_ip_all
     ports:
       - "27019:27017"
-    volumes:
-      - mongodb3_data:/data/db
-      - mongodb3_config:/data/configdb
     healthcheck:
+      <<: *healthcheck
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
+    volumes:
+      - mongo3_data:/data/db
     networks:
-      dc1:
-        ipv4_address: 10.7.0.5
+      - cinema-network
 
-  # ============================================================
-  # MongoDB Initializer - Configuración del Replica Set
-  # ============================================================
-
-  mongo-init:
-    image: mongo:8.0
-    container_name: mongo-init
+  mongo-init-dev:
+    build:
+      context: ../../docker/mongodb
+      dockerfile: Dockerfile
+    container_name: ${ENV_PREFIX:-dev}-mongo-init
+    profiles: [dev]
+    environment:
+      MONGO_HOST: mongo1
+      REPLICA_SET: rs0
+      REPLICA_MEMBERS: "mongo1,mongo2,mongo3"
+      AUTH_ENABLED: "false"
     depends_on:
       mongo1:
         condition: service_healthy
@@ -97,198 +110,338 @@ services:
         condition: service_healthy
       mongo3:
         condition: service_healthy
-    environment:
-      DB_ADMIN_USER: "cristian"
-      DB_ADMIN_PASS: "cristianPassword2017"
-      DB_REPLICA_ADMIN: "replicaAdmin"
-      DB_REPLICA_ADMIN_PASS: "replicaAdminPassword2017"
-      DB_REPLSET_NAME: "rs1"
-    volumes:
-      - ./scripts/init-replica.sh:/init-replica.sh
-    command: bash /init-replica.sh
     restart: "no"
     networks:
-      dc1:
-        ipv4_address: 10.7.0.2
+      - cinema-network
+
+  # ============================================================
+  # MongoDB - Test (single node with tmpfs)
+  # ============================================================
+
+  mongo:
+    image: mongo:8.0
+    container_name: ${ENV_PREFIX:-test}-mongo
+    hostname: mongo
+    profiles: [test]
+    command: mongod --replSet rs0 --bind_ip_all
+    ports:
+      - "27017:27017"
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+    tmpfs:
+      - /data/db
+    networks:
+      - cinema-network
+
+  mongo-init-test:
+    build:
+      context: ../../docker/mongodb
+      dockerfile: Dockerfile
+    container_name: ${ENV_PREFIX:-test}-mongo-init
+    profiles: [test]
+    environment:
+      MONGO_HOST: mongo
+      REPLICA_SET: rs0
+      AUTH_ENABLED: "false"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - cinema-network
+
+  # ============================================================
+  # Redis (shared, profile-specific storage)
+  # ============================================================
+
+  redis-dev:
+    image: redis:7-alpine
+    container_name: ${ENV_PREFIX:-dev}-redis
+    hostname: redis
+    profiles: [dev]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "redis-cli", "ping"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - cinema-network
+
+  redis-test:
+    image: redis:7-alpine
+    container_name: ${ENV_PREFIX:-test}-redis
+    hostname: redis
+    profiles: [test]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "redis-cli", "ping"]
+    tmpfs:
+      - /data
+    networks:
+      - cinema-network
+
+  # ============================================================
+  # NATS (shared between profiles)
+  # ============================================================
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: ${ENV_PREFIX:-cinema}-nats
+    hostname: nats
+    profiles: [dev, test]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["--http_port", "8222", "-js"]
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+    networks:
+      - cinema-network
+
+  # ============================================================
+  # Microservices (shared between dev and test)
+  # ============================================================
 
   movie:
     build:
-      context: ../../../services/movie
-      dockerfile: ../../../platform/docker/go-service/Dockerfile
+      context: ../../..
+      dockerfile: platform/docker/go-service/Dockerfile
       args:
         SERVICE_NAME: movie
         SERVICE_PORT: 8000
-        VERSION: ${VERSION:-0.1.0}
-    image: ${REGISTRY:-docker.io/crizstian/cinema}/movie:${VERSION:-0.1.0}
-    container_name: movie
+    image: ${REGISTRY:-cinema}/movie:${VERSION:-dev}
+    container_name: ${ENV_PREFIX:-cinema}-movie
     hostname: movie
-    restart: on-failure
+    profiles: [dev, test]
     ports:
       - "8000:8000"
     environment:
-      <<: *common-env
-    depends_on:
-      mongo1:
-        condition: service_healthy
-      mongo2:
-        condition: service_healthy
-      mongo3:
-        condition: service_healthy
+      <<: [*mongo-env, *nats-env]
+      DB_SERVERS: "${MONGO_SERVERS:-mongo:27017}"
+      SERVICE_PORT: "8000"
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/ping | grep -q pong"]
     networks:
-      dc1:
-        ipv4_address: 10.7.0.6
+      - cinema-network
+
+  cinema:
+    build:
+      context: ../../..
+      dockerfile: platform/docker/go-service/Dockerfile
+      args:
+        SERVICE_NAME: cinema
+        SERVICE_PORT: 8085
+    image: ${REGISTRY:-cinema}/cinema:${VERSION:-dev}
+    container_name: ${ENV_PREFIX:-cinema}-cinema
+    hostname: cinema
+    profiles: [dev, test]
+    ports:
+      - "8085:8085"
+    environment:
+      <<: *nats-env
+      MONGO_URI: "mongodb://${MONGO_SERVERS:-mongo:27017}/?replicaSet=rs0"
+      MONGO_DB: "cinema"
+      PORT: "8085"
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/ping | grep -q pong"]
+    networks:
+      - cinema-network
+
+  user:
+    build:
+      context: ../../..
+      dockerfile: platform/docker/go-service/Dockerfile
+      args:
+        SERVICE_NAME: user
+        SERVICE_PORT: 8004
+    image: ${REGISTRY:-cinema}/user:${VERSION:-dev}
+    container_name: ${ENV_PREFIX:-cinema}-user
+    hostname: user
+    profiles: [dev, test]
+    ports:
+      - "8004:8004"
+    environment:
+      <<: [*mongo-env, *nats-env]
+      DB_SERVERS: "${MONGO_SERVERS:-mongo:27017}"
+      SERVICE_PORT: "8004"
+      JWT_SECRET: "${JWT_SECRET:-dev-secret-change-in-production}"
+      REDIS_URL: "redis://redis:6379"
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8004/ping | grep -q pong"]
+    networks:
+      - cinema-network
+
+  showtime:
+    build:
+      context: ../../..
+      dockerfile: platform/docker/go-service/Dockerfile
+      args:
+        SERVICE_NAME: showtime
+        SERVICE_PORT: 3003
+    image: ${REGISTRY:-cinema}/showtime:${VERSION:-dev}
+    container_name: ${ENV_PREFIX:-cinema}-showtime
+    hostname: showtime
+    profiles: [dev, test]
+    ports:
+      - "3003:3003"
+    environment:
+      <<: *nats-env
+      MONGO_URI: "mongodb://${MONGO_SERVERS:-mongo:27017}/?replicaSet=rs0"
+      MONGO_DB: "cinema"
+      PORT: "3003"
+      MOVIE_SERVICE_URL: "http://movie:8000"
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3003/ping | grep -q pong"]
+    networks:
+      - cinema-network
+
+  seat:
+    build:
+      context: ../../..
+      dockerfile: platform/docker/go-service/Dockerfile
+      args:
+        SERVICE_NAME: seat
+        SERVICE_PORT: 3004
+    image: ${REGISTRY:-cinema}/seat:${VERSION:-dev}
+    container_name: ${ENV_PREFIX:-cinema}-seat
+    hostname: seat
+    profiles: [dev, test]
+    ports:
+      - "3004:3004"
+    environment:
+      <<: *nats-env
+      MONGO_URI: "mongodb://${MONGO_SERVERS:-mongo:27017}/cinema_seats?replicaSet=rs0"
+      MONGO_DB: "cinema_seats"
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASS: ""
+      PORT: "3004"
+      HOLD_TTL_SECONDS: "300"
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3004/ping | grep -q pong"]
+    networks:
+      - cinema-network
 
   payment:
     build:
-      context: ../../../services/payment
-      dockerfile: ../../../platform/docker/go-service/Dockerfile
+      context: ../../..
+      dockerfile: platform/docker/go-service/Dockerfile
       args:
         SERVICE_NAME: payment
         SERVICE_PORT: 8000
-        VERSION: ${VERSION:-0.1.0}
-    image: ${REGISTRY:-docker.io/crizstian/cinema}/payment:${VERSION:-0.1.0}
-    container_name: payment
+    image: ${REGISTRY:-cinema}/payment:${VERSION:-dev}
+    container_name: ${ENV_PREFIX:-cinema}-payment
     hostname: payment
-    restart: on-failure
+    profiles: [dev, test]
     ports:
-      - "8100:8000"
+      - "8001:8000"
     environment:
-      <<: *common-env
-      STRIPE_PUBLIC: "pk_test_l10342hIODZmOJsBpY6GVPHj"
-      STRIPE_SECRET: "sk_test_lPPoJjmmbSjymtgo4r0O3z89"
-    depends_on:
-      mongo1:
-        condition: service_healthy
-      mongo2:
-        condition: service_healthy
-      mongo3:
-        condition: service_healthy
+      <<: [*mongo-env, *nats-env]
+      DB_SERVERS: "${MONGO_SERVERS:-mongo:27017}"
+      SERVICE_PORT: "8000"
+      STRIPE_PUBLIC: "pk_test_mock"
+      STRIPE_SECRET: "sk_test_mock"
+      STRIPE_MOCK: "true"
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/ping | grep -q pong"]
     networks:
-      dc1:
-        ipv4_address: 10.7.0.7
+      - cinema-network
 
   notification:
     build:
-      context: ../../../services/notification
-      dockerfile: ../../../platform/docker/go-service/Dockerfile
+      context: ../../..
+      dockerfile: platform/docker/go-service/Dockerfile
       args:
         SERVICE_NAME: notification
         SERVICE_PORT: 8000
-        VERSION: ${VERSION:-0.1.0}
-    image: ${REGISTRY:-docker.io/crizstian/cinema}/notification:${VERSION:-0.1.0}
-    container_name: notification
+    image: ${REGISTRY:-cinema}/notification:${VERSION:-dev}
+    container_name: ${ENV_PREFIX:-cinema}-notification
     hostname: notification
-    restart: on-failure
+    profiles: [dev, test]
     ports:
-      - "8200:8000"
+      - "8002:8000"
     environment:
+      <<: *nats-env
       SERVICE_PORT: "8000"
-      EMAIL: "your-email@gmail.com"
-      EMAIL_PASS: "your-password"
+      EMAIL: "${NOTIFICATION_EMAIL:-dev@cinema.local}"
+      EMAIL_PASS: "${NOTIFICATION_PASS:-dev-password}"
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/ping | grep -q pong"]
     networks:
-      dc1:
-        ipv4_address: 10.7.0.8
+      - cinema-network
 
   booking:
     build:
-      context: ../../../services/booking
-      dockerfile: ../../../platform/docker/go-service/Dockerfile
+      context: ../../..
+      dockerfile: platform/docker/go-service/Dockerfile
       args:
         SERVICE_NAME: booking
-        SERVICE_PORT: 8000
-        VERSION: ${VERSION:-0.1.0}
-    image: ${REGISTRY:-docker.io/crizstian/cinema}/booking:${VERSION:-0.1.0}
-    container_name: booking
+        SERVICE_PORT: 8082
+    image: ${REGISTRY:-cinema}/booking:${VERSION:-dev}
+    container_name: ${ENV_PREFIX:-cinema}-booking
     hostname: booking
-    restart: on-failure
+    profiles: [dev, test]
     ports:
-      - "8300:8000"
+      - "8082:8082"
     environment:
-      <<: *common-env
+      <<: [*mongo-env, *nats-env]
+      DB_SERVERS: "${MONGO_SERVERS:-mongo:27017}"
+      SERVICE_PORT: "8082"
       PAYMENT_URL: "http://payment:8000"
       NOTIFICATION_URL: "http://notification:8000"
-      ENABLE_TRACING: "false"
-    depends_on:
-      mongo1:
-        condition: service_healthy
-      mongo2:
-        condition: service_healthy
-      mongo3:
-        condition: service_healthy
+      SEAT_SERVICE_URL: "http://seat:3004"
+      SHOWTIME_SERVICE_URL: "http://showtime:3003"
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/ping | grep -q pong"]
     networks:
-      dc1:
-        ipv4_address: 10.7.0.9
+      - cinema-network
 
-# # Tracing and Metrics
-#   grafana:
-#     image: grafana/grafana
-#     ports:
-#       - 6000:3000
-#     environment:
-#       - GF_SECURITY_ADMIN_PASSWORD=secret
-#     links:
-#       - prometheus-server:prometheus
-#     volumes:
-#       - "./grafana/config.ini:/etc/grafana/config.ini"
-#       - "./grafana/provisioning:/etc/grafana/provisioning"
-#       - "./grafana/dashboards:/var/lib/grafana/dashboards"
-#     networks:
-#       dc1:
-#         ipv4_address: 10.7.0.18
+  # ============================================================
+  # E2E Test Runner (test profile only)
+  # ============================================================
 
-#   prometheus-server:
-#     image: prom/prometheus
-#     ports:
-#       - 9990:9090
-#     volumes:
-#       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-#     networks:
-#       dc1:
-#         ipv4_address: 10.7.0.19
-
-#   jaeger:
-#     image: jaegertracing/all-in-one:1.7
-#     command: "--log-level=debug"
-#     ports:
-#     - "6831:6831/udp"
-#     - "6832:6832/udp"
-#     - "16686:16686"
-#     networks:
-#       dc1:
-#         ipv4_address: 10.7.0.20
-
-#   golang:
-#     image: golang:alpine
-#     container_name: go-dev
-#     working_dir: /workspace
-#     command: tail -f /dev/null
-#     volumes:
-#       - ../../:/workspace
-#     tty: true
-#     networks:
-#       dc1:
-#         ipv4_address: 10.7.0.21
+  e2e-runner:
+    build:
+      context: ../../..
+      dockerfile: platform/docker/e2e-runner/Dockerfile
+    container_name: ${ENV_PREFIX:-test}-e2e-runner
+    profiles: [e2e]
+    environment:
+      GOWORK: "off"
+      USER_SERVICE_URL: "http://user:8004"
+      MOVIE_SERVICE_URL: "http://movie:8000"
+      CINEMA_SERVICE_URL: "http://cinema:8085"
+      SHOWTIME_SERVICE_URL: "http://showtime:3003"
+      SEAT_SERVICE_URL: "http://seat:3004"
+      PAYMENT_SERVICE_URL: "http://payment:8000"
+      BOOKING_SERVICE_URL: "http://booking:8082"
+      NOTIFICATION_SERVICE_URL: "http://notification:8000"
+    networks:
+      - cinema-network
 
 networks:
-  dc1:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 10.7.0.0/16
+  cinema-network:
+    name: cinema-${ENV_PREFIX:-dev}-network
 
-# ============================================================
-# Volúmenes - Persistencia de datos MongoDB
-# ============================================================
 volumes:
-  mongodb1_data:
+  mongo1_data:
     driver: local
-  mongodb1_config:
+  mongo2_data:
     driver: local
-  mongodb2_data:
+  mongo3_data:
     driver: local
-  mongodb2_config:
-    driver: local
-  mongodb3_data:
-    driver: local
-  mongodb3_config:
+  redis_data:
     driver: local
