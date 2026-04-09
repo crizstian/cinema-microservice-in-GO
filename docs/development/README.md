@@ -15,6 +15,15 @@
 5. [Code Style](#code-style)
 6. [Contributing](#contributing)
 
+## Quick Links
+
+| Resource | Description |
+|----------|-------------|
+| [dev:up Laboratory](./dev-up-laboratory.md) | Interactive tutorial for local development |
+| [Debugging Runbook](../operations/debugging-runbook.md) | Troubleshooting common issues |
+| [Performance Baseline](../operations/performance-baseline.md) | Latency and throughput benchmarks |
+| [ADR-006: dev:up vs test:e2e](../architecture/adr/ADR-006-dev-up-vs-test-e2e.md) | Environment profiles decision |
+
 ---
 
 ## Getting Started
@@ -337,9 +346,42 @@ task test:contract
 # E2E tests (starts full environment)
 task test:e2e
 
+# Run single E2E test
+task test:e2e:single TEST=Test01_UserRegistration
+
 # CI pipeline (lint + unit + coverage)
 task test:ci
+
+# Coverage threshold check (default 80%)
+task test:coverage
+task test:coverage THRESHOLD=70
+
+# OpenAPI snapshot tests
+task test:openapi
+task test:openapi:update  # Update snapshots
 ```
+
+### Development Utilities
+
+```bash
+# Environment management
+task dev:up          # Start dev environment (3 MongoDB replicas)
+task dev:down        # Stop and clean volumes
+task dev:status      # Show container status
+
+# Debugging
+task dev:shell SERVICE=booking  # Shell in container
+task dev:mongo                  # MongoDB shell
+task dev:redis                  # Redis CLI
+task dev:log SERVICE=booking    # Stream logs
+task dev:seed                   # Load seed data
+
+# Performance testing
+task perf:baseline   # Run k6 baseline tests
+task perf:stress     # Run stress tests
+```
+
+See [dev:up Laboratory Guide](./dev-up-laboratory.md) for detailed tutorials.
 
 ### Coverage Requirements
 
@@ -626,3 +668,13 @@ go clean -modcache
 - [Services Documentation](../services/README.md)
 - [API Documentation](../api/README.md)
 - [Operations Guide](../operations/README.md)
+
+### Development Guides
+
+- [dev:up Laboratory](./dev-up-laboratory.md) - Interactive tutorial for all dev:up use cases
+- [Debugging Runbook](../operations/debugging-runbook.md) - Quick troubleshooting guide
+- [Performance Baseline](../operations/performance-baseline.md) - Latency and throughput metrics
+
+### Architecture Decisions
+
+- [ADR-006: dev:up vs test:e2e](../architecture/adr/ADR-006-dev-up-vs-test-e2e.md) - Environment profiles

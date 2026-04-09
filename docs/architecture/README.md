@@ -420,6 +420,40 @@ Used for:
 - Better documentation
 - Enables contract testing
 
+### ADR-006: dev:up vs test:e2e Environment Profiles
+
+**Decision**: Separate Docker Compose profiles for development and testing.
+
+**Context**: Need different configurations for local dev vs CI/CD.
+
+**Details**: [ADR-006](./adr/ADR-006-dev-up-vs-test-e2e.md)
+
+### ADR-007: CI/CD Pipeline Chaining for Monorepo
+
+**Decision**: Use orchestrator + child pipeline pattern for CI/CD.
+
+**Context**: Need scalable CI/CD that supports thousands of services without N triggers.
+
+**Details**: [CI/CD Monorepo Strategy](./ci-monorepo-strategy.md)
+
+**Consequences**:
+- O(1) maintenance regardless of service count
+- Independent builds per service
+- Zero-config for new services
+- Centralized control of CI standards
+
+---
+
+## CI/CD Architecture
+
+For the complete CI/CD strategy documentation including:
+- Pipeline Chaining architecture
+- Orchestrator and Child pipeline flows
+- Scaling analysis
+- Multi-language support
+
+See: **[CI/CD Monorepo Strategy](./ci-monorepo-strategy.md)**
+
 ---
 
 ## Related Documentation

@@ -11,10 +11,17 @@
         "redhat.vscode-yaml",
         "humao.rest-client",
         "ms-vscode-remote.remote-containers",
-        "esbenp.prettier-vscode"
+        "esbenp.prettier-vscode",
+        "ShiftLeft.shiftleft-core"
       ],
       "settings": {
-        "terminal.integrated.defaultProfile.linux": "sh"
+        "terminal.integrated.defaultProfile.linux": "sh",
+        "shiftleft.analyzeOnSave": true,
+        "shiftleft.enableSecretsScan": true,
+        "shiftleft.enableSastScan": true,
+        "shiftleft.enableScaScan": true,
+        "shiftleft.severityFilter": "high",
+        "shiftleft.languages": ["go", "javascript", "typescript", "python"]
       },
       "mcp": {
         "servers": {
@@ -50,6 +57,8 @@
     }
   },
   "remoteEnv": {
+    "SHIFTLEFT_ACCESS_TOKEN": "${containerEnv:SHIFTLEFT_ACCESS_TOKEN}",
+    "SHIFTLEFT_ORG_ID": "${containerEnv:SHIFTLEFT_ORG_ID}",
     "HARNESS_API_KEY": "${containerEnv:HARNESS_API_KEY}",
     "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
     "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
@@ -65,7 +74,9 @@
     "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
     "GH_TOKEN": "${containerEnv:GH_TOKEN}",
     "GITHUB_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
-    "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}"
+    "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}",
+    "SHIFTLEFT_ACCESS_TOKEN": "${containerEnv:SHIFTLEFT_ACCESS_TOKEN}",
+    "SHIFTLEFT_ORG_ID": "${containerEnv:SHIFTLEFT_ORG_ID}"
   },
   "remoteUser": "devuser",
   "postCreateCommand": "sh /workspace/platform/scripts/devcontainer/post-create.sh",

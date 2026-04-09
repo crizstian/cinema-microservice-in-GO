@@ -18,6 +18,8 @@ print_banner "E2E TEST EXECUTION"
 # Set test environment
 export ENV_PREFIX=test
 export MONGO_SERVERS="mongo:27017"
+# Short TTL for hold expiration test (Test10)
+export HOLD_TTL_SECONDS=5
 
 # Clean start
 echo "Cleaning up previous containers..."
