@@ -1,0 +1,31 @@
+inputSet:
+  name: Full Pipeline
+  identifier: full_pipeline
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  description: Run both Validate and Build stages (for testing or demos)
+  pipeline:
+    identifier: CI_Golang_v2
+    properties:
+      ci:
+        codebase:
+          build:
+            type: branch
+            spec:
+              branch: <+input>
+    variables:
+      - name: RUN_MODE
+        type: String
+        value: full
+      - name: SERVICES
+        type: String
+        value: <+input>
+      - name: GO_VERSION
+        type: String
+        value: "1.24"
+      - name: COVERAGE_THRESHOLD
+        type: String
+        value: "80"
+      - name: VERSION_BUMP
+        type: String
+        value: <+input>

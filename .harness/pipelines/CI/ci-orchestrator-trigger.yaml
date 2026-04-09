@@ -1,0 +1,63 @@
+# ============================================================
+# Trigger - CI Orchestrator (Language Agnostic)
+# ============================================================
+# Unified trigger for ALL services in the monorepo.
+# Routes to the CI_Orchestrator which detects languages and
+# triggers appropriate child pipelines.
+#
+# Triggers on:
+# - PR Open: Starts validation (format, lint, test)
+# - PR Synchronize: Re-runs validation on new commits
+# - PR Reopen: Re-runs validation
+# - PR Closed: If merged, runs build & release
+#
+# Pattern: ^services/.+ (matches all services, any language)
+# ============================================================
+
+trigger:
+  name: ci-orchestrator-pr
+  identifier: ci_orchestrator_pr
+  enabled: true
+  description: "Triggers CI Orchestrator for all services on PR events (language agnostic)"
+  tags:
+    version: "1.0"
+    type: orchestrator
+
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  pipelineIdentifier: CI_Orchestrator
+
+  source:
+    type: Webhook
+    spec:
+      type: Github
+      spec:
+        type: PullRequest
+        spec:
+          connectorRef: CristianConnector
+          autoAbortPreviousExecutions: true
+          payloadConditions:
+            - key: changedFiles
+              operator: Regex
+              value: ^services/.+
+            - key: targetBranch
+              operator: In
+              value: main, step-1, monorepo
+          headerConditions: []
+          repoName: cinema-microservice-in-GO
+          actions:
+            - Open
+            - Reopen
+            - Synchronize
+            - Close
+
+  inputYaml: |
+    pipeline:
+      identifier: CI_Orchestrator
+      properties:
+        ci:
+          codebase:
+            build:
+              type: PR
+              spec:
+                number: <+trigger.prNumber>
