@@ -1,0 +1,28 @@
+inputSet:
+  name: Validate Service
+  identifier: validate_service
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  description: Run code quality, security scans, and tests for selected services
+  pipeline:
+    identifier: CI_Golang_v2
+    properties:
+      ci:
+        codebase:
+          build:
+            type: branch
+            spec:
+              branch: <+input>
+    variables:
+      - name: RUN_MODE
+        type: String
+        value: validate
+      - name: SERVICES
+        type: String
+        value: <+input>
+      - name: GO_VERSION
+        type: String
+        value: "1.24"
+      - name: COVERAGE_THRESHOLD
+        type: String
+        value: "80"

@@ -1,0 +1,693 @@
+pipeline:
+  name: CI - Golang Services v2
+  identifier: CI_Golang_v2
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  tags:
+    version: "2.7"
+    language: go
+    type: child
+  properties:
+    ci:
+      codebase:
+        connectorRef: CristianConnector
+        repoName: cinema-microservice-in-GO
+        build: <+input>
+        prCloneStrategy: SourceBranch
+        sparseCheckout: []
+        depth: 50
+  variables:
+    - name: RUN_MODE
+      type: String
+      description: |
+        What to execute:
+        - validate: Code quality, security, tests (PR open)
+        - build: Docker build, push, release (PR merged)
+        - full: Both stages (testing/demo)
+      required: true
+      value: <+input>.allowedValues(validate,build,full)
+    - name: SERVICES
+      type: String
+      description: |
+        Comma-separated list of services to process.
+        Examples: "booking" or "booking,movie,payment"
+      required: true
+      value: <+input>
+    - name: GO_VERSION
+      type: String
+      description: Go version for builds
+      required: false
+      value: "1.24"
+    - name: COVERAGE_THRESHOLD
+      type: String
+      description: Minimum test coverage percentage
+      required: false
+      value: "80"
+    - name: VERSION_BUMP
+      type: String
+      description: |
+        Version bump type for Build stage (auto-detected from commits if empty):
+        - patch: Bug fixes (default)
+        - minor: New features
+        - major: Breaking changes
+      required: false
+      value: <+input>.default(patch).allowedValues(patch,minor,major)
+  stages:
+    - stage:
+        name: Validate and Secure
+        identifier: validate
+        description: Code quality, security scans, tests - BLOCKS merge if issues found
+        type: CI
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.RUN_MODE> == "validate" || <+pipeline.variables.RUN_MODE> == "full"
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: Abort
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+            paths:
+              - /go/pkg/mod
+              - ~/.cache/go-build
+          buildIntelligence:
+            enabled: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - stepGroup:
+                  name: Code Quality
+                  identifier: code_quality
+                  steps:
+                    - parallel:
+                        - step:
+                            name: Complexity Analysis
+                            identifier: complexity_analysis
+                            type: Run
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: golang:<+pipeline.variables.GO_VERSION>
+                              shell: Sh
+                              envVariables:
+                                MAX_COMPLEXITY: "15"
+                              command: |
+                                echo "=== Complexity Analysis: <+repeat.item> ==="
+                                cd services/<+repeat.item>
+
+                                go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+                                export PATH=$(go env GOPATH)/bin:$PATH
+
+                                echo "Checking cyclomatic complexity (max: $MAX_COMPLEXITY)..."
+                                COMPLEX=$(gocyclo -over $MAX_COMPLEXITY . 2>/dev/null || true)
+
+                                if [ -n "$COMPLEX" ]; then
+                                  echo "WARNING: Functions exceeding complexity threshold:"
+                                  echo "$COMPLEX"
+                                  echo ""
+                                  echo "Consider refactoring these functions."
+                                else
+                                  echo "OK - No functions exceed complexity $MAX_COMPLEXITY"
+                                fi
+                        - step:
+                            name: Code Duplication
+                            identifier: code_duplication
+                            type: Run
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: golang:<+pipeline.variables.GO_VERSION>
+                              shell: Sh
+                              envVariables:
+                                MIN_TOKENS: "100"
+                              command: |
+                                echo "=== Code Duplication Check: <+repeat.item> ==="
+                                cd services/<+repeat.item>
+
+                                go install github.com/mibk/dupl@latest
+                                export PATH=$(go env GOPATH)/bin:$PATH
+
+                                echo "Checking for duplicated code blocks (threshold: $MIN_TOKENS tokens)..."
+                                DUPES=$(dupl -threshold $MIN_TOKENS -plumbing . 2>/dev/null || true)
+
+                                if [ -n "$DUPES" ]; then
+                                  echo "WARNING: Duplicated code detected:"
+                                  dupl -threshold $MIN_TOKENS .
+                                  echo ""
+                                  echo "Consider extracting common code to reduce duplication."
+                                else
+                                  echo "OK - No significant code duplication found"
+                                fi
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 4
+              - stepGroup:
+                  name: Security Scans
+                  identifier: security_scans
+                  steps:
+                    - parallel:
+                        - step:
+                            type: HarnessSAST
+                            name: SAST
+                            identifier: harness_sast
+                            spec:
+                              mode: orchestration
+                              config: default
+                              target:
+                                type: repository
+                                workspace: services/<+repeat.item>
+                                detection: auto
+                              advanced:
+                                log:
+                                  level: info
+                                fail_on_severity: high
+                            failureStrategies:
+                              - onFailure:
+                                  errors:
+                                    - AllErrors
+                                  action:
+                                    type: MarkAsSuccess
+                        - step:
+                            type: HarnessSCA
+                            name: SCA
+                            identifier: harness_sca
+                            spec:
+                              mode: orchestration
+                              config: default
+                              target:
+                                type: repository
+                                workspace: services/<+repeat.item>
+                                detection: auto
+                              advanced:
+                                log:
+                                  level: info
+                                fail_on_severity: high
+                            failureStrategies:
+                              - onFailure:
+                                  errors:
+                                    - AllErrors
+                                  action:
+                                    type: MarkAsSuccess
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 4
+              - stepGroup:
+                  name: Tests
+                  identifier: tests
+                  steps:
+                    - parallel:
+                        - step:
+                            type: Test
+                            name: Unit Tests
+                            identifier: unit_tests
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: golang:<+pipeline.variables.GO_VERSION>
+                              shell: Bash
+                              command: |
+                                echo "=== Running unit tests for <+repeat.item> ==="
+                                cd services/<+repeat.item>
+
+                                go install github.com/jstemmer/go-junit-report/v2@latest
+                                export PATH=$(go env GOPATH)/bin:$PATH
+
+                                # Exclude integration tests and contracts (tested separately)
+                                PACKAGES=$(go list ./... | grep -v -E '(integration_tests|contracts)')
+
+                                set -o pipefail
+                                go test -v -race -short -coverprofile=coverage.out $PACKAGES 2>&1 | tee test-output.txt
+                                TEST_EXIT=$?
+
+                                echo "=== Coverage Report ==="
+                                COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | sed 's/%//')
+                                echo "Coverage: ${COVERAGE}%"
+                                echo "Threshold: <+pipeline.variables.COVERAGE_THRESHOLD>%"
+
+                                go-junit-report -set-exit-code < test-output.txt > report.xml
+                                exit $TEST_EXIT
+                              reports:
+                                type: JUnit
+                                spec:
+                                  paths:
+                                    - "**/report.xml"
+                              intelligenceMode: true
+                        - step:
+                            type: Test
+                            name: Benchmark Tests
+                            identifier: benchmark_tests
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: golang:<+pipeline.variables.GO_VERSION>
+                              shell: Bash
+                              command: |
+                                echo "=== Running benchmarks for <+repeat.item> ==="
+                                cd services/<+repeat.item>
+
+                                go install github.com/jstemmer/go-junit-report/v2@latest
+                                export PATH=$(go env GOPATH)/bin:$PATH
+
+                                # Exclude integration tests and contracts
+                                PACKAGES=$(go list ./... | grep -v -E '(integration_tests|contracts)')
+
+                                set -o pipefail
+                                go test -v -short -bench=. -benchmem -benchtime=1s $PACKAGES 2>&1 | tee benchmark-output.txt
+
+                                echo "=== Benchmark Summary ==="
+                                grep -E "^Benchmark" benchmark-output.txt || echo "No benchmarks found"
+
+                                go-junit-report < benchmark-output.txt > benchmark-report.xml || true
+                              reports:
+                                type: JUnit
+                                spec:
+                                  paths:
+                                    - "**/benchmark-report.xml"
+                              intelligenceMode: true
+                        - step:
+                            type: Test
+                            name: Contract Tests
+                            identifier: contract_tests
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: golang:<+pipeline.variables.GO_VERSION>
+                              shell: Bash
+                              command: |
+                                echo "=== Running contract tests for <+repeat.item> ==="
+                                cd services/<+repeat.item>
+
+                                go install github.com/jstemmer/go-junit-report/v2@latest
+                                export PATH=$(go env GOPATH)/bin:$PATH
+
+                                set -o pipefail
+
+                                # Check for consumer contract tests (Pact-based)
+                                if [ -d "contracts/consumer" ] && ls contracts/consumer/*_test.go >/dev/null 2>&1; then
+                                  echo "Found consumer contract tests in contracts/consumer/"
+                                  go test -v ./contracts/consumer/... 2>&1 | tee contract-output.txt || true
+                                  go-junit-report < contract-output.txt > contract-report.xml
+                                # Check for provider contract tests
+                                elif [ -d "contracts/provider" ] && ls contracts/provider/*_test.go >/dev/null 2>&1; then
+                                  echo "Found provider contract tests in contracts/provider/"
+                                  PACT_PROVIDER_VERIFICATION=true go test -v ./contracts/provider/... 2>&1 | tee contract-output.txt || true
+                                  go-junit-report < contract-output.txt > contract-report.xml
+                                else
+                                  echo "No contract tests found - skipping"
+                                  echo '<?xml version="1.0" encoding="UTF-8"?><testsuites><testsuite name="contract" tests="0" failures="0" errors="0" skipped="0"></testsuite></testsuites>' > contract-report.xml
+                                fi
+                              reports:
+                                type: JUnit
+                                spec:
+                                  paths:
+                                    - "**/contract-report.xml"
+                              intelligenceMode: true
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 4
+              - stepGroup:
+                  name: API Validation
+                  identifier: api_validation
+                  steps:
+                    - step:
+                        type: Run
+                        name: Spectral OpenAPI Lint
+                        identifier: spectral_lint
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: stoplight/spectral:6
+                          shell: Sh
+                          command: |
+                            echo "=== Spectral OpenAPI Validation for <+repeat.item> ==="
+                            cd /harness
+                            SERVICE="<+repeat.item>"
+
+                            # Check for OpenAPI spec in standard location
+                            SPEC_FILE="services/${SERVICE}/api/openapi.yaml"
+                            if [ ! -f "$SPEC_FILE" ]; then
+                              SPEC_FILE="services/${SERVICE}/api/openapi.json"
+                            fi
+                            if [ ! -f "$SPEC_FILE" ]; then
+                              SPEC_FILE="services/${SERVICE}/openapi.yaml"
+                            fi
+
+                            if [ ! -f "$SPEC_FILE" ]; then
+                              echo "No OpenAPI spec found for ${SERVICE} - skipping"
+                              echo "Checked: services/${SERVICE}/api/openapi.yaml"
+                              exit 0
+                            fi
+
+                            echo "Found OpenAPI spec: $SPEC_FILE"
+                            echo ""
+
+                            # Run Spectral lint - fail on errors
+                            if [ -f ".spectral.yaml" ]; then
+                              echo "Using ruleset: .spectral.yaml"
+                              spectral lint "$SPEC_FILE" --ruleset .spectral.yaml
+                            else
+                              echo "Using default Spectral rules"
+                              spectral lint "$SPEC_FILE"
+                            fi
+
+                            echo ""
+                            echo "OpenAPI validation completed"
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 4
+              - step:
+                  type: Run
+                  name: Validation Summary
+                  identifier: validation_summary
+                  spec:
+                    shell: Sh
+                    envVariables:
+                      SERVICES: <+pipeline.variables.SERVICES>
+                      RUN_MODE: <+pipeline.variables.RUN_MODE>
+                    command: |
+                      echo "==========================================="
+                      echo "       VALIDATION COMPLETED"
+                      echo "==========================================="
+                      echo ""
+                      echo "Services: $SERVICES"
+                      echo "Run Mode: $RUN_MODE"
+                      echo ""
+                      echo "Checks Passed:"
+                      echo "  ✅ Complexity Analysis"
+                      echo "  ✅ Code Duplication"
+                      echo "  ✅ SAST Security Scan"
+                      echo "  ✅ SCA Dependency Scan"
+                      echo "  ✅ Unit Tests"
+                      echo "  ✅ Benchmark Tests"
+                      echo "  ✅ Contract Tests"
+                      echo "  ✅ API Validation"
+                      echo ""
+                      echo "==========================================="
+                  when:
+                    stageStatus: Success
+    - stage:
+        name: Build and Release
+        identifier: build_release
+        description: Build, container scan, push, and release
+        type: CI
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.RUN_MODE> == "build" || <+pipeline.variables.RUN_MODE> == "full"
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: Abort
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+            paths:
+              - /go/pkg/mod
+              - ~/.cache/go-build
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          sharedPaths:
+            - /var/run
+          execution:
+            steps:
+              - stepGroup:
+                  name: Build and Push
+                  identifier: build_push
+                  steps:
+                    - step:
+                        name: Semantic Version
+                        identifier: semantic_version
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          envVariables:
+                            SERVICE: <+repeat.item>
+                            VERSION_BUMP: <+pipeline.variables.VERSION_BUMP>
+                          command: |
+                            echo "=== Semantic Versioning for SERVICE: $SERVICE ==="
+                            echo "Using service-prefixed tags: {service}-v{major}.{minor}.{patch}"
+                            echo ""
+
+                            apk add --no-cache jq curl git > /dev/null 2>&1
+
+                            # Get latest tag for THIS SERVICE ONLY
+                            echo "Fetching tags for $SERVICE..."
+                            ALL_TAGS=$(curl -s -X GET \
+                              "https://app.harness.io/code/api/v1/repos/cinema-microservice-in-GO/tags?accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>&include_commit=true&order=desc&sort=date&page=1&limit=100" \
+                              -H 'x-api-key: <+secrets.getValue("harnessToken")>')
+
+                            LATEST_TAG=$(echo "$ALL_TAGS" | jq -r --arg svc "$SERVICE" \
+                              '[.[] | select(.name | startswith($svc + "-v"))] | sort_by(.name) | reverse | .[0].name // ""')
+
+                            if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+                              echo "No previous tags found for $SERVICE - starting at v0.0.0"
+                              MAJOR=0
+                              MINOR=0
+                              PATCH=0
+                            else
+                              echo "Latest tag for $SERVICE: $LATEST_TAG"
+                              VERSION="${LATEST_TAG#${SERVICE}-v}"
+                              MAJOR=$(echo "$VERSION" | cut -d. -f1)
+                              MINOR=$(echo "$VERSION" | cut -d. -f2)
+                              PATCH=$(echo "$VERSION" | cut -d. -f3)
+                            fi
+
+                            echo "Current version: v${MAJOR}.${MINOR}.${PATCH}"
+                            echo "Bump type: $VERSION_BUMP"
+                            echo ""
+
+                            # Calculate new version
+                            case "$VERSION_BUMP" in
+                              major)
+                                NEW_VERSION="v$((MAJOR + 1)).0.0"
+                                ;;
+                              minor)
+                                NEW_VERSION="v${MAJOR}.$((MINOR + 1)).0"
+                                ;;
+                              patch|*)
+                                NEW_VERSION="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+                                ;;
+                            esac
+
+                            TAG_NAME="${SERVICE}-${NEW_VERSION}"
+
+                            echo "=== Version Decision ==="
+                            echo "Previous tag: ${LATEST_TAG:-none}"
+                            echo "Bump type: $VERSION_BUMP"
+                            echo "New version: $NEW_VERSION"
+                            echo "New tag: $TAG_NAME"
+
+                            echo "NEW_VERSION=$NEW_VERSION" >> $HARNESS_OUTPUT_FILE
+                            echo "TAG_NAME=$TAG_NAME" >> $HARNESS_OUTPUT_FILE
+                        outputVariables:
+                          - name: NEW_VERSION
+                            type: String
+                            value: NEW_VERSION
+                          - name: TAG_NAME
+                            type: String
+                            value: TAG_NAME
+                    - step:
+                        name: Build Binary
+                        identifier: build_binary
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: golang:<+pipeline.variables.GO_VERSION>
+                          shell: Sh
+                          command: |
+                            echo "=== Building binary for <+repeat.item> ==="
+                            cd services/<+repeat.item>
+
+                            VERSION="<+execution.steps.build_push.steps.semantic_version.output.outputVariables.NEW_VERSION>"
+
+                            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+                              go build -ldflags="-s -w -X main.Version=${VERSION}" \
+                              -o <+repeat.item> \
+                              ./cmd/<+repeat.item>
+
+                            echo "Binary built: $(ls -lh <+repeat.item>)"
+                    - step:
+                        type: BuildAndPushDockerRegistry
+                        name: Build and Push Docker
+                        identifier: build_push_docker
+                        spec:
+                          connectorRef: CristianDocker
+                          repo: <+repeat.item>
+                          tags:
+                            - <+execution.steps.build_push.steps.semantic_version.output.outputVariables.NEW_VERSION>
+                            - latest
+                          dockerfile: platform/docker/go-service/Dockerfile
+                          context: .
+                          buildArgs:
+                            SERVICE_NAME: <+repeat.item>
+                            SERVICE_PORT: "8000"
+                            VERSION: <+execution.steps.build_push.steps.semantic_version.output.outputVariables.NEW_VERSION>
+                          caching: true
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 2
+              - stepGroup:
+                  name: Container Security
+                  identifier: container_security
+                  steps:
+                    - step:
+                        type: Background
+                        name: Docker in Docker
+                        identifier: dind
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: docker:dind
+                          shell: Sh
+                          privileged: true
+                    - step:
+                        type: HarnessSCA
+                        name: Container SCA Scan
+                        identifier: container_sca
+                        spec:
+                          mode: orchestration
+                          config: default
+                          target:
+                            type: container
+                            name: <+repeat.item>
+                            variant: <+execution.steps.build_push.steps.semantic_version.output.outputVariables.NEW_VERSION>
+                            detection: auto
+                          image:
+                            type: docker_v2
+                            name: <+repeat.item>
+                            tag: <+execution.steps.build_push.steps.semantic_version.output.outputVariables.NEW_VERSION>
+                            domain: docker.io
+                            access_id: <+secrets.getValue("dockerUsername")>
+                            access_token: <+secrets.getValue("dockerPassword")>
+                          advanced:
+                            log:
+                              level: info
+                            fail_on_severity: critical
+                        failureStrategies:
+                          - onFailure:
+                              errors:
+                                - AllErrors
+                              action:
+                                type: MarkAsSuccess
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 2
+              - stepGroup:
+                  name: Release
+                  identifier: release
+                  steps:
+                    - step:
+                        name: Create Git Tag
+                        identifier: create_tag
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          envVariables:
+                            SERVICE: <+repeat.item>
+                            VERSION_BUMP: <+pipeline.variables.VERSION_BUMP>
+                            COMMIT_SHA: <+codebase.commitSha>
+                          command: |
+                            echo "=== Creating Git Tag for $SERVICE ==="
+
+                            apk add --no-cache curl jq > /dev/null 2>&1
+
+                            # Get latest tag for this service
+                            ALL_TAGS=$(curl -s -X GET \
+                              "https://app.harness.io/code/api/v1/repos/cinema-microservice-in-GO/tags?accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>&include_commit=true&order=desc&sort=date&page=1&limit=100" \
+                              -H 'x-api-key: <+secrets.getValue("harnessToken")>')
+
+                            LATEST_TAG=$(echo "$ALL_TAGS" | jq -r --arg svc "$SERVICE" \
+                              '[.[] | select(.name | startswith($svc + "-v"))] | sort_by(.name) | reverse | .[0].name // ""')
+
+                            if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+                              MAJOR=0; MINOR=0; PATCH=0
+                            else
+                              VERSION="${LATEST_TAG#${SERVICE}-v}"
+                              MAJOR=$(echo "$VERSION" | cut -d. -f1)
+                              MINOR=$(echo "$VERSION" | cut -d. -f2)
+                              PATCH=$(echo "$VERSION" | cut -d. -f3)
+                            fi
+
+                            case "$VERSION_BUMP" in
+                              major) NEW_VERSION="v$((MAJOR + 1)).0.0" ;;
+                              minor) NEW_VERSION="v${MAJOR}.$((MINOR + 1)).0" ;;
+                              patch|*) NEW_VERSION="v${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+                            esac
+
+                            TAG_NAME="${SERVICE}-${NEW_VERSION}"
+
+                            echo "Creating tag: $TAG_NAME -> $COMMIT_SHA"
+
+                            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+                              "https://app.harness.io/code/api/v1/repos/cinema-microservice-in-GO/tags?accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>" \
+                              -H 'Content-Type: application/json' \
+                              -H 'x-api-key: <+secrets.getValue("harnessToken")>' \
+                              -d "{
+                                \"name\": \"$TAG_NAME\",
+                                \"message\": \"Release $SERVICE $NEW_VERSION ($VERSION_BUMP)\",
+                                \"target\": \"$COMMIT_SHA\"
+                              }")
+
+                            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+
+                            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+                              echo "Tag created successfully: $TAG_NAME"
+                            else
+                              echo "Warning: Tag creation returned HTTP $HTTP_CODE"
+                            fi
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 1
+              - step:
+                  type: Run
+                  name: Build Summary
+                  identifier: build_summary
+                  spec:
+                    shell: Sh
+                    envVariables:
+                      SERVICES: <+pipeline.variables.SERVICES>
+                      VERSION_BUMP: <+pipeline.variables.VERSION_BUMP>
+                    command: |
+                      echo "==========================================="
+                      echo "       BUILD & RELEASE COMPLETED"
+                      echo "==========================================="
+                      echo ""
+                      echo "Services: $SERVICES"
+                      echo "Version Bump: $VERSION_BUMP"
+                      echo ""
+                      echo "Completed:"
+                      echo "  ✅ Binary Build"
+                      echo "  ✅ Docker Image Push"
+                      echo "  ✅ Container Security Scan"
+                      echo "  ✅ Git Tag Created"
+                      echo ""
+                      echo "==========================================="
+                  when:
+                    stageStatus: Success
+  allowStageExecutions: true

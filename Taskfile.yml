@@ -2,112 +2,64 @@
 version: "3"
 
 vars:
-  REGISTRY: '{{.REGISTRY | default "docker.io/crizstian/cinema"}}'
-  VERSION:
-    sh: cat VERSION 2>/dev/null || echo "0.0.0-dev"
-  COMMIT_SHA:
-    sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
-  BUILD_DATE:
-    sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
-  SERVICES:
-    sh: ls -d services/*/go.mod 2>/dev/null | xargs -I{} dirname {} | xargs -I{} basename {} | tr '\n' ' ' | sed 's/ $//'
-  SCRIPTS_DIR: platform/scripts/taskfile
-  COMPOSE_FILE: platform/deploy/docker-compose/docker-compose.yml
+  SCRIPTS: platform/scripts/taskfile
+  COMPOSE: platform/deploy/docker-compose/docker-compose.yml
 
 tasks:
-  # ============================================================
   # BUILD
-  # ============================================================
-
   build:
     desc: "Build Docker image: task build SERVICE=booking"
-    vars:
-      SERVICE: '{{.SERVICE | default "booking"}}'
-      TAG: "{{.TAG | default .VERSION}}"
-    env:
-      DOCKER_BUILDKIT: "1"
-    cmds:
-      - |
-        docker build \
-          --file platform/docker/go-service/Dockerfile \
-          --build-arg SERVICE_NAME={{.SERVICE}} \
-          --build-arg SERVICE_PORT=8000 \
-          --build-arg VERSION={{.TAG}} \
-          --build-arg BUILD_DATE={{.BUILD_DATE}} \
-          --build-arg COMMIT_SHA={{.COMMIT_SHA}} \
-          --tag {{.REGISTRY}}/{{.SERVICE}}:{{.TAG}} \
-          --tag {{.REGISTRY}}/{{.SERVICE}}:latest \
-          .
+    cmds: ["{{.SCRIPTS}}/build.sh {{.SERVICE | default \"booking\"}}"]
 
   build:all:
     desc: "Build all service Docker images"
-    cmds:
-      - for: { var: SERVICES, split: " " }
-        task: build
-        vars:
-          SERVICE: "{{.ITEM}}"
+    cmds: ["{{.SCRIPTS}}/build-all.sh"]
 
-  # ============================================================
   # DEV ENVIRONMENT
-  # ============================================================
-
   dev:up:
-    desc: "Start dev environment (3 MongoDB replicas)"
-    env:
-      ENV_PREFIX: dev
-      MONGO_SERVERS: "mongo1:27017,mongo2:27017,mongo3:27017"
-    cmds:
-      - docker compose -f {{.COMPOSE_FILE}} --profile dev up -d --build
-      - echo "Waiting for services to be healthy..."
-      - sleep 15
-      - docker compose -f {{.COMPOSE_FILE}} --profile dev ps
+    desc: "Start dev environment"
+    cmds: ["{{.SCRIPTS}}/dev-up.sh"]
 
   dev:down:
-    desc: "Stop all containers and clean volumes"
-    cmds:
-      - docker compose -f {{.COMPOSE_FILE}} --profile dev down -v
+    desc: "Stop containers and clean volumes"
+    cmds: ["{{.SCRIPTS}}/dev-down.sh"]
 
-  dev:log:
-    desc: "Stream logs: task dev:log [SERVICE=booking]"
-    vars:
-      SERVICE: '{{.SERVICE | default ""}}'
-    cmds:
-      - docker compose -f {{.COMPOSE_FILE}} --profile dev logs -f {{.SERVICE}}
+  dev:logs:
+    desc: "Stream logs: task dev:logs SERVICE=booking"
+    cmds: ["docker compose -f {{.COMPOSE}} --profile dev logs -f {{.SERVICE | default \"\"}}"]
 
-  dev:clean:
-    desc: "Remove project Docker images and build cache"
-    cmds:
-      - docker images --filter "reference={{.REGISTRY}}/*" -q | xargs -r docker rmi -f
-      - docker builder prune -f
+  dev:status:
+    desc: "Show container status"
+    cmds: ["docker compose -f {{.COMPOSE}} --profile dev ps -a"]
 
-  # ============================================================
   # TEST
-  # ============================================================
-
   test:
     desc: "Run unit tests: task test SERVICE=booking"
-    vars:
-      SERVICE: '{{.SERVICE | default "booking"}}'
-    cmds:
-      - "{{.SCRIPTS_DIR}}/test-unit.sh {{.SERVICE}}"
+    cmds: ["{{.SCRIPTS}}/test-unit.sh {{.SERVICE | default \"booking\"}}"]
 
   test:all:
     desc: "Run unit tests for all services"
-    cmds:
-      - "{{.SCRIPTS_DIR}}/test-unit-all.sh"
-
-  test:contract:
-    desc: "Run Pact contract tests (consumer + provider)"
-    cmds:
-      - "{{.SCRIPTS_DIR}}/contract-consumer.sh"
-      - "{{.SCRIPTS_DIR}}/contract-verify.sh"
+    cmds: ["{{.SCRIPTS}}/test-unit-all.sh"]
 
   test:e2e:
-    desc: "Run E2E tests (starts full environment)"
+    desc: "Run E2E tests"
+    cmds: ["{{.SCRIPTS}}/test-e2e.sh"]
+
+  test:contract:
+    desc: "Run Pact contract tests"
     cmds:
-      - "{{.SCRIPTS_DIR}}/test-e2e.sh"
+      - "{{.SCRIPTS}}/contract-consumer.sh"
+      - "{{.SCRIPTS}}/contract-verify.sh"
 
   test:ci:
-    desc: "CI pipeline: lint + unit + contracts + coverage"
-    cmds:
-      - "{{.SCRIPTS_DIR}}/test-ci.sh"
+    desc: "CI: lint + unit + contracts + coverage"
+    cmds: ["{{.SCRIPTS}}/test-ci.sh"]
+
+  test:coverage:
+    desc: "Check coverage: task test:coverage THRESHOLD=80"
+    cmds: ["{{.SCRIPTS}}/test-coverage.sh {{.THRESHOLD | default \"80\"}}"]
+
+  # PIPELINE
+  pipeline:run:
+    desc: "Run CI pipeline: task pipeline:run SERVICES=booking RUN_MODE=validate"
+    cmds: ["{{.SCRIPTS}}/pipeline-run.sh {{.SERVICES | default \"booking\"}} {{.RUN_MODE | default \"validate\"}} {{.BRANCH | default \"step-1\"}}"]

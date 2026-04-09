@@ -4,8 +4,11 @@
 # Unified compose file with profiles for dev and test environments.
 #
 # Profiles:
-#   - dev:  3 MongoDB replicas, persistent volumes (production-like)
-#   - test: 1 MongoDB node, tmpfs (fast, ephemeral)
+#   - dev:   3 MongoDB replicas, persistent volumes (production-like)
+#   - test:  1 MongoDB node, tmpfs (fast, ephemeral)
+#   - debug: Dev profile + debug ports exposed
+#   - perf:  Dev profile optimized for performance testing
+#   - e2e:   E2E test runner container
 #
 # Usage:
 #   task dev:up          # Start dev environment
@@ -16,6 +19,8 @@
 #   docker compose --profile dev up -d
 #   docker compose --profile test up -d
 #   docker compose --profile test --profile e2e up
+#   docker compose --profile debug up -d   # With debug ports
+#   docker compose --profile perf up -d    # For load testing
 # ============================================================
 
 x-healthcheck: &healthcheck
@@ -48,7 +53,7 @@ services:
     image: mongo:8.0
     container_name: ${ENV_PREFIX:-dev}-mongo1
     hostname: mongo1
-    profiles: [dev]
+    profiles: [dev, debug, perf]
     command: mongod --replSet rs0 --bind_ip_all
     ports:
       - "27017:27017"
@@ -64,7 +69,7 @@ services:
     image: mongo:8.0
     container_name: ${ENV_PREFIX:-dev}-mongo2
     hostname: mongo2
-    profiles: [dev]
+    profiles: [dev, debug, perf]
     command: mongod --replSet rs0 --bind_ip_all
     ports:
       - "27018:27017"
@@ -80,7 +85,7 @@ services:
     image: mongo:8.0
     container_name: ${ENV_PREFIX:-dev}-mongo3
     hostname: mongo3
-    profiles: [dev]
+    profiles: [dev, debug, perf]
     command: mongod --replSet rs0 --bind_ip_all
     ports:
       - "27019:27017"
@@ -97,7 +102,7 @@ services:
       context: ../../docker/mongodb
       dockerfile: Dockerfile
     container_name: ${ENV_PREFIX:-dev}-mongo-init
-    profiles: [dev]
+    profiles: [dev, debug, perf]
     environment:
       MONGO_HOST: mongo1
       REPLICA_SET: rs0
@@ -159,7 +164,7 @@ services:
     image: redis:7-alpine
     container_name: ${ENV_PREFIX:-dev}-redis
     hostname: redis
-    profiles: [dev]
+    profiles: [dev, debug, perf]
     ports:
       - "6379:6379"
     healthcheck:
@@ -193,7 +198,7 @@ services:
     image: nats:2.10-alpine
     container_name: ${ENV_PREFIX:-cinema}-nats
     hostname: nats
-    profiles: [dev, test]
+    profiles: [dev, test, debug, perf]
     ports:
       - "4222:4222"
       - "8222:8222"
@@ -218,7 +223,7 @@ services:
     image: ${REGISTRY:-cinema}/movie:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-movie
     hostname: movie
-    profiles: [dev, test]
+    profiles: [dev, test, debug, perf]
     ports:
       - "8000:8000"
     environment:
@@ -227,7 +232,7 @@ services:
       SERVICE_PORT: "8000"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || wget -qO- http://localhost:8000/ping | grep -q pong"]
     networks:
       - cinema-network
 
@@ -241,7 +246,7 @@ services:
     image: ${REGISTRY:-cinema}/cinema:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-cinema
     hostname: cinema
-    profiles: [dev, test]
+    profiles: [dev, test, debug, perf]
     ports:
       - "8085:8085"
     environment:
@@ -251,7 +256,7 @@ services:
       PORT: "8085"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/health || wget -qO- http://localhost:8085/ping | grep -q pong"]
     networks:
       - cinema-network
 
@@ -265,7 +270,7 @@ services:
     image: ${REGISTRY:-cinema}/user:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-user
     hostname: user
-    profiles: [dev, test]
+    profiles: [dev, test, debug, perf]
     ports:
       - "8004:8004"
     environment:
@@ -276,7 +281,7 @@ services:
       REDIS_URL: "redis://redis:6379"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8004/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8004/health || wget -qO- http://localhost:8004/ping | grep -q pong"]
     networks:
       - cinema-network
 
@@ -290,7 +295,7 @@ services:
     image: ${REGISTRY:-cinema}/showtime:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-showtime
     hostname: showtime
-    profiles: [dev, test]
+    profiles: [dev, test, debug, perf]
     ports:
       - "3003:3003"
     environment:
@@ -301,7 +306,7 @@ services:
       MOVIE_SERVICE_URL: "http://movie:8000"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3003/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3003/health || wget -qO- http://localhost:3003/ping | grep -q pong"]
     networks:
       - cinema-network
 
@@ -315,7 +320,7 @@ services:
     image: ${REGISTRY:-cinema}/seat:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-seat
     hostname: seat
-    profiles: [dev, test]
+    profiles: [dev, test, debug, perf]
     ports:
       - "3004:3004"
     environment:
@@ -325,10 +330,11 @@ services:
       REDIS_ADDR: "redis:6379"
       REDIS_PASS: ""
       PORT: "3004"
-      HOLD_TTL_SECONDS: "300"
+      # TTL: 300s for dev, 5s for test (allows Test10_HoldExpiration to run)
+      HOLD_TTL_SECONDS: "${HOLD_TTL_SECONDS:-300}"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3004/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3004/health || wget -qO- http://localhost:3004/ping | grep -q pong"]
     networks:
       - cinema-network
 
@@ -342,7 +348,7 @@ services:
     image: ${REGISTRY:-cinema}/payment:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-payment
     hostname: payment
-    profiles: [dev, test]
+    profiles: [dev, test, debug, perf]
     ports:
       - "8001:8000"
     environment:
@@ -354,7 +360,7 @@ services:
       STRIPE_MOCK: "true"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || wget -qO- http://localhost:8000/ping | grep -q pong"]
     networks:
       - cinema-network
 
@@ -368,7 +374,7 @@ services:
     image: ${REGISTRY:-cinema}/notification:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-notification
     hostname: notification
-    profiles: [dev, test]
+    profiles: [dev, test, debug, perf]
     ports:
       - "8002:8000"
     environment:
@@ -378,7 +384,7 @@ services:
       EMAIL_PASS: "${NOTIFICATION_PASS:-dev-password}"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || wget -qO- http://localhost:8000/ping | grep -q pong"]
     networks:
       - cinema-network
 
@@ -392,7 +398,7 @@ services:
     image: ${REGISTRY:-cinema}/booking:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-booking
     hostname: booking
-    profiles: [dev, test]
+    profiles: [dev, test, debug, perf]
     ports:
       - "8082:8082"
     environment:
@@ -405,7 +411,7 @@ services:
       SHOWTIME_SERVICE_URL: "http://showtime:3003"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health || wget -qO- http://localhost:8082/ping | grep -q pong"]
     networks:
       - cinema-network
 
@@ -429,6 +435,8 @@ services:
       PAYMENT_SERVICE_URL: "http://payment:8000"
       BOOKING_SERVICE_URL: "http://booking:8082"
       NOTIFICATION_SERVICE_URL: "http://notification:8000"
+      # Short TTL for Test10_HoldExpiration
+      HOLD_TTL_SECONDS: "${HOLD_TTL_SECONDS:-5}"
     networks:
       - cinema-network
 

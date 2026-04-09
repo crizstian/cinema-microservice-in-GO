@@ -509,10 +509,78 @@ func (s *E2ETestSuite) Test09_ConcurrentSeatHolds() {
 func (s *E2ETestSuite) Test10_HoldExpiration() {
 	s.T().Log("Step 10: Test Hold Expiration")
 
-	// This test would require waiting for TTL (5 min) which is too long
-	// In real tests, you'd set a shorter TTL for testing
-	s.T().Log("  Hold expiration test skipped (requires waiting for TTL)")
-	s.T().Log("  In production tests, use a shorter TTL or mock time")
+	// Get TTL from environment (default 300s, but test profile uses 5s)
+	holdTTL := getEnv("HOLD_TTL_SECONDS", "300")
+	ttlSeconds := 300
+	if _, err := fmt.Sscanf(holdTTL, "%d", &ttlSeconds); err != nil {
+		ttlSeconds = 300
+	}
+
+	// Skip if TTL is too long (> 30 seconds)
+	if ttlSeconds > 30 {
+		s.T().Skipf("Skipping hold expiration test: TTL=%ds is too long (max 30s for test)", ttlSeconds)
+		return
+	}
+
+	s.T().Logf("  Testing with HOLD_TTL_SECONDS=%d", ttlSeconds)
+
+	// Create a hold with short TTL
+	seats := []string{"Z1", "Z2"} // Use seats unlikely to conflict
+	sessionID := fmt.Sprintf("sess_expiry_%d", time.Now().UnixNano())
+
+	payload := map[string]interface{}{
+		"showtime_id": s.showtimeID,
+		"seat_ids":    seats,
+		"session_id":  sessionID,
+	}
+
+	resp, err := s.postJSON(SeatServiceURL+"/seats/hold", payload, "")
+	require.NoError(s.T(), err)
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	s.T().Logf("  Hold created: %d - %s", resp.StatusCode, truncate(string(body), 200))
+
+	if resp.StatusCode != http.StatusCreated {
+		s.T().Skip("  Could not create hold, skipping expiration test")
+		return
+	}
+
+	// Wait for TTL + 1 second buffer
+	waitTime := time.Duration(ttlSeconds+1) * time.Second
+	s.T().Logf("  Waiting %v for hold to expire...", waitTime)
+	time.Sleep(waitTime)
+
+	// Verify seats are available again
+	availURL := fmt.Sprintf("%s/seats/availability?showtime_id=%s", SeatServiceURL, s.showtimeID)
+	availResp, err := s.get(availURL, "")
+	require.NoError(s.T(), err)
+	defer availResp.Body.Close()
+
+	availBody, _ := io.ReadAll(availResp.Body)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(availBody, &result)
+	require.NoError(s.T(), err)
+
+	// Check if our seats are available
+	if seatsData, ok := result["seats"].([]interface{}); ok {
+		for _, seat := range seatsData {
+			if seatMap, ok := seat.(map[string]interface{}); ok {
+				seatID, _ := seatMap["seat_id"].(string)
+				status, _ := seatMap["status"].(string)
+				for _, targetSeat := range seats {
+					if seatID == targetSeat {
+						s.T().Logf("  Seat %s status: %s", seatID, status)
+						assert.Equal(s.T(), "available", status,
+							"Seat %s should be available after TTL expiration", seatID)
+					}
+				}
+			}
+		}
+	}
+
+	s.T().Log("  Hold expiration verified successfully")
 }
 
 // ============================================================

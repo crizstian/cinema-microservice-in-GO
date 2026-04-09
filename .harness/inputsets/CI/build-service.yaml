@@ -1,0 +1,28 @@
+inputSet:
+  name: Build Service
+  identifier: build_service
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  description: Build Docker images, push to registry, and create Git tags
+  pipeline:
+    identifier: CI_Golang_v2
+    properties:
+      ci:
+        codebase:
+          build:
+            type: branch
+            spec:
+              branch: <+input>
+    variables:
+      - name: RUN_MODE
+        type: String
+        value: build
+      - name: SERVICES
+        type: String
+        value: <+input>
+      - name: GO_VERSION
+        type: String
+        value: "1.24"
+      - name: VERSION_BUMP
+        type: String
+        value: <+input>

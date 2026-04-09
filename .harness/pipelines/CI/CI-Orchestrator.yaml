@@ -1,0 +1,366 @@
+# ============================================================
+# CI Orchestrator - Language Agnostic Service Detector
+# ============================================================
+# Central pipeline that:
+# 1. Detects changed files from PR
+# 2. Classifies services by language using STRATEGY 2: Manifest File Detection
+# 3. Triggers appropriate child pipelines per language stack
+#
+# Strategy 2: Manifest File Detection
+# - go.mod exists -> Go service
+# - pom.xml or build.gradle exists -> Java service
+# - package.json exists -> Node service
+#
+# This orchestrator is LANGUAGE AGNOSTIC - it routes to the correct
+# child pipeline based on detected manifest files.
+# ============================================================
+
+pipeline:
+  name: CI Orchestrator
+  identifier: CI_Orchestrator
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  tags:
+    version: "1.0"
+    type: orchestrator
+
+  properties:
+    ci:
+      codebase:
+        connectorRef: CristianConnector
+        repoName: cinema-microservice-in-GO
+        build: <+input>
+        prCloneStrategy: SourceBranch
+        sparseCheckout: []
+        depth: 1
+
+  stages:
+    # ============================================================
+    # STAGE 1: Detect Changed Services & Classify by Language
+    # ============================================================
+    - stage:
+        name: Detect and Classify Services
+        identifier: detect_classify
+        description: "Detect changed files and classify by language using manifest files (STRATEGY 2)"
+        type: CI
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Detect Changed Services
+                  identifier: detect_services
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:3.19
+                    shell: Sh
+                    envVariables:
+                      # Native Harness expressions - NO GitHub API needed
+                      COMMITS_JSON: <+trigger.payload.commits>
+                      PR_ACTION: <+trigger.payload.action>
+                      PR_MERGED: <+trigger.payload.pull_request.merged>
+                    command: |
+                      echo "=== CI Orchestrator: Detecting Changed Services ==="
+                      echo "Using native Harness <+trigger.payload.commits>"
+                      echo "PR Action: $PR_ACTION"
+                      echo "PR Merged: $PR_MERGED"
+                      echo ""
+
+                      apk add --no-cache jq > /dev/null 2>&1
+
+                      # Extract changed files from trigger.payload.commits (native Harness)
+                      # Each commit has: added[], modified[], removed[]
+                      CHANGED_FILES=""
+
+                      if [ -n "$COMMITS_JSON" ] && [ "$COMMITS_JSON" != "null" ]; then
+                        echo "Extracting files from trigger.payload.commits..."
+                        ADDED=$(echo "$COMMITS_JSON" | jq -r '.[].added[]? // empty' 2>/dev/null | sort -u)
+                        MODIFIED=$(echo "$COMMITS_JSON" | jq -r '.[].modified[]? // empty' 2>/dev/null | sort -u)
+                        REMOVED=$(echo "$COMMITS_JSON" | jq -r '.[].removed[]? // empty' 2>/dev/null | sort -u)
+                        CHANGED_FILES=$(printf "%s\n%s\n%s" "$ADDED" "$MODIFIED" "$REMOVED" | grep -v '^$' | sort -u)
+                      fi
+
+                      # Fallback to git diff only if payload is empty
+                      if [ -z "$CHANGED_FILES" ]; then
+                        echo "Payload empty, falling back to git diff..."
+                        CHANGED_FILES=$(git diff --name-only origin/<+codebase.targetBranch>...HEAD 2>/dev/null || echo "")
+                      fi
+
+                      echo "Changed files:"
+                      echo "$CHANGED_FILES"
+                      echo ""
+
+                      # Extract unique service names from services/{service}/* pattern
+                      SERVICES=""
+                      for file in $CHANGED_FILES; do
+                        case "$file" in
+                          services/*/*)
+                            svc=$(echo "$file" | cut -d'/' -f2)
+                            case ",${SERVICES}," in
+                              *,"${svc}",*) ;;  # Already in list
+                              *) SERVICES="${SERVICES:+$SERVICES,}${svc}" ;;
+                            esac
+                            ;;
+                        esac
+                      done
+
+                      echo "Detected services: $SERVICES"
+                      echo ""
+
+                      # Validate at least one service was detected
+                      if [ -z "$SERVICES" ]; then
+                        echo "No services detected in changed files - skipping child pipelines"
+                        SERVICES=""
+                        SERVICES_JSON="[]"
+                        SERVICE_COUNT=0
+                      else
+                        SERVICES_JSON=$(echo "$SERVICES" | tr ',' '\n' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+                        SERVICE_COUNT=$(echo "$SERVICES" | tr ',' '\n' | grep -v '^$' | wc -l)
+                      fi
+
+                      echo "=== Detection Results ==="
+                      echo "Services: $SERVICES"
+                      echo "Services JSON: $SERVICES_JSON"
+                      echo "Service Count: $SERVICE_COUNT"
+                    outputVariables:
+                      - name: SERVICES
+                        type: String
+                        value: SERVICES
+                      - name: SERVICES_JSON
+                        type: String
+                        value: SERVICES_JSON
+                      - name: SERVICE_COUNT
+                        type: String
+                        value: SERVICE_COUNT
+
+              - step:
+                  type: Run
+                  name: Classify by Language
+                  identifier: classify_language
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:3.19
+                    shell: Sh
+                    envVariables:
+                      SERVICES: <+execution.steps.detect_services.output.outputVariables.SERVICES>
+                    command: |
+                      echo "=== STRATEGY 2: Manifest File Detection ==="
+                      echo "Classifying services by language using manifest files..."
+                      echo ""
+
+                      apk add --no-cache jq > /dev/null 2>&1
+
+                      GO_SERVICES=""
+                      JAVA_SERVICES=""
+                      NODE_SERVICES=""
+                      UNKNOWN_SERVICES=""
+
+                      if [ -z "$SERVICES" ]; then
+                        echo "No services to classify"
+                      else
+                        for service in $(echo "$SERVICES" | tr ',' ' '); do
+                          SERVICE_PATH="services/$service"
+
+                          echo -n "Checking $service... "
+
+                          # STRATEGY 2: Check manifest files to determine language
+                          if [ -f "$SERVICE_PATH/go.mod" ]; then
+                            echo "Go (go.mod found)"
+                            GO_SERVICES="${GO_SERVICES:+$GO_SERVICES,}$service"
+                          elif [ -f "$SERVICE_PATH/pom.xml" ] || [ -f "$SERVICE_PATH/build.gradle" ]; then
+                            echo "Java (pom.xml/build.gradle found)"
+                            JAVA_SERVICES="${JAVA_SERVICES:+$JAVA_SERVICES,}$service"
+                          elif [ -f "$SERVICE_PATH/package.json" ]; then
+                            echo "Node (package.json found)"
+                            NODE_SERVICES="${NODE_SERVICES:+$NODE_SERVICES,}$service"
+                          else
+                            echo "Unknown (no manifest found)"
+                            UNKNOWN_SERVICES="${UNKNOWN_SERVICES:+$UNKNOWN_SERVICES,}$service"
+                          fi
+                        done
+                      fi
+
+                      echo ""
+                      echo "=== Classification Results ==="
+
+                      # Convert to JSON arrays for child pipeline matrix
+                      GO_SERVICES_JSON=$(echo "$GO_SERVICES" | tr ',' '\n' | grep -v '^$' | jq -R -s -c 'split("\n") | map(select(length > 0))' 2>/dev/null || echo "[]")
+                      JAVA_SERVICES_JSON=$(echo "$JAVA_SERVICES" | tr ',' '\n' | grep -v '^$' | jq -R -s -c 'split("\n") | map(select(length > 0))' 2>/dev/null || echo "[]")
+                      NODE_SERVICES_JSON=$(echo "$NODE_SERVICES" | tr ',' '\n' | grep -v '^$' | jq -R -s -c 'split("\n") | map(select(length > 0))' 2>/dev/null || echo "[]")
+
+                      # Count services per language
+                      GO_COUNT=$(echo "$GO_SERVICES_JSON" | jq 'length')
+                      JAVA_COUNT=$(echo "$JAVA_SERVICES_JSON" | jq 'length')
+                      NODE_COUNT=$(echo "$NODE_SERVICES_JSON" | jq 'length')
+
+                      echo "Go services ($GO_COUNT): $GO_SERVICES_JSON"
+                      echo "Java services ($JAVA_COUNT): $JAVA_SERVICES_JSON"
+                      echo "Node services ($NODE_COUNT): $NODE_SERVICES_JSON"
+                      if [ -n "$UNKNOWN_SERVICES" ]; then
+                        echo "Unknown services: $UNKNOWN_SERVICES"
+                      fi
+
+                      # Determine which child pipelines to trigger
+                      HAS_GO=$( [ "$GO_COUNT" -gt 0 ] && echo "true" || echo "false" )
+                      HAS_JAVA=$( [ "$JAVA_COUNT" -gt 0 ] && echo "true" || echo "false" )
+                      HAS_NODE=$( [ "$NODE_COUNT" -gt 0 ] && echo "true" || echo "false" )
+
+                      echo ""
+                      echo "=== Child Pipelines to Trigger ==="
+                      echo "Trigger Go pipeline: $HAS_GO"
+                      echo "Trigger Java pipeline: $HAS_JAVA"
+                      echo "Trigger Node pipeline: $HAS_NODE"
+                    outputVariables:
+                      - name: GO_SERVICES
+                        type: String
+                        value: GO_SERVICES
+                      - name: GO_SERVICES_JSON
+                        type: String
+                        value: GO_SERVICES_JSON
+                      - name: JAVA_SERVICES
+                        type: String
+                        value: JAVA_SERVICES
+                      - name: JAVA_SERVICES_JSON
+                        type: String
+                        value: JAVA_SERVICES_JSON
+                      - name: NODE_SERVICES
+                        type: String
+                        value: NODE_SERVICES
+                      - name: NODE_SERVICES_JSON
+                        type: String
+                        value: NODE_SERVICES_JSON
+                      - name: HAS_GO
+                        type: String
+                        value: HAS_GO
+                      - name: HAS_JAVA
+                        type: String
+                        value: HAS_JAVA
+                      - name: HAS_NODE
+                        type: String
+                        value: HAS_NODE
+
+              - step:
+                  type: Run
+                  name: Determine Run Mode
+                  identifier: determine_run_mode
+                  spec:
+                    shell: Sh
+                    envVariables:
+                      PR_STATE: <+trigger.payload.pull_request.state>
+                      PR_ACTION: <+trigger.payload.action>
+                      PR_MERGED: <+trigger.payload.pull_request.merged>
+                    command: |
+                      echo "=== Determining Run Mode for Child Pipelines ==="
+                      echo ""
+                      echo "PR State: $PR_STATE"
+                      echo "PR Action: $PR_ACTION"
+                      echo "PR Merged: $PR_MERGED"
+                      echo ""
+
+                      # Map PR state to RUN_MODE
+                      # PR open/reopened/synchronize → validate
+                      # PR closed + merged → build
+                      # PR closed + not merged → skip (handled by when condition)
+                      if [ "$PR_STATE" = "open" ]; then
+                        RUN_MODE="validate"
+                      elif [ "$PR_ACTION" = "closed" ] && [ "$PR_MERGED" = "true" ]; then
+                        RUN_MODE="build"
+                      else
+                        RUN_MODE="validate"  # Default
+                      fi
+
+                      echo "=== Run Mode Decision ==="
+                      echo "RUN_MODE: $RUN_MODE"
+
+                      # Capture other context
+                      PR_NUMBER="<+codebase.prNumber>"
+                      SOURCE_BRANCH="<+codebase.sourceBranch>"
+
+                      echo "PR_NUMBER: $PR_NUMBER"
+                      echo "SOURCE_BRANCH: $SOURCE_BRANCH"
+                    outputVariables:
+                      - name: RUN_MODE
+                        type: String
+                        value: RUN_MODE
+                      - name: PR_NUMBER
+                        type: String
+                        value: PR_NUMBER
+                      - name: SOURCE_BRANCH
+                        type: String
+                        value: SOURCE_BRANCH
+
+    # ============================================================
+    # STAGE 2: Trigger Go Services Pipeline (Pipeline Chaining)
+    # ============================================================
+    - stage:
+        name: Trigger Go Services
+        identifier: trigger_go
+        description: "Trigger Go child pipeline for detected Go services"
+        type: Pipeline
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.detect_classify.spec.execution.steps.classify_language.output.outputVariables.HAS_GO> == "true"
+        spec:
+          org: sandbox
+          pipeline: CI_Golang_v2
+          project: CristianRamirez
+          inputs:
+            identifier: CI_Golang_v2
+            properties:
+              ci:
+                codebase:
+                  build:
+                    type: PR
+                    spec:
+                      number: <+pipeline.stages.detect_classify.spec.execution.steps.determine_run_mode.output.outputVariables.PR_NUMBER>
+            variables:
+              # New simplified variables (v2.7)
+              - name: RUN_MODE
+                type: String
+                value: <+pipeline.stages.detect_classify.spec.execution.steps.determine_run_mode.output.outputVariables.RUN_MODE>
+              - name: SERVICES
+                type: String
+                value: <+pipeline.stages.detect_classify.spec.execution.steps.classify_language.output.outputVariables.GO_SERVICES>
+
+    # ============================================================
+    # STAGE 3: Trigger Java Services Pipeline (Placeholder)
+    # ============================================================
+    # - stage:
+    #     name: Trigger Java Services
+    #     identifier: trigger_java
+    #     type: Pipeline
+    #     when:
+    #       condition: <+pipeline.stages.detect_classify.spec.execution.steps.classify_language.output.outputVariables.HAS_JAVA> == "true"
+    #     spec:
+    #       pipeline: CI_Java_v2
+    #       inputs:
+    #         variables:
+    #           - name: SERVICES_JSON
+    #             value: <+pipeline.stages.detect_classify.spec.execution.steps.classify_language.output.outputVariables.JAVA_SERVICES_JSON>
+
+    # ============================================================
+    # STAGE 4: Trigger Node Services Pipeline (Placeholder)
+    # ============================================================
+    # - stage:
+    #     name: Trigger Node Services
+    #     identifier: trigger_node
+    #     type: Pipeline
+    #     when:
+    #       condition: <+pipeline.stages.detect_classify.spec.execution.steps.classify_language.output.outputVariables.HAS_NODE> == "true"
+    #     spec:
+    #       pipeline: CI_Node_v2
+    #       inputs:
+    #         variables:
+    #           - name: SERVICES_JSON
+    #             value: <+pipeline.stages.detect_classify.spec.execution.steps.classify_language.output.outputVariables.NODE_SERVICES_JSON>
+
+  allowStageExecutions: true
