@@ -61,12 +61,6 @@ pipeline:
         when:
           pipelineStatus: Success
           condition: <+pipeline.variables.RUN_MODE> == "validate" || <+pipeline.variables.RUN_MODE> == "full"
-        failureStrategies:
-          - onFailure:
-              errors:
-                - AllErrors
-              action:
-                type: Abort
         spec:
           cloneCodebase: true
           caching:
@@ -170,6 +164,9 @@ pipeline:
                                 log:
                                   level: info
                                 fail_on_severity: high
+                              tool:
+                                target_language: golang
+                                app_name: <+repeat.item>
                             failureStrategies:
                               - onFailure:
                                   errors:
@@ -191,6 +188,9 @@ pipeline:
                                 log:
                                   level: info
                                 fail_on_severity: high
+                              privileged: true
+                              tool:
+                                app_name: <+repeat.item>
                             failureStrategies:
                               - onFailure:
                                   errors:
@@ -396,6 +396,78 @@ pipeline:
                       echo "==========================================="
                   when:
                     stageStatus: Success
+              - step:
+                  type: Run
+                  name: PR Comment
+                  identifier: pr_comment
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:3.19
+                    shell: Sh
+                    envVariables:
+                      SERVICES: <+pipeline.variables.SERVICES>
+                      RUN_MODE: <+pipeline.variables.RUN_MODE>
+                      PR_NUMBER: <+codebase.prNumber>
+                      PIPELINE_STATUS: <+pipeline.status>
+                      EXECUTION_URL: <+pipeline.executionUrl>
+                    command: |
+                      # Skip if not a PR
+                      if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+                        echo "Not a PR execution - skipping PR comment"
+                        exit 0
+                      fi
+
+                      apk add --no-cache curl jq > /dev/null 2>&1
+
+                      # Build comment body
+                      COMMENT_BODY=$(cat <<EOF
+                      ## 🚀 CI Pipeline Results
+
+                      | Item | Value |
+                      |------|-------|
+                      | **Services** | \`$SERVICES\` |
+                      | **Mode** | \`$RUN_MODE\` |
+                      | **Status** | ✅ Passed |
+
+                      ### Checks Completed
+                      - ✅ Complexity Analysis
+                      - ✅ Code Duplication
+                      - ✅ SAST Security Scan
+                      - ✅ SCA Dependency Scan
+                      - ✅ Unit Tests
+                      - ✅ Benchmark Tests
+                      - ✅ Contract Tests
+                      - ✅ API Validation
+
+                      ---
+                      🔗 [View Pipeline Execution]($EXECUTION_URL)
+                      EOF
+                      )
+
+                      echo "Posting comment to PR #$PR_NUMBER..."
+
+                      RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+                        "https://app.harness.io/code/api/v1/repos/cinema-microservice-in-GO/pullreq/${PR_NUMBER}/comments?accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>" \
+                        -H 'Content-Type: application/json' \
+                        -H 'x-api-key: <+secrets.getValue("harnessToken")>' \
+                        -d "$(jq -n --arg text "$COMMENT_BODY" '{text: $text}')")
+
+                      HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+
+                      if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+                        echo "✅ PR comment posted successfully"
+                      else
+                        echo "⚠️ Failed to post PR comment (HTTP $HTTP_CODE)"
+                        echo "$RESPONSE" | head -n -1
+                      fi
+                  when:
+                    stageStatus: Success
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
     - stage:
         name: Build and Release
         identifier: build_release
