@@ -46,7 +46,7 @@ pipeline:
         spec:
           cloneCodebase: true
           caching:
-            enabled: true
+            enabled: false
           platform:
             os: Linux
             arch: Amd64

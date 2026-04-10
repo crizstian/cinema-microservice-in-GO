@@ -37,7 +37,7 @@ pipeline:
       type: String
       description: Go version for builds
       required: false
-      value: "1.24"
+      value: <+input>.default(1.24).selectOneFrom(1.24)
     - name: COVERAGE_THRESHOLD
       type: String
       description: Minimum test coverage percentage
@@ -65,9 +65,9 @@ pipeline:
           cloneCodebase: true
           caching:
             enabled: true
+            key: go-mod-<+hashFiles("**/go.sum")>
             paths:
-              - /go/pkg/mod
-              - ~/.cache/go-build
+              - /harness/.go/pkg/mod
           buildIntelligence:
             enabled: true
           platform:
@@ -165,14 +165,8 @@ pipeline:
                                   level: info
                                 fail_on_severity: high
                               tool:
-                                target_language: golang
+                                target_language: go
                                 app_name: <+repeat.item>
-                            failureStrategies:
-                              - onFailure:
-                                  errors:
-                                    - AllErrors
-                                  action:
-                                    type: MarkAsSuccess
                         - step:
                             type: HarnessSCA
                             name: SCA
@@ -191,12 +185,6 @@ pipeline:
                               privileged: true
                               tool:
                                 app_name: <+repeat.item>
-                            failureStrategies:
-                              - onFailure:
-                                  errors:
-                                    - AllErrors
-                                  action:
-                                    type: MarkAsSuccess
                   strategy:
                     repeat:
                       items: <+pipeline.variables.SERVICES.split(",")>
@@ -368,88 +356,85 @@ pipeline:
                       maxConcurrency: 4
               - step:
                   type: Run
-                  name: Validation Summary
-                  identifier: validation_summary
-                  spec:
-                    shell: Sh
-                    envVariables:
-                      SERVICES: <+pipeline.variables.SERVICES>
-                      RUN_MODE: <+pipeline.variables.RUN_MODE>
-                    command: |
-                      echo "==========================================="
-                      echo "       VALIDATION COMPLETED"
-                      echo "==========================================="
-                      echo ""
-                      echo "Services: $SERVICES"
-                      echo "Run Mode: $RUN_MODE"
-                      echo ""
-                      echo "Checks Passed:"
-                      echo "  ✅ Complexity Analysis"
-                      echo "  ✅ Code Duplication"
-                      echo "  ✅ SAST Security Scan"
-                      echo "  ✅ SCA Dependency Scan"
-                      echo "  ✅ Unit Tests"
-                      echo "  ✅ Benchmark Tests"
-                      echo "  ✅ Contract Tests"
-                      echo "  ✅ API Validation"
-                      echo ""
-                      echo "==========================================="
-                  when:
-                    stageStatus: Success
-              - step:
-                  type: Run
                   name: PR Comment
                   identifier: pr_comment
                   spec:
                     connectorRef: account.harnessImage
                     image: alpine:3.19
                     shell: Sh
-                    envVariables:
-                      SERVICES: <+pipeline.variables.SERVICES>
-                      RUN_MODE: <+pipeline.variables.RUN_MODE>
-                      PR_NUMBER: <+codebase.prNumber>
-                      PIPELINE_STATUS: <+pipeline.status>
-                      EXECUTION_URL: <+pipeline.executionUrl>
-                    command: |
-                      # Skip if not a PR
-                      if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
-                        echo "Not a PR execution - skipping PR comment"
-                        exit 0
-                      fi
-
+                    command: |-
                       apk add --no-cache curl jq > /dev/null 2>&1
 
-                      # Build comment body
-                      COMMENT_BODY=$(cat <<EOF
-                      ## 🚀 CI Pipeline Results
+                      # Build service badges
+                      SERVICE_LIST=""
+                      for svc in $(echo "$SERVICES" | tr ',' ' '); do
+                        SERVICE_LIST="${SERVICE_LIST}![${svc}](https://img.shields.io/badge/${svc}-passed-brightgreen) "
+                      done
 
-                      | Item | Value |
-                      |------|-------|
-                      | **Services** | \`$SERVICES\` |
-                      | **Mode** | \`$RUN_MODE\` |
-                      | **Status** | ✅ Passed |
+                      COMMENT_BODY=$(cat <<'COMMENT'
+                      # ✅ CI Pipeline Passed
 
-                      ### Checks Completed
-                      - ✅ Complexity Analysis
-                      - ✅ Code Duplication
-                      - ✅ SAST Security Scan
-                      - ✅ SCA Dependency Scan
-                      - ✅ Unit Tests
-                      - ✅ Benchmark Tests
-                      - ✅ Contract Tests
-                      - ✅ API Validation
+                      ## 📦 Services Validated
+                      SERVICE_BADGES_PLACEHOLDER
 
                       ---
-                      🔗 [View Pipeline Execution]($EXECUTION_URL)
-                      EOF
+
+                      ## 🔍 Quality Gates
+
+                      | Check | Status | Description |
+                      |:------|:------:|:------------|
+                      | 🧮 Complexity | ✅ | Cyclomatic complexity within limits |
+                      | 📋 Duplication | ✅ | No significant code duplication |
+                      | 🛡️ SAST | ✅ | No security vulnerabilities in code |
+                      | 📦 SCA | ✅ | Dependencies are secure |
+
+                      ## 🧪 Test Results
+
+                      | Suite | Status | Description |
+                      |:------|:------:|:------------|
+                      | 🔬 Unit Tests | ✅ | All unit tests passing |
+                      | ⚡ Benchmarks | ✅ | Performance benchmarks completed |
+                      | 🤝 Contracts | ✅ | API contracts verified |
+                      | 📜 OpenAPI | ✅ | Specs validated with Spectral |
+
+                      ---
+
+                      <details>
+                      <summary>📊 Pipeline Details</summary>
+
+                      | Property | Value |
+                      |:---------|:------|
+                      | **Mode** | `MODE_PLACEHOLDER` |
+                      | **Services** | `SERVICES_PLACEHOLDER` |
+                      | **Coverage Threshold** | `80%` |
+
+                      </details>
+
+                      ---
+
+                      🔗 **[View Full Execution](EXECUTION_URL_PLACEHOLDER)**
+
+                      <sub>🤖 Automated by Harness CI</sub>
+                      COMMENT
                       )
 
+                      COMMENT_BODY=$(echo "$COMMENT_BODY" | \
+                        sed "s|SERVICE_BADGES_PLACEHOLDER|$SERVICE_LIST|g" | \
+                        sed "s/SERVICES_PLACEHOLDER/$SERVICES/g" | \
+                        sed "s/MODE_PLACEHOLDER/$RUN_MODE/g" | \
+                        sed "s|EXECUTION_URL_PLACEHOLDER|$EXECUTION_URL|g")
+
+                      echo "$COMMENT_BODY"
+                      echo ""
                       echo "Posting comment to PR #$PR_NUMBER..."
 
+                      # Use Harness Code API with full repo path
+                      REPO_PATH="${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/${REPO_NAME}"
+
                       RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-                        "https://app.harness.io/code/api/v1/repos/cinema-microservice-in-GO/pullreq/${PR_NUMBER}/comments?accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>" \
+                        "https://app.harness.io/code/api/v1/repos/${REPO_PATH}/+/pullreq/${PR_NUMBER}/comments" \
                         -H 'Content-Type: application/json' \
-                        -H 'x-api-key: <+secrets.getValue("harnessToken")>' \
+                        -H "x-api-key: ${HARNESS_TOKEN}" \
                         -d "$(jq -n --arg text "$COMMENT_BODY" '{text: $text}')")
 
                       HTTP_CODE=$(echo "$RESPONSE" | tail -1)
@@ -459,15 +444,22 @@ pipeline:
                       else
                         echo "⚠️ Failed to post PR comment (HTTP $HTTP_CODE)"
                         echo "$RESPONSE" | head -n -1
+                        # Don't fail the pipeline for comment issues
+                        exit 0
                       fi
+                    envVariables:
+                      SERVICES: <+pipeline.variables.SERVICES>
+                      RUN_MODE: <+pipeline.variables.RUN_MODE>
+                      PR_NUMBER: <+codebase.prNumber>
+                      EXECUTION_URL: <+pipeline.executionUrl>
+                      ACCOUNT_ID: <+account.identifier>
+                      ORG_ID: <+org.identifier>
+                      PROJECT_ID: <+project.identifier>
+                      REPO_NAME: cinema-microservice-in-GO
+                      HARNESS_TOKEN: <+secrets.getValue("harnessToken")>
                   when:
                     stageStatus: Success
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
+                    condition: <+codebase.prNumber> != null
     - stage:
         name: Build and Release
         identifier: build_release
@@ -486,9 +478,10 @@ pipeline:
           cloneCodebase: true
           caching:
             enabled: true
+            key: go-build-<+hashFiles("**/go.sum")>
             paths:
-              - /go/pkg/mod
-              - ~/.cache/go-build
+              - /harness/.go/pkg/mod
+              - /harness/.cache/go-build
           platform:
             os: Linux
             arch: Amd64
@@ -602,7 +595,7 @@ pipeline:
                         name: Build and Push Docker
                         identifier: build_push_docker
                         spec:
-                          connectorRef: CristianDocker
+                          connectorRef: DockerCristian
                           repo: <+repeat.item>
                           tags:
                             - <+execution.steps.build_push.steps.semantic_version.output.outputVariables.NEW_VERSION>
@@ -762,4 +755,6 @@ pipeline:
                       echo "==========================================="
                   when:
                     stageStatus: Success
+          buildIntelligence:
+            enabled: false
   allowStageExecutions: true
