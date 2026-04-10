@@ -20,7 +20,6 @@ tests/test-results/
 *.exe
 *.test
 *.out
-go.sum
 
 # Go workspace and cache
 .go/
