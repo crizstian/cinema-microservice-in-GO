@@ -67,7 +67,8 @@ pipeline:
             enabled: true
             key: go-mod-<+hashFiles("**/go.sum")>
             paths:
-              - /harness/.go/pkg/mod
+              - /harness/.go
+            override: false
           buildIntelligence:
             enabled: true
           platform:
@@ -476,8 +477,7 @@ pipeline:
             enabled: true
             key: go-build-<+hashFiles("**/go.sum")>
             paths:
-              - /harness/.go/pkg/mod
-              - /harness/.cache/go-build
+              - /harness/.go
           platform:
             os: Linux
             arch: Amd64

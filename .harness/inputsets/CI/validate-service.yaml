@@ -1,9 +1,10 @@
 inputSet:
   name: Validate Service
+  tags: {}
   identifier: validate_service
+  description: Run code quality, security scans, and tests for selected services
   orgIdentifier: sandbox
   projectIdentifier: CristianRamirez
-  description: Run code quality, security scans, and tests for selected services
   pipeline:
     identifier: CI_Golang_v2
     properties:
@@ -12,17 +13,17 @@ inputSet:
           build:
             type: branch
             spec:
-              branch: <+input>
+              branch: monorepo
     variables:
       - name: RUN_MODE
         type: String
         value: validate
       - name: SERVICES
         type: String
-        value: <+input>
+        value: ""
       - name: GO_VERSION
         type: String
         value: "1.24"
-      - name: COVERAGE_THRESHOLD
+      - name: VERSION_BUMP
         type: String
-        value: "80"
+        value: patch
