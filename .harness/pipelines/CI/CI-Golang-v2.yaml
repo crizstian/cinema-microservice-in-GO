@@ -453,7 +453,7 @@ pipeline:
                       PR_NUMBER: <+codebase.prNumber>
                       EXECUTION_URL: <+pipeline.executionUrl>
                       GITHUB_REPO: crizstian/cinema-microservice-in-GO
-                      GITHUB_TOKEN: <+secrets.getValue("githubToken")>
+                      GITHUB_TOKEN: <+secrets.getValue("CristianGithub")>
                   when:
                     stageStatus: Success
                     condition: <+codebase.prNumber> != null
@@ -503,6 +503,8 @@ pipeline:
                           envVariables:
                             SERVICE: <+repeat.item>
                             VERSION_BUMP: <+pipeline.variables.VERSION_BUMP>
+                            GITHUB_REPO: crizstian/cinema-microservice-in-GO
+                            GITHUB_TOKEN: <+secrets.getValue("CristianGithub")>
                           command: |
                             echo "=== Semantic Versioning for SERVICE: $SERVICE ==="
                             echo "Using service-prefixed tags: {service}-v{major}.{minor}.{patch}"
@@ -510,11 +512,12 @@ pipeline:
 
                             apk add --no-cache jq curl git > /dev/null 2>&1
 
-                            # Get latest tag for THIS SERVICE ONLY
-                            echo "Fetching tags for $SERVICE..."
+                            # Get latest tag for THIS SERVICE ONLY from GitHub
+                            echo "Fetching tags for $SERVICE from GitHub..."
                             ALL_TAGS=$(curl -s -X GET \
-                              "https://app.harness.io/code/api/v1/repos/cinema-microservice-in-GO/tags?accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>&include_commit=true&order=desc&sort=date&page=1&limit=100" \
-                              -H 'x-api-key: <+secrets.getValue("harnessToken")>')
+                              "https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=100" \
+                              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                              -H "Accept: application/vnd.github+json")
 
                             LATEST_TAG=$(echo "$ALL_TAGS" | jq -r --arg svc "$SERVICE" \
                               '[.[] | select(.name | startswith($svc + "-v"))] | sort_by(.name) | reverse | .[0].name // ""')
@@ -671,22 +674,28 @@ pipeline:
                             SERVICE: <+repeat.item>
                             VERSION_BUMP: <+pipeline.variables.VERSION_BUMP>
                             COMMIT_SHA: <+codebase.commitSha>
+                            GITHUB_REPO: crizstian/cinema-microservice-in-GO
+                            GITHUB_TOKEN: <+secrets.getValue("CristianGithub")>
                           command: |
                             echo "=== Creating Git Tag for $SERVICE ==="
 
                             apk add --no-cache curl jq > /dev/null 2>&1
 
-                            # Get latest tag for this service
+                            # Get latest tags from GitHub for this service
+                            echo "Fetching tags for $SERVICE from GitHub..."
                             ALL_TAGS=$(curl -s -X GET \
-                              "https://app.harness.io/code/api/v1/repos/cinema-microservice-in-GO/tags?accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>&include_commit=true&order=desc&sort=date&page=1&limit=100" \
-                              -H 'x-api-key: <+secrets.getValue("harnessToken")>')
+                              "https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=100" \
+                              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                              -H "Accept: application/vnd.github+json")
 
                             LATEST_TAG=$(echo "$ALL_TAGS" | jq -r --arg svc "$SERVICE" \
                               '[.[] | select(.name | startswith($svc + "-v"))] | sort_by(.name) | reverse | .[0].name // ""')
 
                             if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+                              echo "No previous tags found for $SERVICE - starting at v0.0.0"
                               MAJOR=0; MINOR=0; PATCH=0
                             else
+                              echo "Latest tag for $SERVICE: $LATEST_TAG"
                               VERSION="${LATEST_TAG#${SERVICE}-v}"
                               MAJOR=$(echo "$VERSION" | cut -d. -f1)
                               MINOR=$(echo "$VERSION" | cut -d. -f2)
@@ -703,23 +712,35 @@ pipeline:
 
                             echo "Creating tag: $TAG_NAME -> $COMMIT_SHA"
 
+                            # Create tag via GitHub API
                             RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-                              "https://app.harness.io/code/api/v1/repos/cinema-microservice-in-GO/tags?accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>" \
-                              -H 'Content-Type: application/json' \
-                              -H 'x-api-key: <+secrets.getValue("harnessToken")>' \
+                              "https://api.github.com/repos/${GITHUB_REPO}/git/refs" \
+                              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                              -H "Accept: application/vnd.github+json" \
+                              -H "Content-Type: application/json" \
                               -d "{
-                                \"name\": \"$TAG_NAME\",
-                                \"message\": \"Release $SERVICE $NEW_VERSION ($VERSION_BUMP)\",
-                                \"target\": \"$COMMIT_SHA\"
+                                \"ref\": \"refs/tags/${TAG_NAME}\",
+                                \"sha\": \"${COMMIT_SHA}\"
                               }")
 
                             HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 
                             if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-                              echo "Tag created successfully: $TAG_NAME"
+                              echo "✅ Tag created successfully: $TAG_NAME"
                             else
-                              echo "Warning: Tag creation returned HTTP $HTTP_CODE"
+                              echo "⚠️ Tag creation returned HTTP $HTTP_CODE"
+                              echo "$RESPONSE" | head -n -1
                             fi
+
+                            echo "TAG_NAME=$TAG_NAME" >> $HARNESS_OUTPUT_FILE
+                            echo "NEW_VERSION=$NEW_VERSION" >> $HARNESS_OUTPUT_FILE
+                        outputVariables:
+                          - name: TAG_NAME
+                            type: String
+                            value: TAG_NAME
+                          - name: NEW_VERSION
+                            type: String
+                            value: NEW_VERSION
                   strategy:
                     repeat:
                       items: <+pipeline.variables.SERVICES.split(",")>
@@ -730,10 +751,16 @@ pipeline:
                   name: Build Summary
                   identifier: build_summary
                   spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:3.19
                     shell: Sh
                     envVariables:
                       SERVICES: <+pipeline.variables.SERVICES>
                       VERSION_BUMP: <+pipeline.variables.VERSION_BUMP>
+                      PR_NUMBER: <+codebase.prNumber>
+                      EXECUTION_URL: <+pipeline.executionUrl>
+                      GITHUB_REPO: crizstian/cinema-microservice-in-GO
+                      GITHUB_TOKEN: <+secrets.getValue("CristianGithub")>
                     command: |
                       echo "==========================================="
                       echo "       BUILD & RELEASE COMPLETED"
@@ -749,6 +776,79 @@ pipeline:
                       echo "  ✅ Git Tag Created"
                       echo ""
                       echo "==========================================="
+
+                      # Post PR comment if PR context exists
+                      if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "null" ]; then
+                        apk add --no-cache curl jq > /dev/null 2>&1
+
+                        # Build service badges
+                        SERVICE_LIST=""
+                        for svc in $(echo "$SERVICES" | tr ',' ' '); do
+                          SERVICE_LIST="${SERVICE_LIST}![${svc}](https://img.shields.io/badge/${svc}-released-blue) "
+                        done
+
+                        COMMENT_BODY=$(cat <<'COMMENT'
+                      # 🚀 Build & Release Completed
+
+                      ## 📦 Services Released
+                      SERVICE_BADGES_PLACEHOLDER
+
+                      ---
+
+                      ## ✅ Release Checklist
+
+                      | Step | Status | Description |
+                      |:-----|:------:|:------------|
+                      | 🔨 Binary Build | ✅ | Go binaries compiled |
+                      | 🐳 Docker Push | ✅ | Images pushed to registry |
+                      | 🔒 Container Scan | ✅ | Security scan passed |
+                      | 🏷️ Git Tags | ✅ | Version tags created |
+
+                      ---
+
+                      <details>
+                      <summary>📊 Release Details</summary>
+
+                      | Property | Value |
+                      |:---------|:------|
+                      | **Version Bump** | `VERSION_BUMP_PLACEHOLDER` |
+                      | **Services** | `SERVICES_PLACEHOLDER` |
+
+                      </details>
+
+                      ---
+
+                      🔗 **[View Full Execution](EXECUTION_URL_PLACEHOLDER)**
+
+                      <sub>🤖 Automated by Harness CI</sub>
+                      COMMENT
+                      )
+
+                        COMMENT_BODY=$(echo "$COMMENT_BODY" | \
+                          sed "s|SERVICE_BADGES_PLACEHOLDER|$SERVICE_LIST|g" | \
+                          sed "s/SERVICES_PLACEHOLDER/$SERVICES/g" | \
+                          sed "s/VERSION_BUMP_PLACEHOLDER/$VERSION_BUMP/g" | \
+                          sed "s|EXECUTION_URL_PLACEHOLDER|$EXECUTION_URL|g")
+
+                        echo ""
+                        echo "Posting release comment to PR #$PR_NUMBER..."
+
+                        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+                          "https://api.github.com/repos/${GITHUB_REPO}/issues/${PR_NUMBER}/comments" \
+                          -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                          -H "Accept: application/vnd.github+json" \
+                          -H "Content-Type: application/json" \
+                          -d "$(jq -n --arg body "$COMMENT_BODY" '{body: $body}')")
+
+                        HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+
+                        if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+                          echo "✅ PR comment posted successfully"
+                        else
+                          echo "⚠️ Failed to post PR comment (HTTP $HTTP_CODE)"
+                          echo "$RESPONSE" | head -n -1
+                        fi
+                      fi
                   when:
                     stageStatus: Success
           buildIntelligence:
