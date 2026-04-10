@@ -428,14 +428,13 @@ pipeline:
                       echo ""
                       echo "Posting comment to PR #$PR_NUMBER..."
 
-                      # Use Harness Code API with full repo path
-                      REPO_PATH="${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/${REPO_NAME}"
-
+                      # Use GitHub API for GitHub repos
                       RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-                        "https://app.harness.io/code/api/v1/repos/${REPO_PATH}/+/pullreq/${PR_NUMBER}/comments" \
+                        "https://api.github.com/repos/${GITHUB_REPO}/issues/${PR_NUMBER}/comments" \
                         -H 'Content-Type: application/json' \
-                        -H "x-api-key: ${HARNESS_TOKEN}" \
-                        -d "$(jq -n --arg text "$COMMENT_BODY" '{text: $text}')")
+                        -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                        -H "Accept: application/vnd.github+json" \
+                        -d "$(jq -n --arg body "$COMMENT_BODY" '{body: $body}')")
 
                       HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 
@@ -452,11 +451,8 @@ pipeline:
                       RUN_MODE: <+pipeline.variables.RUN_MODE>
                       PR_NUMBER: <+codebase.prNumber>
                       EXECUTION_URL: <+pipeline.executionUrl>
-                      ACCOUNT_ID: <+account.identifier>
-                      ORG_ID: <+org.identifier>
-                      PROJECT_ID: <+project.identifier>
-                      REPO_NAME: cinema-microservice-in-GO
-                      HARNESS_TOKEN: <+secrets.getValue("harnessToken")>
+                      GITHUB_REPO: crizstian/cinema-microservice-in-GO
+                      GITHUB_TOKEN: <+secrets.getValue("githubToken")>
                   when:
                     stageStatus: Success
                     condition: <+codebase.prNumber> != null
