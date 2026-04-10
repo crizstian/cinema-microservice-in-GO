@@ -634,12 +634,12 @@ pipeline:
                           target:
                             type: container
                             name: <+repeat.item>
-                            variant: <+execution.steps.build_push_<+repeat.item>.steps.semantic_version.output.outputVariables.NEW_VERSION>
+                            variant: <+execution.steps[<+"build_push"+strategy.identifierPostFix>].steps.semantic_version.output.outputVariables.NEW_VERSION>
                             detection: auto
                           image:
                             type: docker_v2
                             name: crizstian/cinema/<+repeat.item>
-                            tag: <+execution.steps.build_push_<+repeat.item>.steps.semantic_version.output.outputVariables.NEW_VERSION>
+                            tag: <+execution.steps[<+"build_push"+strategy.identifierPostFix>].steps.semantic_version.output.outputVariables.NEW_VERSION>
                             domain: docker.io
                             access_id: <+secrets.getValue("dockerUsername")>
                             access_token: <+secrets.getValue("dockerPassword")>
