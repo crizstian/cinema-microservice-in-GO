@@ -581,7 +581,7 @@ pipeline:
                             echo "=== Building binary for <+repeat.item> ==="
                             cd services/<+repeat.item>
 
-                            VERSION="<+execution.steps.build_push.steps.semantic_version.output.outputVariables.NEW_VERSION>"
+                            VERSION="<+execution.steps.semantic_version.output.outputVariables.NEW_VERSION>"
 
                             CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
                               go build -ldflags="-s -w -X main.Version=${VERSION}" \
@@ -595,16 +595,16 @@ pipeline:
                         identifier: build_push_docker
                         spec:
                           connectorRef: DockerCristian
-                          repo: <+repeat.item>
+                          repo: crizstian/cinema/<+repeat.item>
                           tags:
-                            - <+execution.steps.build_push.steps.semantic_version.output.outputVariables.NEW_VERSION>
+                            - <+execution.steps.semantic_version.output.outputVariables.NEW_VERSION>
                             - latest
                           dockerfile: platform/docker/go-service/Dockerfile
                           context: .
                           buildArgs:
                             SERVICE_NAME: <+repeat.item>
                             SERVICE_PORT: "8000"
-                            VERSION: <+execution.steps.build_push.steps.semantic_version.output.outputVariables.NEW_VERSION>
+                            VERSION: <+execution.steps.semantic_version.output.outputVariables.NEW_VERSION>
                           caching: true
                   strategy:
                     repeat:
@@ -634,12 +634,12 @@ pipeline:
                           target:
                             type: container
                             name: <+repeat.item>
-                            variant: <+execution.steps.build_push.steps.semantic_version.output.outputVariables.NEW_VERSION>
+                            variant: <+execution.steps.build_push_<+repeat.item>.steps.semantic_version.output.outputVariables.NEW_VERSION>
                             detection: auto
                           image:
                             type: docker_v2
-                            name: <+repeat.item>
-                            tag: <+execution.steps.build_push.steps.semantic_version.output.outputVariables.NEW_VERSION>
+                            name: crizstian/cinema/<+repeat.item>
+                            tag: <+execution.steps.build_push_<+repeat.item>.steps.semantic_version.output.outputVariables.NEW_VERSION>
                             domain: docker.io
                             access_id: <+secrets.getValue("dockerUsername")>
                             access_token: <+secrets.getValue("dockerPassword")>
