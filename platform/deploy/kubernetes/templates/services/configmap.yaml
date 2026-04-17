@@ -13,8 +13,6 @@ data:
   DB_NAME: {{ quote (default .Values.serviceName .Values.dbName) }}
   DB_SERVERS: {{ quote .Values.database.servers }}
   DB_REPLICA: {{ quote (default "" .Values.database.replica) }}
-  JAEGER_AGENT_HOST: {{ quote .Values.observability.jaegerAgentHost }}
-  JAEGER_AGENT_PORT: {{ quote .Values.observability.jaegerAgentPort }}
   LOG_LEVEL: {{ quote .Values.observability.logLevel }}
   BOOKING_URL: {{ quote .Values.services.booking }}
   MOVIE_URL: {{ quote .Values.services.movie }}
