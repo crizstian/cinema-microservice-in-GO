@@ -1,6 +1,9 @@
 # Movie Service Values
 # Manages movie catalog and schedules
 
+serviceName: movie
+version: <+artifact.tag>
+
 port: 8002
 dbName: movie
 
