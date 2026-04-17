@@ -1,0 +1,23 @@
+# Movie Service Values
+# Manages movie catalog and schedules
+
+port: 8002
+dbName: movie
+
+dependencies:
+  - cinema
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  minReplicas: 1
+  maxReplicas: 5
+
+pdb:
+  minAvailable: 1

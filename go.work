@@ -1,6 +1,7 @@
-go 1.24.0
+go 1.26.1
 
 use (
+	./platform/deploy/kubernetes/cmd/render
 	./services/booking
 	./services/cinema
 	./services/movie

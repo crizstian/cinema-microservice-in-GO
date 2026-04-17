@@ -1,0 +1,55 @@
+# Base Values - Common defaults for all environments and services
+# These values are overridden by environment and service-specific values
+
+# Node placement
+nodeOwner: cristian-ramirez
+nodeTaintValue: selatam_demo_space
+
+# Image defaults
+image:
+  registry: crizstian
+  tag: v0.0.2
+  pullPolicy: IfNotPresent
+
+# Default resources
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Autoscaling defaults
+autoscaling:
+  minReplicas: 1
+  maxReplicas: 3
+  cpuThreshold: 80
+  memoryThreshold: 80
+
+# Probe defaults
+probes:
+  liveness:
+    path: /health/live
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    path: /health/ready
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# PDB default
+pdb:
+  minAvailable: 1
+
+# Observability
+observability:
+  logLevel: info
+
+# Labels
+labels:
+  component: service

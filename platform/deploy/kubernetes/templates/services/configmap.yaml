@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.serviceName }}-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.serviceName }}
+    app.kubernetes.io/version: {{ quote .Values.version }}
+    app.kubernetes.io/component: config
+    app.kubernetes.io/environment: {{ .Values.environment }}
+data:
+  SERVICE_PORT: {{ quote (default "8080" .Values.port) }}
+  DB_NAME: {{ quote (default .Values.serviceName .Values.dbName) }}
+  DB_SERVERS: {{ quote .Values.database.servers }}
+  DB_REPLICA: {{ quote (default "" .Values.database.replica) }}
+  JAEGER_AGENT_HOST: {{ quote .Values.observability.jaegerAgentHost }}
+  JAEGER_AGENT_PORT: {{ quote .Values.observability.jaegerAgentPort }}
+  LOG_LEVEL: {{ quote .Values.observability.logLevel }}
+  BOOKING_URL: {{ quote .Values.services.booking }}
+  MOVIE_URL: {{ quote .Values.services.movie }}
+  CINEMA_URL: {{ quote .Values.services.cinema }}
+  USER_URL: {{ quote .Values.services.user }}
+  SEAT_URL: {{ quote .Values.services.seat }}
+  SHOWTIME_URL: {{ quote .Values.services.showtime }}
+  PAYMENT_URL: {{ quote .Values.services.payment }}
+  NOTIFICATION_URL: {{ quote .Values.services.notification }}

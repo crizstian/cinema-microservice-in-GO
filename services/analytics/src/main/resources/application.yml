@@ -1,0 +1,19 @@
+server:
+  port: 8010
+
+spring:
+  application:
+    name: analytics
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    dev.cinema.latam: DEBUG

@@ -19,7 +19,19 @@ RUN apk upgrade --no-cache && \
     bat exa coreutils wget curl bash \
     binutils jq sudo g++ py3-pip yq \
     github-cli \
-    nodejs npm shadow docker-cli docker-cli-buildx docker-cli-compose ca-certificates
+    nodejs npm shadow docker-cli docker-cli-buildx docker-cli-compose ca-certificates \
+    openjdk21 maven
+
+# ---------- Gradle ----------
+ARG GRADLE_VERSION=8.5
+RUN wget -q https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip \
+      -O /tmp/gradle.zip && \
+    unzip -q /tmp/gradle.zip -d /opt && \
+    ln -s /opt/gradle-${GRADLE_VERSION}/bin/gradle /usr/local/bin/gradle && \
+    rm /tmp/gradle.zip
+
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+ENV PATH="${PATH}:${JAVA_HOME}/bin"
 
 # ---------- Usuario no root ----------
 # Crear usuario

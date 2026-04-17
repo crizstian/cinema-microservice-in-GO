@@ -1,0 +1,53 @@
+# Infrastructure Values
+# Shared configuration for MongoDB and Ingress-nginx
+#
+# SECURITY NOTE: Replace example credentials before deploying to production!
+# Generate new credentials with:
+#   password: head -c 32 /dev/urandom | base64 | tr -d '=+/' | head -c 24
+#   keyfile:  head -c 512 /dev/urandom | base64 | tr -d '\n' | head -c 756
+
+# Namespace (same as application)
+namespace: cinema-dev
+
+# Node placement (SE LATAM dedicated node)
+nodeOwner: cristian-ramirez
+nodeTaintValue: selatam_demo_space
+
+# MongoDB Configuration
+mongodb:
+  replicas: 1  # Use 1 for dev, 3 for prod
+  rootUser: cinema_admin
+  rootPassword: n8XGsZ15Z4OzTqpAXsCAs8CA  # CHANGE IN PRODUCTION!
+  keyfile: |
+    RJfupxJIIETj0XWK85zWHY7AEDVWXQ1UPV9l1E23EhxmdfC5HtTzkC5KL0RWovEk
+    Y8qCFNngMSQKghVNX0YJZsQl1BYDRU9eUQMDpD8afcfO2x6lq2SainKCeEfzKSKv
+    Ie4fMRgBwuWKlTNN49kDzAM8fjML5xLxVm02i5Ru8859URkq2LmYedp026Ll823x
+    tfNpYhWckbKBZcZKuHSb9supQuiHNPGtWaO168rqAVd2b2AllLm94WiLQKLIT3JP
+    k0jbJ5AcCA9kzNqi3aGqq5ocBeZlaDDsIwPwQW8HynH2rCrSZDDV7pTxYoY21jBx
+    87NyHtaDxWraKiwSZ491taYr7osA8lybWku8pig03hhOFWpv8rdUU5oKbIeZxRc5
+    uMae4zzFtOH8Z4qhcq0MEwOE9fje7jSs8iJL60GbRWww2zmGol6hmgILR3lAipUT
+    CTvsBJmYMsav3hgIvWK62GBKxwW6C2UksHvIFpIPdW7fFtXHPrMYp6N5b2f2L3hN
+    zdoe45SoiYQDgAVq6yMPAq9KEGinN2MB89rXfnQ3xHyMTI1LlvIo9Q55vf3V1ZHT
+    O37NtYcJVCYZxWlARCQ3OJNCGkWdeaaOlDt8xUTARa0RqaEDhmIIzlquKzOOAq75
+    1ehCyaQCYZXN8eNSS07E
+  storageClass: standard
+  storageSize: 10Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+# Ingress-nginx Configuration
+ingress:
+  replicas: 1  # Use 1 for dev, 2 for prod
+  serviceType: LoadBalancer  # or NodePort for dev
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

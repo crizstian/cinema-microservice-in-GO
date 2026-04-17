@@ -1,0 +1,18 @@
+micronaut:
+  application:
+    name: reviews
+  server:
+    port: 8012
+
+endpoints:
+  all:
+    enabled: true
+    sensitive: false
+  health:
+    enabled: true
+  prometheus:
+    enabled: true
+
+logger:
+  levels:
+    dev.cinema.latam: DEBUG

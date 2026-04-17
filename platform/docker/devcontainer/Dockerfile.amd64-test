@@ -1,0 +1,29 @@
+# Dockerfile to validate ARM64/amd64 compatibility hypothesis
+# Forces x86_64 emulation via Rosetta 2 on Apple Silicon
+FROM --platform=linux/amd64 golang:alpine
+
+USER root
+ENV GO111MODULE=on
+
+# Minimal dependencies for validation
+RUN apk upgrade --no-cache && \
+    apk add --no-cache \
+    git bash curl nodejs npm
+
+# Non-root user (required for VSCode DevContainer)
+RUN adduser -D -s /bin/bash devuser && \
+    echo "devuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+RUN mkdir -p /home/devuser/go/bin && \
+    chown -R devuser:devuser /home/devuser/go
+
+ENV GOPATH=/home/devuser/go
+ENV PATH="${PATH}:/home/devuser/go/bin"
+
+# Workspace
+RUN mkdir -p /workspace && chown -R devuser:devuser /workspace
+
+USER devuser
+WORKDIR /workspace
+
+CMD ["bash"]
