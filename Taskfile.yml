@@ -230,6 +230,64 @@ tasks:
     cmds: ["{{.K8S}}/deploy-full.sh {{.ENV | default \"dev\"}} {{.VERSION | default \"latest\"}}"]
 
   # ============================================================================
+  # CD PIPELINE (mirrors Harness CD - Kubernetes pipeline)
+  # ============================================================================
+  cd:validate:
+    desc: "Pre-deploy validation (schema + OPA): task cd:validate SERVICE=movie ENV=dev"
+    cmds:
+      - "{{.K8S}}/validate-values.sh {{.SERVICE | default \"movie\"}} {{.ENV | default \"dev\"}}"
+
+  cd:render:
+    desc: "Render templates: task cd:render SERVICE=movie ENV=dev VERSION=v0.0.2"
+    cmds:
+      - "{{.K8S}}/render.sh {{.SERVICE | default \"movie\"}} {{.ENV | default \"dev\"}} {{.VERSION | default \"latest\"}}"
+
+  cd:deploy:
+    desc: "Deploy to cluster: task cd:deploy SERVICE=movie ENV=dev"
+    cmds:
+      - "{{.K8S}}/apply.sh {{.SERVICE | default \"movie\"}} {{.ENV | default \"dev\"}}"
+
+  cd:smoke:
+    desc: "Smoke test (HTTP health check): task cd:smoke SERVICE=movie ENV=dev"
+    vars:
+      NAMESPACE: "cinema-{{.ENV | default \"dev\"}}"
+      PORT: '{{.PORT | default "8002"}}'
+    cmds:
+      - |
+        echo "=== Smoke Test: {{.SERVICE}} ({{.ENV}}) ==="
+        POD=$(kubectl get pods -n {{.NAMESPACE}} -l app.kubernetes.io/name={{.SERVICE}} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        if [ -z "$POD" ]; then
+          echo "ERROR: No pod found for {{.SERVICE}}"
+          exit 1
+        fi
+        echo "Pod: $POD"
+        echo ""
+        echo "Testing: /health/live"
+        kubectl exec $POD -n {{.NAMESPACE}} -- wget -qO- -T 5 http://localhost:{{.PORT}}/health/live || exit 1
+        echo ""
+        echo "Testing: /health/ready"
+        kubectl exec $POD -n {{.NAMESPACE}} -- wget -qO- -T 5 http://localhost:{{.PORT}}/health/ready || exit 1
+        echo ""
+        echo "=== Smoke Test PASSED ==="
+
+  cd:rollback:
+    desc: "Rollback deployment: task cd:rollback SERVICE=movie ENV=dev"
+    cmds:
+      - "kubectl rollout undo deployment/{{.SERVICE | default \"movie\"}} -n cinema-{{.ENV | default \"dev\"}}"
+
+  cd:pipeline:
+    desc: "Full CD pipeline (validate → render → deploy → smoke): task cd:pipeline SERVICE=movie ENV=dev VERSION=v0.0.2"
+    cmds:
+      - task: cd:validate
+        vars: { SERVICE: "{{.SERVICE}}", ENV: "{{.ENV}}" }
+      - task: cd:render
+        vars: { SERVICE: "{{.SERVICE}}", ENV: "{{.ENV}}", VERSION: "{{.VERSION}}" }
+      - task: cd:deploy
+        vars: { SERVICE: "{{.SERVICE}}", ENV: "{{.ENV}}" }
+      - task: cd:smoke
+        vars: { SERVICE: "{{.SERVICE}}", ENV: "{{.ENV}}", PORT: "{{.PORT}}" }
+
+  # ============================================================================
   # JAVA SERVICES
   # ============================================================================
   java:test:

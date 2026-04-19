@@ -11,7 +11,7 @@ image:
 # Database
 database:
   servers: mongodb.cinema-dev.svc.cluster.local:27017
-  replica: ""
+  replica: rs0
   user: cinema
   password: cinema123
 
