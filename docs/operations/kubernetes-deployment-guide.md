@@ -1940,3 +1940,209 @@ platform/deploy/kubernetes/
 │     └─ version, serviceName                                 │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Fase 7: CD Pipeline y Validación
+
+### 7.1 Tareas de CD en Taskfile
+
+El Taskfile incluye tareas que replican el flujo de Harness CD para validación local:
+
+```bash
+# Flujo completo de CD (validate → render → deploy → smoke)
+task cd:pipeline SERVICE=movie ENV=dev VERSION=v0.0.3
+
+# O ejecutar cada paso individualmente:
+task cd:validate SERVICE=movie ENV=dev      # Pre-deploy validation
+task cd:render SERVICE=movie ENV=dev VERSION=v0.0.3  # Render templates
+task cd:deploy SERVICE=movie ENV=dev        # Apply to cluster
+task cd:smoke SERVICE=movie ENV=dev PORT=8002  # Health checks
+task cd:rollback SERVICE=movie ENV=dev      # Rollback if needed
+```
+
+### 7.2 Validación Pre-Deploy
+
+El script `validate-values.sh` verifica la configuración antes de renderizar:
+
+```bash
+./scripts/validate-values.sh movie dev
+```
+
+**Validaciones incluidas:**
+- `database.replica` no está vacío (requerido para MongoDB replica set)
+- `database.servers` está configurado
+- `database.user` y `database.password` (requeridos en staging/prod, opcionales en dev)
+- `port` está en rango válido (1024-65535)
+- `namespace` coincide con el entorno (`cinema-{env}`)
+
+**Respuesta esperada:**
+```
+=== Validating values for movie (dev) ===
+Merging values from:
+  1. values/base.yaml
+  2. values/environments/dev.yaml
+  3. values/services/movie.yaml
+
+=== Running basic validation ===
+OK: database.replica = rs0
+OK: database.servers = mongodb.cinema-dev.svc.cluster.local:27017
+OK: database.user = [REDACTED]
+OK: database.password = [REDACTED]
+OK: port = 8002
+OK: namespace = cinema-dev
+
+=== Validation Summary ===
+PASSED: All validations passed
+```
+
+### 7.3 MongoDB con Autenticación
+
+A partir de v0.0.3, MongoDB se despliega con autenticación habilitada:
+
+**Credenciales configuradas en `values/infrastructure.yaml`:**
+```yaml
+mongodb:
+  replicaSet: rs0
+  rootUser: cinema_admin
+  rootPassword: n8XGsZ15Z4OzTqpAXsCAs8CA  # CAMBIAR EN PRODUCCIÓN
+  appUser: cinema
+  appPassword: cinema123  # CAMBIAR EN PRODUCCIÓN
+```
+
+**Credenciales de aplicación en `values/environments/dev.yaml`:**
+```yaml
+database:
+  servers: mongodb.cinema-dev.svc.cluster.local:27017
+  replica: rs0
+  user: cinema
+  password: cinema123
+```
+
+**Desplegar MongoDB con auth:**
+```bash
+# Renderizar infraestructura
+task k8s:infra:render COMPONENT=mongodb
+
+# Aplicar
+kubectl apply -f platform/deploy/kubernetes/rendered/infrastructure/mongodb.yaml
+
+# Verificar conexión con auth
+kubectl run mongo-test --rm -it --restart=Never \
+  --image=mongo:8.0 -n cinema-dev -- \
+  mongosh "mongodb://cinema:cinema123@mongodb:27017/movie?authSource=admin&replicaSet=rs0" \
+  --eval "db.adminCommand('ping')"
+```
+
+### 7.4 Health Endpoints
+
+Todos los servicios exponen endpoints de salud compatibles con Kubernetes:
+
+| Endpoint | Propósito | Kubernetes Probe |
+|----------|-----------|------------------|
+| `/health/live` | Liveness check | `livenessProbe` |
+| `/health/ready` | Readiness check | `readinessProbe` |
+| `/ping` | Legacy health check | - |
+
+**Verificar health desde dentro del cluster:**
+```bash
+kubectl exec -n cinema-dev deploy/movie -- \
+  wget -qO- http://localhost:8002/health/ready
+```
+
+**Respuesta esperada:**
+```
+pong
+```
+
+### 7.5 OPA Policies
+
+Las políticas OPA validan configuración antes del deploy en Harness:
+
+| Policy | Archivo | Validaciones |
+|--------|---------|--------------|
+| ConfigMap Validation | `policies/configmap-validation.rego` | DB_REPLICA, credentials, port, namespace |
+| Deployment Validation | `policies/deployment-validation.rego` | Probes, resources, image tags |
+
+**Testing local de policies:**
+```bash
+# Instalar OPA
+brew install opa  # macOS
+
+# Validar values
+yq eval-all 'select(fi==0)*select(fi==1)*select(fi==2)' \
+  values/base.yaml values/environments/dev.yaml values/services/movie.yaml \
+  | yq -o=json > /tmp/values.json
+
+opa eval -i /tmp/values.json \
+  -d policies/configmap-validation.rego \
+  "data.kubernetes.configmap.deny"
+```
+
+**Configurar en Harness UI:**
+1. Navegar a **Project Settings** → **Governance** → **Policies**
+2. Crear policy con contenido de `configmap-validation.rego`
+3. Crear Policy Set con Entity Type: `Pipeline`, Event: `On Run`
+
+### 7.6 Pipeline Harness CD
+
+El pipeline `CD_Kubernetes` incluye el flujo completo:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Step 1: Validate Values                                    │
+│  └─ ./scripts/validate-values.sh <service> dev              │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Step 2: Render Templates                                   │
+│  └─ ./scripts/render.sh <service> dev <version>             │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Step 3: K8sRollingDeploy                                   │
+│  └─ Harness native deployment step                          │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Step 4: Smoke Test - Liveness                              │
+│  └─ HTTP GET /health/live → expect 200                      │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Step 5: Smoke Test - Readiness                             │
+│  └─ HTTP GET /health/ready → expect 200                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Pipeline YAML:** `.harness/pipelines/CD/CD-Kubernetes-updated.yaml`
+
+---
+
+## Versiones
+
+### v0.0.3 (Actual)
+
+**Cambios:**
+- MongoDB con autenticación habilitada (user: cinema, pass: cinema123)
+- Health endpoints `/health/live` y `/health/ready` en todos los servicios
+- Script de validación pre-deploy (`validate-values.sh`)
+- OPA policies para governance en Harness
+- Pipeline CD actualizado con smoke tests HTTP
+- Taskfile con paridad de features con Harness CD
+
+**Imágenes Docker:**
+```
+crizstian/booking-service:v0.0.3
+crizstian/movie-service:v0.0.3
+crizstian/cinema-service:v0.0.3
+crizstian/user-service:v0.0.3
+crizstian/seat-service:v0.0.3
+crizstian/showtime-service:v0.0.3
+crizstian/payment-service:v0.0.3
+crizstian/notification-service:v0.0.3
+```

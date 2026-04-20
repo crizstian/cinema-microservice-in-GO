@@ -16,8 +16,13 @@ nodeTaintValue: selatam_demo_space
 # MongoDB Configuration
 mongodb:
   replicas: 1  # Use 1 for dev, 3 for prod
+  replicaSet: rs0
+  # Root credentials (admin)
   rootUser: cinema_admin
   rootPassword: n8XGsZ15Z4OzTqpAXsCAs8CA  # CHANGE IN PRODUCTION!
+  # Application credentials (used by microservices)
+  appUser: cinema
+  appPassword: cinema123  # CHANGE IN PRODUCTION!
   keyfile: |
     RJfupxJIIETj0XWK85zWHY7AEDVWXQ1UPV9l1E23EhxmdfC5HtTzkC5KL0RWovEk
     Y8qCFNngMSQKghVNX0YJZsQl1BYDRU9eUQMDpD8afcfO2x6lq2SainKCeEfzKSKv

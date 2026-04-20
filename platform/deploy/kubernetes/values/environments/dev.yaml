@@ -8,10 +8,10 @@ namespace: cinema-dev
 image:
   pullPolicy: Always
 
-# Database
+# Database (with user/pass authentication)
 database:
   servers: mongodb.cinema-dev.svc.cluster.local:27017
-  replica: rs0
+  replica: ""
   user: cinema
   password: cinema123
 

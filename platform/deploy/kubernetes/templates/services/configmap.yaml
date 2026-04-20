@@ -12,7 +12,9 @@ data:
   SERVICE_PORT: {{ quote (default "8080" .Values.port) }}
   DB_NAME: {{ quote (default .Values.serviceName .Values.dbName) }}
   DB_SERVERS: {{ quote .Values.database.servers }}
-  DB_REPLICA: {{ quote (required "database.replica is required (e.g., 'rs0')" .Values.database.replica) }}
+  DB_REPLICA: {{ quote (default "" .Values.database.replica) }}
+  DB_USER: {{ quote (default "" .Values.database.user) }}
+  DB_PASS: {{ quote (default "" .Values.database.password) }}
   LOG_LEVEL: {{ quote .Values.observability.logLevel }}
   BOOKING_URL: {{ quote .Values.services.booking }}
   MOVIE_URL: {{ quote .Values.services.movie }}

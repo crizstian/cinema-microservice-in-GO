@@ -14,7 +14,10 @@ func BookingAPI(app *echo.Group, repo api.Repository) {
 	app.GET("/:orderId", repo.GetOrderByID)
 }
 
-// HealthyAPI ...
+// HealthyAPI registers health check endpoints
 func HealthyAPI(app *echo.Echo) {
 	app.GET("/ping", api.PingAPI)
+	// Kubernetes health endpoints
+	app.GET("/health/live", api.PingAPI)
+	app.GET("/health/ready", api.PingAPI)
 }

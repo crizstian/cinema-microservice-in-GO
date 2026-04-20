@@ -13,7 +13,10 @@ func PaymentAPI(app *echo.Group, repo api.Repository) {
 	app.POST("/:id/refund", repo.RefundPayment)
 }
 
-// HealthyAPI ...
+// HealthyAPI registers health check endpoints
 func HealthyAPI(app *echo.Echo) {
 	app.GET("/ping", api.PingAPI)
+	// Kubernetes health endpoints
+	app.GET("/health/live", api.PingAPI)
+	app.GET("/health/ready", api.PingAPI)
 }

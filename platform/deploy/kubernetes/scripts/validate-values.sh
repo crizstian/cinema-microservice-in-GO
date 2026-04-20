@@ -63,13 +63,17 @@ echo "=== Running basic validation ==="
 
 ERRORS=0
 
-# Check database.replica is not empty
+# Check database.replica (optional in dev for standalone MongoDB)
 DB_REPLICA=$(yq -r '.database.replica // ""' "$MERGED_VALUES_FILE")
 if [[ -z "$DB_REPLICA" || "$DB_REPLICA" == "null" ]]; then
-    echo "ERROR: database.replica is empty or missing"
-    echo "  - MongoDB replica set name is required"
-    echo "  - Suggested fix: Set database.replica to 'rs0' in ${ENV_FILE}"
-    ERRORS=$((ERRORS + 1))
+    if [[ "$ENVIRONMENT" == "dev" ]]; then
+        echo "INFO: database.replica is empty (standalone MongoDB for dev)"
+    else
+        echo "ERROR: database.replica is empty or missing (required for $ENVIRONMENT)"
+        echo "  - MongoDB replica set name is required for $ENVIRONMENT"
+        echo "  - Suggested fix: Set database.replica to 'rs0' in ${ENV_FILE}"
+        ERRORS=$((ERRORS + 1))
+    fi
 else
     echo "OK: database.replica = $DB_REPLICA"
 fi
@@ -83,20 +87,28 @@ else
     echo "OK: database.servers = $DB_SERVERS"
 fi
 
-# Check database.user
+# Check database.user (optional in dev - no-auth mode supported)
 DB_USER=$(yq '.database.user // ""' "$MERGED_VALUES_FILE")
-if [[ -z "$DB_USER" || "$DB_USER" == "null" ]]; then
-    echo "ERROR: database.user is empty or missing"
-    ERRORS=$((ERRORS + 1))
+if [[ -z "$DB_USER" || "$DB_USER" == "null" || "$DB_USER" == '""' ]]; then
+    if [[ "$ENVIRONMENT" == "dev" ]]; then
+        echo "INFO: database.user is empty (no-auth mode for dev)"
+    else
+        echo "ERROR: database.user is empty or missing (required for $ENVIRONMENT)"
+        ERRORS=$((ERRORS + 1))
+    fi
 else
     echo "OK: database.user = [REDACTED]"
 fi
 
-# Check database.password
+# Check database.password (optional in dev - no-auth mode supported)
 DB_PASS=$(yq '.database.password // ""' "$MERGED_VALUES_FILE")
-if [[ -z "$DB_PASS" || "$DB_PASS" == "null" ]]; then
-    echo "ERROR: database.password is empty or missing"
-    ERRORS=$((ERRORS + 1))
+if [[ -z "$DB_PASS" || "$DB_PASS" == "null" || "$DB_PASS" == '""' ]]; then
+    if [[ "$ENVIRONMENT" == "dev" ]]; then
+        echo "INFO: database.password is empty (no-auth mode for dev)"
+    else
+        echo "ERROR: database.password is empty or missing (required for $ENVIRONMENT)"
+        ERRORS=$((ERRORS + 1))
+    fi
 else
     echo "OK: database.password = [REDACTED]"
 fi
