@@ -1,6 +1,9 @@
 # Payment Service Values
 # Handles payment processing
 
+serviceName: payment-service
+version: <+artifact.tag>
+
 port: 8007
 dbName: payment
 

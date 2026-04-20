@@ -1,6 +1,9 @@
 # Cinema Service Values
 # Manages cinema locations and halls
 
+serviceName: cinema-service
+version: <+artifact.tag>
+
 port: 8003
 dbName: cinema
 

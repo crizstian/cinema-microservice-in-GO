@@ -1,6 +1,9 @@
 # User Service Values
 # Manages user accounts and authentication
 
+serviceName: user-service
+version: <+artifact.tag>
+
 port: 8004
 dbName: user
 

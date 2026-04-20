@@ -1,6 +1,9 @@
 # Notification Service Values
 # Sends notifications (email, SMS, push)
 
+serviceName: notification-service
+version: <+artifact.tag>
+
 port: 8008
 dbName: notification
 

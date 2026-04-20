@@ -1,12 +1,15 @@
 # Showtime Service Values
 # Manages movie showtimes
 
+serviceName: showtime-service
+version: <+artifact.tag>
+
 port: 8006
 dbName: showtime
 
 dependencies:
-  - movie
-  - cinema
+  - movie-service
+  - cinema-service
 
 resources:
   requests:

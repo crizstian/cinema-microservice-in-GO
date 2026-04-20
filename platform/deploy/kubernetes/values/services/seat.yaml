@@ -1,11 +1,14 @@
 # Seat Service Values
 # Manages seat availability and reservations
 
+serviceName: seat-service
+version: <+artifact.tag>
+
 port: 8005
 dbName: seat
 
 dependencies:
-  - showtime
+  - showtime-service
 
 resources:
   requests:
