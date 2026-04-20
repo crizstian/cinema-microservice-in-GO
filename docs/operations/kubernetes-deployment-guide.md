@@ -344,7 +344,7 @@ image:
 
 database:
   servers: mongodb.cinema-dev.svc.cluster.local:27017
-  replica: ""
+  replica: ""  # Empty for standalone MongoDB (no replica set)
   user: cinema
   password: cinema123
 
@@ -1970,9 +1970,9 @@ El script `validate-values.sh` verifica la configuración antes de renderizar:
 ```
 
 **Validaciones incluidas:**
-- `database.replica` no está vacío (requerido para MongoDB replica set)
+- `database.replica` - Requerido para staging/prod; opcional en dev (vacío = standalone MongoDB)
 - `database.servers` está configurado
-- `database.user` y `database.password` (requeridos en staging/prod, opcionales en dev)
+- `database.user` y `database.password` (requeridos en staging/prod, opcionales en dev para no-auth mode)
 - `port` está en rango válido (1024-65535)
 - `namespace` coincide con el entorno (`cinema-{env}`)
 
@@ -1985,7 +1985,7 @@ Merging values from:
   3. values/services/movie.yaml
 
 === Running basic validation ===
-OK: database.replica = rs0
+INFO: database.replica is empty (standalone MongoDB for dev)
 OK: database.servers = mongodb.cinema-dev.svc.cluster.local:27017
 OK: database.user = [REDACTED]
 OK: database.password = [REDACTED]
@@ -1998,40 +1998,65 @@ PASSED: All validations passed
 
 ### 7.3 MongoDB con Autenticación
 
-A partir de v0.0.3, MongoDB se despliega con autenticación habilitada:
+A partir de v0.0.3, MongoDB soporta dos modos de autenticación:
 
-**Credenciales configuradas en `values/infrastructure.yaml`:**
+#### Modo Standalone (Dev)
+
+Para desarrollo, MongoDB se despliega sin replica set, simplificando la configuración:
+
+**Credenciales en `values/infrastructure.yaml`:**
 ```yaml
 mongodb:
-  replicaSet: rs0
   rootUser: cinema_admin
   rootPassword: n8XGsZ15Z4OzTqpAXsCAs8CA  # CAMBIAR EN PRODUCCIÓN
   appUser: cinema
   appPassword: cinema123  # CAMBIAR EN PRODUCCIÓN
 ```
 
-**Credenciales de aplicación en `values/environments/dev.yaml`:**
+**Configuración en `values/environments/dev.yaml`:**
 ```yaml
 database:
   servers: mongodb.cinema-dev.svc.cluster.local:27017
-  replica: rs0
+  replica: ""  # Vacío = standalone mode (sin replica set)
   user: cinema
   password: cinema123
 ```
 
-**Desplegar MongoDB con auth:**
+**ConfigMap generado incluye:**
+```yaml
+DB_SERVERS: mongodb.cinema-dev.svc.cluster.local:27017
+DB_REPLICA: ""
+DB_USER: cinema
+DB_PASS: cinema123
+```
+
+**Verificar conexión (standalone):**
 ```bash
-# Renderizar infraestructura
-task k8s:infra:render COMPONENT=mongodb
-
-# Aplicar
-kubectl apply -f platform/deploy/kubernetes/rendered/infrastructure/mongodb.yaml
-
-# Verificar conexión con auth
 kubectl run mongo-test --rm -it --restart=Never \
   --image=mongo:8.0 -n cinema-dev -- \
-  mongosh "mongodb://cinema:cinema123@mongodb:27017/movie?authSource=admin&replicaSet=rs0" \
+  mongosh "mongodb://cinema:cinema123@mongodb:27017/movie?authSource=admin" \
   --eval "db.adminCommand('ping')"
+```
+
+#### Modo Replica Set (Staging/Prod)
+
+Para staging y producción, MongoDB usa replica set para alta disponibilidad:
+
+```yaml
+# values/environments/staging.yaml
+database:
+  servers: mongodb-0.mongodb,mongodb-1.mongodb,mongodb-2.mongodb
+  replica: rs0  # Nombre del replica set
+  user: cinema
+  password: ${MONGO_APP_PASSWORD}  # Desde secret
+```
+
+**Verificar conexión (replica set):**
+```bash
+kubectl run mongo-test --rm -it --restart=Never \
+  --image=mongo:8.0 -n cinema-staging -- \
+  mongosh "mongodb://cinema:pass@mongodb:27017/movie?authSource=admin&replicaSet=rs0" \
+  --eval "rs.status()"
 ```
 
 ### 7.4 Health Endpoints
@@ -2128,14 +2153,25 @@ El pipeline `CD_Kubernetes` incluye el flujo completo:
 ### v0.0.3 (Actual)
 
 **Cambios:**
-- MongoDB con autenticación habilitada (user: cinema, pass: cinema123)
+- **MongoDB standalone mode** para dev (sin replica set, simplifica configuración)
+- **MongoDB con autenticación** via user/password (DB_USER, DB_PASS en configmap)
+- **DB_REPLICA opcional** - vacío para standalone, configurado para replica set
 - Health endpoints `/health/live` y `/health/ready` en todos los servicios
-- Script de validación pre-deploy (`validate-values.sh`)
-- OPA policies para governance en Harness
+- Script de validación pre-deploy (`validate-values.sh`) actualizado para soportar standalone
+- ConfigMap incluye DB_USER y DB_PASS para autenticación
 - Pipeline CD actualizado con smoke tests HTTP
-- Taskfile con paridad de features con Harness CD
+- Servicios Go actualizados para manejar DB_REPLICA opcional
 
-**Imágenes Docker:**
+**ConfigMap generado (ejemplo movie):**
+```yaml
+DB_SERVERS: mongodb.cinema-dev.svc.cluster.local:27017
+DB_REPLICA: ""  # Vacío para standalone
+DB_USER: cinema
+DB_PASS: cinema123
+DB_NAME: movie
+```
+
+**Imágenes Docker (linux/amd64):**
 ```
 crizstian/booking-service:v0.0.3
 crizstian/movie-service:v0.0.3
