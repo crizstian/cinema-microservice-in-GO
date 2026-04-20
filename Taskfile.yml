@@ -345,11 +345,11 @@ tasks:
   # CONFIG GENERATION (Single Source of Truth)
   # ============================================================================
   config:generate:
-    desc: "Generate .env.local from config/services.yaml"
+    desc: "Generate .env.local from platform/config/services.yaml"
     cmds: ["{{.SCRIPTS}}/config-generate.sh"]
 
   config:harness:
-    desc: "Generate Harness service definitions from config/services.yaml"
+    desc: "Generate Harness service definitions from platform/config/services.yaml"
     cmds: ["{{.SCRIPTS}}/config-sync-harness.sh"]
 
   config:all:
@@ -359,11 +359,11 @@ tasks:
       - task: config:harness
 
   config:validate:
-    desc: "Validate config/services.yaml"
+    desc: "Validate platform/config/services.yaml"
     cmds:
       - |
         if command -v yq &> /dev/null; then
-          yq eval '.' config/services.yaml > /dev/null && echo "config/services.yaml is valid YAML"
+          yq eval '.' platform/config/services.yaml > /dev/null && echo "platform/config/services.yaml is valid YAML"
         else
           echo "yq not installed, skipping validation"
         fi
@@ -373,7 +373,7 @@ tasks:
     cmds:
       - |
         echo "=== Service Configuration ==="
-        yq '.services | to_entries | .[] | .key + ": port=" + (.value.port | tostring)' config/services.yaml
+        yq '.services | to_entries | .[] | .key + ": port=" + (.value.port | tostring)' platform/config/services.yaml
 
   # ============================================================================
   # HELP

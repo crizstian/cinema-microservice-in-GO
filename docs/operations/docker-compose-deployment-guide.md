@@ -7,14 +7,264 @@ Disenada para todos los niveles: desde principiantes hasta expertos.
 
 ## Tabla de Contenidos
 
-1. [Prerequisitos](#prerequisitos)
-2. [Fase 1: Configuracion Centralizada](#fase-1-configuracion-centralizada)
-3. [Fase 2: Iniciar el Entorno](#fase-2-iniciar-el-entorno)
-4. [Fase 3: Validacion de Servicios](#fase-3-validacion-de-servicios)
-5. [Fase 4: Testing de APIs](#fase-4-testing-de-apis)
-6. [Fase 5: Troubleshooting](#fase-5-troubleshooting)
-7. [Fase 6: Cleanup](#fase-6-cleanup)
-8. [Quick Reference](#quick-reference)
+1. [Arquitectura del Sistema](#arquitectura-del-sistema)
+2. [Prerequisitos](#prerequisitos)
+3. [Fase 1: Configuracion Centralizada](#fase-1-configuracion-centralizada)
+4. [Fase 2: Iniciar el Entorno](#fase-2-iniciar-el-entorno)
+5. [Fase 3: Validacion de Servicios](#fase-3-validacion-de-servicios)
+6. [Fase 4: Testing de APIs](#fase-4-testing-de-apis)
+7. [Fase 5: Troubleshooting](#fase-5-troubleshooting)
+8. [Fase 6: Cleanup](#fase-6-cleanup)
+9. [Quick Reference](#quick-reference)
+
+---
+
+## Arquitectura del Sistema
+
+### Microservicios de la Aplicacion
+
+**Objetivo:** Entender que hace cada microservicio y como se relacionan entre si.
+
+**Por que es importante:** Cada servicio tiene una responsabilidad especifica. Conocerlos te ayuda a debuggear problemas y entender el flujo de datos.
+
+| Servicio | Puerto | Responsabilidad | Dependencias |
+|----------|--------|-----------------|--------------|
+| **booking** | 8001 | Orquestador SAGA - coordina el flujo completo de reserva | payment, seat, showtime, notification |
+| **movie** | 8002 | Catalogo de peliculas - CRUD de peliculas disponibles | MongoDB |
+| **cinema** | 8003 | Gestion de cines y salas - ubicaciones y capacidades | MongoDB |
+| **user** | 8004 | Autenticacion y usuarios - registro, login, perfiles | MongoDB, Redis |
+| **seat** | 8005 | Mapa de asientos - disponibilidad y holds temporales | MongoDB, Redis |
+| **showtime** | 8006 | Funciones - horarios, precios, disponibilidad | MongoDB, movie |
+| **payment** | 8007 | Procesamiento de pagos - integracion con Stripe (mock) | MongoDB |
+| **notification** | 8008 | Notificaciones - emails de confirmacion (mock) | NATS |
+
+**Diagrama de dependencias:**
+
+```
+                           ┌─────────────────────────────────────────┐
+                           │           BOOKING SERVICE               │
+                           │        (SAGA Orchestrator)              │
+                           │    Coordina transacciones distribuidas  │
+                           │              Puerto: 8001               │
+                           └─────────────────┬───────────────────────┘
+                                             │
+            ┌────────────────┬───────────────┼───────────────┬────────────────┐
+            │                │               │               │                │
+            ▼                ▼               ▼               ▼                ▼
+    ┌───────────────┐ ┌───────────────┐ ┌───────────────┐ ┌───────────────┐
+    │    PAYMENT    │ │     SEAT      │ │   SHOWTIME    │ │ NOTIFICATION  │
+    │ Procesa pagos │ │ Reserva seats │ │   Valida      │ │ Envia emails  │
+    │    :8007      │ │    :8005      │ │  horarios     │ │    :8008      │
+    └───────────────┘ └───────┬───────┘ │    :8006      │ └───────────────┘
+                              │         └───────┬───────┘
+                              │                 │
+                              ▼                 ▼
+                       ┌─────────────────────────────┐
+                       │      MOVIE      │   CINEMA  │
+                       │   Catalogo de   │  Cines y  │
+                       │   peliculas     │   salas   │
+                       │     :8002       │   :8003   │
+                       └─────────────────────────────┘
+                                    │
+    ┌───────────────────────────────┼───────────────────────────────┐
+    │                               │                               │
+    ▼                               ▼                               ▼
+┌─────────┐                   ┌─────────┐                     ┌─────────┐
+│  USER   │                   │ MongoDB │                     │  Redis  │
+│ :8004   │                   │         │                     │         │
+└─────────┘                   └─────────┘                     └─────────┘
+```
+
+---
+
+### Servicios de Infraestructura
+
+**Objetivo:** Entender que infraestructura se requiere y por que cada componente es necesario.
+
+**Por que es importante:** Sin la infraestructura correcta, los microservicios no pueden funcionar. Cada componente tiene un proposito especifico.
+
+#### MongoDB (Base de datos)
+
+| Aspecto | Descripcion |
+|---------|-------------|
+| **Que es** | Base de datos NoSQL orientada a documentos |
+| **Por que se usa** | Flexibilidad de schema, buen rendimiento para lecturas, soporte nativo para replica sets |
+| **Configuracion dev** | 3 nodos en replica set (mongo1, mongo2, mongo3) |
+| **Configuracion test** | 1 nodo standalone con tmpfs |
+| **Puertos** | 27017 (mongo1), 27018 (mongo2), 27019 (mongo3) |
+
+**Por que replica set en dev:**
+- Simula produccion (alta disponibilidad)
+- Permite probar transacciones multi-documento
+- El servicio `booking` usa transacciones ACID
+
+```bash
+# Verificar estado del replica set
+docker exec dev-mongo1 mongosh --eval "rs.status().members.map(m => m.name + ' -> ' + m.stateStr)"
+```
+
+**Respuesta esperada:**
+```
+[ 'mongo1:27017 -> PRIMARY', 'mongo2:27017 -> SECONDARY', 'mongo3:27017 -> SECONDARY' ]
+```
+
+#### Redis (Cache y Locks)
+
+| Aspecto | Descripcion |
+|---------|-------------|
+| **Que es** | Almacen de datos en memoria, key-value |
+| **Por que se usa** | Cache de sesiones, locks distribuidos para seat holds |
+| **Quien lo usa** | `user` (sesiones JWT), `seat` (holds temporales) |
+| **Puerto** | 6379 |
+
+**Caso de uso critico - Seat Holds:**
+
+Cuando un usuario selecciona asientos, estos se "reservan temporalmente" por 5 minutos:
+
+```
+Usuario A selecciona A1, A2
+    │
+    ▼
+seat-service crea lock en Redis:
+  KEY: "hold:sht_001:A1" = "user_123"
+  KEY: "hold:sht_001:A2" = "user_123"
+  TTL: 300 segundos (5 min)
+    │
+    ▼
+Usuario B intenta seleccionar A1
+    │
+    ▼
+seat-service verifica Redis
+  KEY existe → Asiento NO disponible
+    │
+    ▼
+Respuesta: 409 Conflict
+```
+
+```bash
+# Verificar Redis
+docker exec dev-redis redis-cli ping
+# Respuesta: PONG
+
+# Ver keys activos (despues de un hold)
+docker exec dev-redis redis-cli keys "hold:*"
+```
+
+#### NATS (Mensajeria)
+
+| Aspecto | Descripcion |
+|---------|-------------|
+| **Que es** | Sistema de mensajeria pub/sub de alto rendimiento |
+| **Por que se usa** | Comunicacion asincrona entre servicios |
+| **Quien lo usa** | `booking` (publica eventos), `notification` (consume eventos) |
+| **Puertos** | 4222 (cliente), 8222 (monitoring HTTP) |
+
+**Flujo de notificacion:**
+
+```
+booking-service confirma reserva
+    │
+    ▼
+Publica evento en NATS:
+  Subject: "booking.confirmed"
+  Data: {order_id, user_email, seats, showtime}
+    │
+    ▼
+notification-service suscrito a "booking.*"
+    │
+    ▼
+Recibe evento → Envia email de confirmacion
+```
+
+```bash
+# Verificar NATS
+curl -s http://localhost:8222/varz | jq '{server_id, version, connections}'
+```
+
+**Respuesta esperada:**
+```json
+{
+  "server_id": "NXXXXXXXXXXXXXXXXXXXXXXXXX",
+  "version": "2.10.x",
+  "connections": 8
+}
+```
+
+#### mongo-init (Contenedor de inicializacion)
+
+| Aspecto | Descripcion |
+|---------|-------------|
+| **Que es** | Contenedor one-shot que configura MongoDB |
+| **Que hace** | 1) Inicia replica set, 2) Crea bases de datos, 3) Carga datos de prueba |
+| **Cuando corre** | Una vez al iniciar, luego termina (Exit 0) |
+| **Ubicacion scripts** | `platform/docker/mongodb/seed/*.js` |
+
+**Scripts de inicializacion (orden de ejecucion):**
+
+| Script | Proposito |
+|--------|-----------|
+| `01-init-replica.js` | Configura el replica set rs0 |
+| `02-create-databases.js` | Crea colecciones con schemas |
+| `03-create-indexes.js` | Crea indices para rendimiento |
+| `04-seed-test-data.js` | Inserta datos de prueba |
+
+**Datos de prueba cargados:**
+
+| Base de datos | Coleccion | Registros | Descripcion |
+|---------------|-----------|-----------|-------------|
+| `cinema` | movies | 2 | The Shawshank Redemption, Inception |
+| `cinema` | cinemas | 1 | Cinema Downtown |
+| `cinema` | rooms | 2 | Room 1 (100 seats), VIP Room (50 seats) |
+| `cinema` | showtimes | 2 | Funciones para manana |
+| `cinema` | users | 1 | test@example.com |
+| `cinema_seats` | room_layouts | 1 | Layout de 100 asientos (10x10) |
+| `cinema_seats` | showtimes | 2 | Mapeo showtime → room |
+
+```bash
+# Ver logs del init (deberia mostrar Exit 0)
+docker logs dev-mongo-init
+
+# Verificar datos cargados
+docker exec dev-mongo1 mongosh --eval "
+  db = db.getSiblingDB('cinema');
+  print('Movies: ' + db.movies.countDocuments());
+  print('Showtimes: ' + db.showtimes.countDocuments());
+  db.movies.find({}, {title: 1, _id: 0}).forEach(m => print('  - ' + m.title));
+"
+```
+
+**Respuesta esperada:**
+```
+Movies: 2
+Showtimes: 2
+  - The Shawshank Redemption
+  - Inception
+```
+
+---
+
+### Resumen de Contenedores
+
+**Objetivo:** Tener una vista completa de todos los contenedores que se inician.
+
+| Contenedor | Tipo | Puerto | Persistencia | Estado esperado |
+|------------|------|--------|--------------|-----------------|
+| dev-mongo1 | Infra | 27017 | Volume | healthy |
+| dev-mongo2 | Infra | 27018 | Volume | healthy |
+| dev-mongo3 | Infra | 27019 | Volume | healthy |
+| dev-mongo-init | Infra | - | - | Exited (0) |
+| dev-redis | Infra | 6379 | Volume | healthy |
+| cinema-nats | Infra | 4222, 8222 | - | healthy |
+| cinema-movie | App | 8002 | - | healthy |
+| cinema-cinema | App | 8003 | - | healthy |
+| cinema-user | App | 8004 | - | healthy |
+| cinema-seat | App | 8005 | - | healthy |
+| cinema-showtime | App | 8006 | - | healthy |
+| cinema-payment | App | 8007 | - | healthy |
+| cinema-notification | App | 8008 | - | healthy |
+| cinema-booking | App | 8001 | - | healthy |
+
+**Total:** 14 contenedores (6 infra + 8 app)
 
 ---
 
@@ -422,7 +672,273 @@ cinema-booking         healthy
 
 ---
 
-### 2.3 Iniciar manualmente (avanzado)
+### 2.3 Que hace `task dev:up` (desmitificando la magia)
+
+**Objetivo:** Entender exactamente que sucede cuando ejecutas `task dev:up` para poder debuggear problemas.
+
+**Por que es importante:** Cuando algo falla, necesitas saber que archivos, variables y comandos estan involucrados. No es magia - es una secuencia de operaciones bien definida.
+
+#### Archivos involucrados
+
+```
+/workspace/
+├── Taskfile.yml                              # Define el task dev:up
+│   └── calls: platform/scripts/taskfile/dev-up.sh
+│
+├── platform/scripts/taskfile/dev-up.sh       # Script que ejecuta el comando
+│   └── calls: docker compose ... --profile dev up
+│
+├── platform/deploy/docker-compose/
+│   ├── docker-compose.yml                    # Definicion de todos los servicios
+│   └── .env                                  # Variables (generado por config:generate)
+│
+├── platform/config/services.yaml             # Source of truth para puertos/config
+│
+└── platform/docker/
+    ├── go-service/Dockerfile                 # Dockerfile para microservicios Go
+    └── mongodb/
+        ├── Dockerfile                        # Init container de MongoDB
+        └── seed/*.js                         # Scripts de inicializacion
+```
+
+#### Contenido del script dev-up.sh
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+COMPOSE_FILE="platform/deploy/docker-compose/docker-compose.yml"
+
+# Variables de entorno que se exportan
+export ENV_PREFIX=dev
+export MONGO_SERVERS="mongo1:27017,mongo2:27017,mongo3:27017"
+
+# Comando que se ejecuta
+docker compose -f "$COMPOSE_FILE" --profile dev up -d --build
+
+# Espera y muestra estado
+echo "Waiting for services..."
+sleep 10
+docker compose -f "$COMPOSE_FILE" --profile dev ps
+```
+
+#### Variables de entorno en juego
+
+| Variable | Valor | Definida en | Usada por |
+|----------|-------|-------------|-----------|
+| `ENV_PREFIX` | `dev` | dev-up.sh | docker-compose.yml (nombres de contenedores) |
+| `MONGO_SERVERS` | `mongo1:27017,...` | dev-up.sh | Servicios Go (conexion a MongoDB) |
+| `MOVIE_PORT` | `8002` | .env (generado) | docker-compose.yml |
+| `MOVIE_DB` | `movie` | .env (generado) | docker-compose.yml |
+| `MOVIE_IMAGE` | `crizstian/movie-service` | .env (generado) | docker-compose.yml |
+| `VERSION` | `dev` (default) | No definida | docker-compose.yml (tag de imagen) |
+
+**Como docker-compose.yml usa las variables:**
+
+```yaml
+# Ejemplo: servicio movie en docker-compose.yml
+movie:
+  image: ${MOVIE_IMAGE:-crizstian/movie-service}:${VERSION:-dev}
+  container_name: ${ENV_PREFIX:-cinema}-movie
+  ports:
+    - "${MOVIE_PORT:-8002}:${MOVIE_PORT:-8002}"
+  environment:
+    DB_SERVERS: "${MONGO_SERVERS:-mongo:27017}"
+    DB_NAME: "${MOVIE_DB:-movie}"
+    SERVICE_PORT: "${MOVIE_PORT:-8002}"
+```
+
+#### Orden de operaciones
+
+```
+task dev:up
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  1. Taskfile.yml busca el task "dev:up"                             │
+│     - Ubicacion: /workspace/Taskfile.yml                            │
+│     - Linea: dev:up → calls platform/scripts/taskfile/dev-up.sh     │
+└───────────────────────────────────┬─────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  2. Script dev-up.sh se ejecuta                                     │
+│     - Exporta ENV_PREFIX=dev                                        │
+│     - Exporta MONGO_SERVERS=mongo1:27017,mongo2:27017,mongo3:27017  │
+└───────────────────────────────────┬─────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  3. Docker Compose lee configuracion                                │
+│     - Lee docker-compose.yml                                        │
+│     - Lee .env automaticamente (mismo directorio)                   │
+│     - Combina variables de entorno exportadas + .env                │
+└───────────────────────────────────┬─────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  4. Docker Compose filtra por profile "dev"                         │
+│     - Solo inicia servicios con "profiles: [dev, ...]"              │
+│     - Excluye servicios con otros profiles (ej: test, e2e)          │
+└───────────────────────────────────┬─────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  5. Docker construye imagenes (--build)                             │
+│     - Para cada servicio, lee el Dockerfile especificado            │
+│     - Construye imagen con tag ${VERSION:-dev}                      │
+│     - Cache de layers acelera rebuilds                              │
+└───────────────────────────────────┬─────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  6. Docker crea recursos                                            │
+│     - Network: cinema-dev-network                                   │
+│     - Volumes: mongo1_data, mongo2_data, mongo3_data, redis_data    │
+└───────────────────────────────────┬─────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  7. Docker inicia contenedores (respetando depends_on)              │
+│                                                                     │
+│     Orden de inicio:                                                │
+│     ┌─────────────────────────────────────────────────────────────┐ │
+│     │  Primero: mongo1, mongo2, mongo3 (en paralelo)              │ │
+│     │  Esperan: healthcheck (mongosh ping)                        │ │
+│     └───────────────────────────┬─────────────────────────────────┘ │
+│                                 │                                   │
+│     ┌───────────────────────────▼─────────────────────────────────┐ │
+│     │  Segundo: mongo-init (depends_on: mongo1,2,3 healthy)       │ │
+│     │  Ejecuta: /init.sh (rs.initiate + seed scripts)             │ │
+│     │  Termina: Exit 0                                            │ │
+│     └───────────────────────────┬─────────────────────────────────┘ │
+│                                 │                                   │
+│     ┌───────────────────────────▼─────────────────────────────────┐ │
+│     │  Tercero: redis, nats (en paralelo, sin dependencias)       │ │
+│     │  Esperan: healthcheck propio                                │ │
+│     └───────────────────────────┬─────────────────────────────────┘ │
+│                                 │                                   │
+│     ┌───────────────────────────▼─────────────────────────────────┐ │
+│     │  Cuarto: Todos los microservicios Go (en paralelo)          │ │
+│     │  Esperan: healthcheck /health/live                          │ │
+│     └─────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### Troubleshooting de `task dev:up`
+
+**Problema: "task: command not found"**
+
+```bash
+# Verificar instalacion
+which task
+
+# Si no existe, instalar
+brew install go-task  # macOS
+# o
+sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin  # Linux
+```
+
+**Problema: "No such file: platform/scripts/taskfile/dev-up.sh"**
+
+```bash
+# Verificar que existe el script
+ls -la platform/scripts/taskfile/dev-up.sh
+
+# Si no existe, verificar la rama
+git status
+```
+
+**Problema: ".env file not found" o variables vacias**
+
+```bash
+# Verificar que .env existe
+ls -la platform/deploy/docker-compose/.env
+
+# Si no existe, generarlo
+task config:generate
+
+# Verificar contenido
+cat platform/deploy/docker-compose/.env | head -20
+```
+
+**Problema: "port is already allocated"**
+
+```bash
+# Ver que usa el puerto
+lsof -i :8002
+
+# Detener compose anterior
+docker compose -f platform/deploy/docker-compose/docker-compose.yml down
+
+# O matar el proceso
+kill -9 <PID>
+```
+
+**Problema: "network not found" o "volume not found"**
+
+```bash
+# Limpiar recursos huerfanos
+docker network prune -f
+docker volume prune -f
+
+# Reintentar
+task dev:up
+```
+
+**Problema: Servicios nunca llegan a "healthy"**
+
+```bash
+# Ver logs del servicio que falla
+docker logs cinema-booking --tail 100
+
+# Ver eventos de Docker
+docker events --filter container=cinema-booking &
+
+# Ver healthcheck especifico
+docker inspect cinema-booking | jq '.[0].State.Health'
+```
+
+#### Ejecutar pasos individualmente (debug avanzado)
+
+Si `task dev:up` falla, puedes ejecutar cada paso manualmente:
+
+```bash
+# Paso 1: Exportar variables manualmente
+export ENV_PREFIX=dev
+export MONGO_SERVERS="mongo1:27017,mongo2:27017,mongo3:27017"
+
+# Paso 2: Iniciar solo infraestructura primero
+docker compose -f platform/deploy/docker-compose/docker-compose.yml \
+  --profile dev up -d mongo1 mongo2 mongo3
+
+# Paso 3: Esperar a que MongoDB este healthy
+docker compose -f platform/deploy/docker-compose/docker-compose.yml \
+  --profile dev ps mongo1 mongo2 mongo3
+
+# Paso 4: Ejecutar init manualmente
+docker compose -f platform/deploy/docker-compose/docker-compose.yml \
+  --profile dev up mongo-init-dev
+
+# Paso 5: Iniciar Redis y NATS
+docker compose -f platform/deploy/docker-compose/docker-compose.yml \
+  --profile dev up -d redis-dev nats
+
+# Paso 6: Iniciar un servicio a la vez
+docker compose -f platform/deploy/docker-compose/docker-compose.yml \
+  --profile dev up -d --build movie
+
+# Paso 7: Verificar logs
+docker logs cinema-movie
+
+# Paso 8: Si funciona, iniciar el resto
+docker compose -f platform/deploy/docker-compose/docker-compose.yml \
+  --profile dev up -d --build
+```
+
+---
+
+### 2.4 Iniciar manualmente (avanzado)
 
 **Objetivo:** Entender el comando subyacente para casos especiales.
 
@@ -451,7 +967,7 @@ docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile de
 
 ---
 
-### 2.4 Ver estado de contenedores
+### 2.5 Ver estado de contenedores
 
 **Objetivo:** Verificar que todos los contenedores estan corriendo.
 
