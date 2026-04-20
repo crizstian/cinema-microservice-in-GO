@@ -1,0 +1,59 @@
+# Harness Service Definition
+# Generated from config/services.yaml
+# Use: harness_create or harness_update to sync
+
+service:
+  name: seat-service
+  identifier: seatservice
+  serviceDefinition:
+    type: Kubernetes
+    spec:
+      manifests:
+        - manifest:
+            identifier: templates
+            type: K8sManifest
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: CristianConnector
+                  gitFetchType: Branch
+                  paths:
+                    - platform/deploy/kubernetes/templates/services/
+                  repoName: cinema-microservice-in-GO
+                  branch: <+pipeline.variables.branch>
+              valuesPaths:
+                - platform/deploy/kubernetes/values/base.yaml
+                - platform/deploy/kubernetes/values/environments/<+env.name>.yaml
+                - platform/deploy/kubernetes/values/services/seat.yaml
+              skipResourceVersioning: true
+      artifacts:
+        primary:
+          primaryArtifactRef: artifact
+          sources:
+            - identifier: artifact
+              type: DockerRegistry
+              spec:
+                connectorRef: DockerCristian
+                imagePath: crizstian/seat-service
+                tag: <+input>
+      variables:
+        - name: port
+          type: String
+          value: "8005"
+        - name: dbName
+          type: String
+          value: "seat"
+        - name: cpu_request
+          type: String
+          value: "100m"
+        - name: mem_request
+          type: String
+          value: "128Mi"
+        - name: cpu_limit
+          type: String
+          value: "500m"
+        - name: mem_limit
+          type: String
+          value: "512Mi"
+  gitOpsEnabled: false

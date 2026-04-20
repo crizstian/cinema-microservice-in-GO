@@ -342,6 +342,40 @@ tasks:
         fi
 
   # ============================================================================
+  # CONFIG GENERATION (Single Source of Truth)
+  # ============================================================================
+  config:generate:
+    desc: "Generate .env.local from config/services.yaml"
+    cmds: ["{{.SCRIPTS}}/config-generate.sh"]
+
+  config:harness:
+    desc: "Generate Harness service definitions from config/services.yaml"
+    cmds: ["{{.SCRIPTS}}/config-sync-harness.sh"]
+
+  config:all:
+    desc: "Generate all config files (.env.local + Harness services)"
+    cmds:
+      - task: config:generate
+      - task: config:harness
+
+  config:validate:
+    desc: "Validate config/services.yaml"
+    cmds:
+      - |
+        if command -v yq &> /dev/null; then
+          yq eval '.' config/services.yaml > /dev/null && echo "config/services.yaml is valid YAML"
+        else
+          echo "yq not installed, skipping validation"
+        fi
+
+  config:show:
+    desc: "Show current service configuration"
+    cmds:
+      - |
+        echo "=== Service Configuration ==="
+        yq '.services | to_entries | .[] | .key + ": port=" + (.value.port | tostring)' config/services.yaml
+
+  # ============================================================================
   # HELP
   # ============================================================================
   default:

@@ -1,33 +1,29 @@
 # Booking Service Values
-# Orchestrates the booking SAGA pattern
+# Template with Harness expressions - values resolved at deploy time
 
-serviceName: booking-service
+serviceName: <+service.name>
 version: <+artifact.tag>
 
-port: 8001
-dbName: booking
+port: <+serviceVariables.port>
+dbName: <+serviceVariables.dbName>
 
-# Dependencies
 dependencies:
   - seat-service
   - payment-service
   - showtime-service
   - notification-service
 
-# Resource defaults (overrides base)
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: <+serviceVariables.cpu_request>
+    memory: <+serviceVariables.mem_request>
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: <+serviceVariables.cpu_limit>
+    memory: <+serviceVariables.mem_limit>
 
-# HPA defaults
 autoscaling:
   minReplicas: 2
   maxReplicas: 10
 
-# PDB
 pdb:
   minAvailable: 1
