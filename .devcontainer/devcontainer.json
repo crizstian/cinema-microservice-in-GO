@@ -52,6 +52,13 @@
             "env": {
               "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}"
             }
+          },
+          "kubernetes": {
+            "command": "npx",
+            "args": ["-y", "mcp-server-kubernetes"],
+            "env": {
+              "KUBECONFIG": "${containerEnv:KUBECONFIG}"
+            }
           }
         }
       }
