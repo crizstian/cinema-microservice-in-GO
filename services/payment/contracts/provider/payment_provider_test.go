@@ -1,3 +1,5 @@
+//go:build pact
+
 package provider
 
 import (
