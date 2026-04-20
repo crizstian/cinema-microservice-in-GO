@@ -15,6 +15,7 @@ services:
       - ../:/workspace
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HOME}/.config/gcloud:/home/devuser/.config/gcloud:rw
+      - ${HOME}/.kube:/home/devuser/.kube:rw
     working_dir: /workspace
     user: devuser
     container_name: cinemas_microservice_go

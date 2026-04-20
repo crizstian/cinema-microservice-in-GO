@@ -1,0 +1,176 @@
+openapi: 3.0.3
+info:
+  title: Analytics Service API
+  description: |
+    Cinema ticketing system - Analytics and reporting microservice.
+
+    Provides business intelligence capabilities:
+    - Generate sales reports (daily, weekly, monthly)
+    - Top movies analytics
+    - Occupancy rate metrics
+    - Revenue by cinema location
+  version: 1.0.0
+  contact:
+    name: Cinema Ticketing Team
+    email: team@cinema.local
+
+servers:
+  - url: http://localhost:8010
+    description: Local development server
+  - url: http://analytics-service:8010
+    description: Docker/Kubernetes internal
+
+tags:
+  - name: reports
+    description: Report generation and retrieval
+  - name: health
+    description: Service health check
+
+paths:
+  /health:
+    get:
+      tags:
+        - health
+      summary: Health check endpoint
+      operationId: health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ping:
+    get:
+      tags:
+        - health
+      summary: Simple ping endpoint
+      operationId: ping
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: pong
+
+  /api/reports:
+    get:
+      tags:
+        - reports
+      summary: Get all reports
+      operationId: getAllReports
+      responses:
+        '200':
+          description: List of all generated reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Report'
+
+  /api/reports/{id}:
+    get:
+      tags:
+        - reports
+      summary: Get report by ID
+      operationId: getReport
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Report found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+        '404':
+          description: Report not found
+
+  /api/reports/type/{type}:
+    get:
+      tags:
+        - reports
+      summary: Get reports by type
+      operationId: getReportsByType
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ReportType'
+      responses:
+        '200':
+          description: Reports of specified type
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Report'
+
+  /api/reports/generate:
+    post:
+      tags:
+        - reports
+      summary: Generate a new report
+      operationId: generateReport
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/ReportType'
+      responses:
+        '200':
+          description: Report generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: UP
+        service:
+          type: string
+          example: analytics
+
+    ReportType:
+      type: string
+      enum:
+        - DAILY_SALES
+        - WEEKLY_SALES
+        - MONTHLY_SALES
+        - TOP_MOVIES
+        - OCCUPANCY_RATE
+        - REVENUE_BY_CINEMA
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/ReportType'
+        title:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+        generatedAt:
+          type: string
+          format: date-time

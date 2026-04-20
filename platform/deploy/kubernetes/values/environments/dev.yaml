@@ -1,0 +1,58 @@
+# Development Environment Values
+# GKE sandbox cluster configuration
+
+environment: dev
+namespace: cinema-dev
+
+# Image configuration
+image:
+  pullPolicy: Always
+
+# Database (with user/pass authentication)
+database:
+  servers: mongodb.cinema-dev.svc.cluster.local:27017
+  replica: ""
+  user: cinema
+  password: cinema123
+
+# Observability
+observability:
+  logLevel: debug
+
+# Service discovery
+services:
+  booking: http://booking.cinema-dev.svc.cluster.local
+  movie: http://movie.cinema-dev.svc.cluster.local
+  cinema: http://cinema.cinema-dev.svc.cluster.local
+  user: http://user.cinema-dev.svc.cluster.local
+  seat: http://seat.cinema-dev.svc.cluster.local
+  showtime: http://showtime.cinema-dev.svc.cluster.local
+  payment: http://payment.cinema-dev.svc.cluster.local
+  notification: http://notification.cinema-dev.svc.cluster.local
+
+# Ingress
+ingress:
+  host: cinema.dev.local
+  sslRedirect: "false"
+  tlsSecret: cinema-tls-dev
+
+# Scaling (minimal for dev)
+replicas: 1
+autoscaling:
+  minReplicas: 1
+  maxReplicas: 2
+  cpuThreshold: 80
+  memoryThreshold: 80
+
+# Resources (minimal for dev)
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+# PDB (relaxed for dev)
+pdb:
+  minAvailable: 0

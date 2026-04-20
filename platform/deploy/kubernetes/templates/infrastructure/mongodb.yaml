@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-secrets
+  namespace: {{ .Values.namespace }}
+type: Opaque
+stringData:
+  MONGO_INITDB_ROOT_USERNAME: {{ .Values.mongodb.rootUser }}
+  MONGO_INITDB_ROOT_PASSWORD: {{ .Values.mongodb.rootPassword }}
+  MONGO_APP_USER: {{ .Values.mongodb.appUser }}
+  MONGO_APP_PASSWORD: {{ .Values.mongodb.appPassword }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-init-scripts
+  namespace: {{ .Values.namespace }}
+data:
+  create-app-user.js: |
+    // Create application user for microservices
+    db = db.getSiblingDB('admin');
+
+    // Create app user if not exists
+    var existingUser = db.getUser('{{ .Values.mongodb.appUser }}');
+    if (!existingUser) {
+      db.createUser({
+        user: '{{ .Values.mongodb.appUser }}',
+        pwd: '{{ .Values.mongodb.appPassword }}',
+        roles: [
+          { role: 'readWrite', db: 'booking' },
+          { role: 'readWrite', db: 'movie' },
+          { role: 'readWrite', db: 'cinema' },
+          { role: 'readWrite', db: 'user' },
+          { role: 'readWrite', db: 'seat' },
+          { role: 'readWrite', db: 'showtime' },
+          { role: 'readWrite', db: 'payment' },
+          { role: 'readWrite', db: 'notification' }
+        ]
+      });
+      print("Created application user: {{ .Values.mongodb.appUser }}");
+    } else {
+      print("Application user already exists: {{ .Values.mongodb.appUser }}");
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: mongodb
+spec:
+  clusterIP: None
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: 27017
+  selector:
+    app.kubernetes.io/name: mongodb
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: mongodb
+spec:
+  serviceName: mongodb
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongodb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongodb
+    spec:
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        owner: {{ .Values.nodeOwner }}
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: {{ quote .Values.nodeTaintValue }}
+          effect: "NoSchedule"
+      containers:
+        - name: mongodb
+          image: mongo:8.0
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secrets
+                  key: MONGO_INITDB_ROOT_USERNAME
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secrets
+                  key: MONGO_INITDB_ROOT_PASSWORD
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            requests:
+              cpu: {{ .Values.mongodb.resources.requests.cpu }}
+              memory: {{ .Values.mongodb.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.mongodb.resources.limits.cpu }}
+              memory: {{ .Values.mongodb.resources.limits.memory }}
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - -u
+                - $(MONGO_INITDB_ROOT_USERNAME)
+                - -p
+                - $(MONGO_INITDB_ROOT_PASSWORD)
+                - --authenticationDatabase
+                - admin
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - -u
+                - $(MONGO_INITDB_ROOT_USERNAME)
+                - -p
+                - $(MONGO_INITDB_ROOT_PASSWORD)
+                - --authenticationDatabase
+                - admin
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: mongodb-init-scripts
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ quote .Values.mongodb.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.mongodb.storageSize }}

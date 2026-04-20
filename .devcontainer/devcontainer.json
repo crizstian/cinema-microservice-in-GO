@@ -12,7 +12,8 @@
         "humao.rest-client",
         "ms-vscode-remote.remote-containers",
         "esbenp.prettier-vscode",
-        "ShiftLeft.shiftleft-core"
+        "ShiftLeft.shiftleft-core",
+        "shd101wyy.markdown-preview-enhanced"
       ],
       "settings": {
         "terminal.integrated.defaultProfile.linux": "sh",
@@ -51,14 +52,19 @@
             "env": {
               "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}"
             }
+          },
+          "kubernetes": {
+            "command": "npx",
+            "args": ["-y", "mcp-server-kubernetes"],
+            "env": {
+              "KUBECONFIG": "${containerEnv:KUBECONFIG}"
+            }
           }
         }
       }
     }
   },
   "remoteEnv": {
-    "SHIFTLEFT_ACCESS_TOKEN": "${containerEnv:SHIFTLEFT_ACCESS_TOKEN}",
-    "SHIFTLEFT_ORG_ID": "${containerEnv:SHIFTLEFT_ORG_ID}",
     "HARNESS_API_KEY": "${containerEnv:HARNESS_API_KEY}",
     "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
     "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
@@ -76,7 +82,8 @@
     "GITHUB_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
     "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}",
     "SHIFTLEFT_ACCESS_TOKEN": "${containerEnv:SHIFTLEFT_ACCESS_TOKEN}",
-    "SHIFTLEFT_ORG_ID": "${containerEnv:SHIFTLEFT_ORG_ID}"
+    "SHIFTLEFT_ORG_ID": "${containerEnv:SHIFTLEFT_ORG_ID}",
+    "KUBECONFIG": "${containerEnv:KUBECONFIG}"
   },
   "remoteUser": "devuser",
   "postCreateCommand": "sh /workspace/platform/scripts/devcontainer/post-create.sh",

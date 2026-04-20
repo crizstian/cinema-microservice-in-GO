@@ -1,0 +1,22 @@
+# Payment Service Values
+# Handles payment processing
+
+port: 8007
+dbName: payment
+
+dependencies: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  minReplicas: 2
+  maxReplicas: 10
+
+pdb:
+  minAvailable: 1

@@ -24,7 +24,10 @@ func UserAPI(app *echo.Group, repo api.Repository, jwtConfig *middleware.JWTConf
 	protected.GET("/me/bookings", repo.GetBookings)
 }
 
-// HealthyAPI sets up health check route
+// HealthyAPI sets up health check routes
 func HealthyAPI(app *echo.Echo) {
 	app.GET("/ping", api.PingAPI)
+	// Kubernetes health endpoints
+	app.GET("/health/live", api.PingAPI)
+	app.GET("/health/ready", api.PingAPI)
 }

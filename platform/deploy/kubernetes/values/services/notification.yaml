@@ -1,0 +1,22 @@
+# Notification Service Values
+# Sends notifications (email, SMS, push)
+
+port: 8008
+dbName: notification
+
+dependencies: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  minReplicas: 1
+  maxReplicas: 5
+
+pdb:
+  minAvailable: 1

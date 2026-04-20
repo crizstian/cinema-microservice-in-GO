@@ -10,6 +10,9 @@ import (
 func Register(e *echo.Echo, repo api.Repository) {
 	// Health check
 	e.GET("/ping", api.PingAPI)
+	// Kubernetes health endpoints
+	e.GET("/health/live", api.PingAPI)
+	e.GET("/health/ready", api.PingAPI)
 
 	// Seat API group
 	seats := e.Group("/seats")

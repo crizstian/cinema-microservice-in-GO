@@ -1,0 +1,300 @@
+openapi: 3.0.3
+info:
+  title: Loyalty Service API
+  description: |
+    Cinema ticketing system - Loyalty and rewards microservice.
+
+    Provides loyalty program capabilities:
+    - Create and manage loyalty accounts
+    - Earn points on purchases
+    - Redeem points for rewards
+    - Track transaction history
+    - Tier-based multipliers (Bronze, Silver, Gold, Platinum)
+  version: 1.0.0
+  contact:
+    name: Cinema Ticketing Team
+    email: team@cinema.local
+
+servers:
+  - url: http://localhost:8011
+    description: Local development server
+  - url: http://loyalty-service:8011
+    description: Docker/Kubernetes internal
+
+tags:
+  - name: accounts
+    description: Loyalty account management
+  - name: points
+    description: Points earning and redemption
+  - name: health
+    description: Service health check
+
+paths:
+  /health:
+    get:
+      tags:
+        - health
+      summary: Health check endpoint
+      operationId: health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ping:
+    get:
+      tags:
+        - health
+      summary: Simple ping endpoint
+      operationId: ping
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: pong
+
+  /api/loyalty/accounts:
+    get:
+      tags:
+        - accounts
+      summary: Get all loyalty accounts
+      operationId: getAllAccounts
+      responses:
+        '200':
+          description: List of all accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoyaltyAccount'
+
+  /api/loyalty/accounts/{userId}:
+    get:
+      tags:
+        - accounts
+      summary: Get account by user ID
+      operationId: getAccount
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyAccount'
+        '404':
+          description: Account not found
+
+    post:
+      tags:
+        - accounts
+      summary: Create new loyalty account
+      operationId: createAccount
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyAccount'
+
+  /api/loyalty/accounts/{userId}/earn:
+    post:
+      tags:
+        - points
+      summary: Earn points
+      operationId: earnPoints
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: points
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: description
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Points earned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyAccount'
+
+  /api/loyalty/accounts/{userId}/redeem:
+    post:
+      tags:
+        - points
+      summary: Redeem points
+      operationId: redeemPoints
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: points
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: description
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Points redeemed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyAccount'
+        '400':
+          description: Insufficient points
+
+  /api/loyalty/accounts/{userId}/transactions:
+    get:
+      tags:
+        - points
+      summary: Get transaction history
+      operationId: getTransactions
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PointsTransaction'
+
+  /api/loyalty/accounts/{userId}/tier:
+    get:
+      tags:
+        - accounts
+      summary: Get user tier status
+      operationId: getTier
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tier information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TierResponse'
+        '404':
+          description: Account not found
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: UP
+        service:
+          type: string
+          example: loyalty
+
+    LoyaltyTier:
+      type: string
+      enum:
+        - BRONZE
+        - SILVER
+        - GOLD
+        - PLATINUM
+
+    LoyaltyAccount:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        currentPoints:
+          type: integer
+        totalPoints:
+          type: integer
+        tier:
+          $ref: '#/components/schemas/LoyaltyTier'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TransactionType:
+      type: string
+      enum:
+        - EARN
+        - REDEEM
+        - BONUS
+        - EXPIRE
+
+    PointsTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        points:
+          type: integer
+        description:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    TierResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+        tier:
+          $ref: '#/components/schemas/LoyaltyTier'
+        totalPoints:
+          type: integer

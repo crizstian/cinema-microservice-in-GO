@@ -1,0 +1,24 @@
+# Showtime Service Values
+# Manages movie showtimes
+
+port: 8006
+dbName: showtime
+
+dependencies:
+  - movie
+  - cinema
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  minReplicas: 1
+  maxReplicas: 5
+
+pdb:
+  minAvailable: 1

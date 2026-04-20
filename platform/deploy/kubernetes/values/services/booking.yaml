@@ -1,0 +1,30 @@
+# Booking Service Values
+# Orchestrates the booking SAGA pattern
+
+port: 8001
+dbName: booking
+
+# Dependencies
+dependencies:
+  - seat
+  - payment
+  - showtime
+  - notification
+
+# Resource defaults (overrides base)
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# HPA defaults
+autoscaling:
+  minReplicas: 2
+  maxReplicas: 10
+
+# PDB
+pdb:
+  minAvailable: 1

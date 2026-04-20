@@ -4,18 +4,137 @@ version: "3"
 vars:
   SCRIPTS: platform/scripts/taskfile
   COMPOSE: platform/deploy/docker-compose/docker-compose.yml
+  K8S: platform/deploy/kubernetes/scripts
 
 tasks:
-  # BUILD
+  # ============================================================================
+  # VERSION
+  # ============================================================================
+  version:
+    desc: "Get current version: task version SERVICE=booking"
+    cmds: ["{{.SCRIPTS}}/version.sh {{.SERVICE | default \"booking\"}}"]
+
+  version:next:
+    desc: "Calculate next version: task version:next SERVICE=booking BUMP=patch"
+    cmds: ["{{.SCRIPTS}}/version.sh {{.SERVICE | default \"booking\"}} {{.BUMP | default \"patch\"}}"]
+
+  # ============================================================================
+  # CODE QUALITY (mirrors pipeline Code Quality stage)
+  # ============================================================================
+  quality:
+    desc: "Run all quality checks: task quality SERVICE=booking"
+    cmds: ["{{.SCRIPTS}}/quality.sh {{.SERVICE | default \"booking\"}} all"]
+
+  quality:complexity:
+    desc: "Check cyclomatic complexity: task quality:complexity SERVICE=booking"
+    cmds: ["{{.SCRIPTS}}/quality.sh {{.SERVICE | default \"booking\"}} complexity"]
+
+  quality:duplication:
+    desc: "Check code duplication: task quality:duplication SERVICE=booking"
+    cmds: ["{{.SCRIPTS}}/quality.sh {{.SERVICE | default \"booking\"}} duplication"]
+
+  quality:all:
+    desc: "Run quality checks on all services"
+    cmds:
+      - |
+        for svc in booking movie cinema user seat showtime payment notification; do
+          echo "=== Quality: $svc ===" && {{.SCRIPTS}}/quality.sh $svc all || true
+        done
+
+  # ============================================================================
+  # TESTS (mirrors pipeline Tests stage)
+  # ============================================================================
+  test:
+    desc: "Run unit tests: task test SERVICE=booking"
+    cmds: ["{{.SCRIPTS}}/test-unit.sh {{.SERVICE | default \"booking\"}}"]
+
+  test:all:
+    desc: "Run unit tests for all services"
+    cmds: ["{{.SCRIPTS}}/test-unit-all.sh"]
+
+  test:benchmark:
+    desc: "Run benchmark tests: task test:benchmark SERVICE=booking"
+    cmds: ["{{.SCRIPTS}}/benchmark.sh {{.SERVICE | default \"booking\"}}"]
+
+  test:contract:
+    desc: "Run Pact contract tests"
+    cmds:
+      - "{{.SCRIPTS}}/contract-consumer.sh"
+      - "{{.SCRIPTS}}/contract-verify.sh"
+
+  test:e2e:
+    desc: "Run E2E tests"
+    cmds: ["{{.SCRIPTS}}/test-e2e.sh"]
+
+  test:coverage:
+    desc: "Check coverage: task test:coverage THRESHOLD=80"
+    cmds: ["{{.SCRIPTS}}/test-coverage.sh {{.THRESHOLD | default \"80\"}}"]
+
+  # ============================================================================
+  # VALIDATE (mirrors pipeline Validate stage)
+  # ============================================================================
+  validate:
+    desc: "Full validation: quality + tests + openapi (like CI validate stage)"
+    cmds:
+      - task: quality
+        vars: { SERVICE: "{{.SERVICE}}" }
+      - task: test
+        vars: { SERVICE: "{{.SERVICE}}" }
+      - task: lint:openapi
+        vars: { SERVICE: "{{.SERVICE}}" }
+
+  validate:all:
+    desc: "Validate all services"
+    cmds: ["{{.SCRIPTS}}/test-ci.sh"]
+
+  lint:openapi:
+    desc: "Lint OpenAPI spec with Spectral: task lint:openapi SERVICE=booking"
+    cmds:
+      - |
+        SPEC="services/{{.SERVICE | default \"booking\"}}/api/openapi.yaml"
+        if [ -f "$SPEC" ]; then
+          spectral lint "$SPEC" || true
+        else
+          echo "No OpenAPI spec found: $SPEC"
+        fi
+
+  # ============================================================================
+  # BUILD (mirrors pipeline Build stage)
+  # ============================================================================
   build:
-    desc: "Build Docker image: task build SERVICE=booking"
-    cmds: ["{{.SCRIPTS}}/build.sh {{.SERVICE | default \"booking\"}}"]
+    desc: "Build Docker image: task build SERVICE=booking [VERSION=1.0.0]"
+    cmds: ["{{.SCRIPTS}}/build.sh {{.SERVICE | default \"booking\"}} {{.VERSION | default \"\"}}"]
+
+  build:push:
+    desc: "Build and push Docker image: task build:push SERVICE=booking"
+    cmds: ["{{.SCRIPTS}}/build.sh {{.SERVICE | default \"booking\"}} {{.VERSION | default \"\"}} --push"]
 
   build:all:
     desc: "Build all service Docker images"
     cmds: ["{{.SCRIPTS}}/build-all.sh"]
 
+  # ============================================================================
+  # RELEASE (mirrors pipeline Release stage)
+  # ============================================================================
+  release:
+    desc: "Create git tag: task release SERVICE=booking BUMP=patch"
+    cmds: ["{{.SCRIPTS}}/release.sh {{.SERVICE | default \"booking\"}} {{.BUMP | default \"patch\"}}"]
+
+  release:push:
+    desc: "Create and push git tag: task release:push SERVICE=booking BUMP=patch"
+    cmds: ["{{.SCRIPTS}}/release.sh {{.SERVICE | default \"booking\"}} {{.BUMP | default \"patch\"}} --push"]
+
+  release:full:
+    desc: "Full release: build + push + tag: task release:full SERVICE=booking BUMP=patch"
+    cmds:
+      - task: build:push
+        vars: { SERVICE: "{{.SERVICE}}", VERSION: "" }
+      - task: release:push
+        vars: { SERVICE: "{{.SERVICE}}", BUMP: "{{.BUMP | default \"patch\"}}" }
+
+  # ============================================================================
   # DEV ENVIRONMENT
+  # ============================================================================
   dev:up:
     desc: "Start dev environment"
     cmds: ["{{.SCRIPTS}}/dev-up.sh"]
@@ -32,34 +151,199 @@ tasks:
     desc: "Show container status"
     cmds: ["docker compose -f {{.COMPOSE}} --profile dev ps -a"]
 
-  # TEST
-  test:
-    desc: "Run unit tests: task test SERVICE=booking"
-    cmds: ["{{.SCRIPTS}}/test-unit.sh {{.SERVICE | default \"booking\"}}"]
+  # ============================================================================
+  # CI PIPELINE
+  # ============================================================================
+  ci:validate:
+    desc: "CI validate stage: task ci:validate SERVICES=booking"
+    cmds: ["{{.SCRIPTS}}/pipeline-run.sh {{.SERVICES | default \"booking\"}} validate {{.BRANCH | default \"step-1\"}}"]
 
-  test:all:
-    desc: "Run unit tests for all services"
-    cmds: ["{{.SCRIPTS}}/test-unit-all.sh"]
+  ci:build:
+    desc: "CI build stage: task ci:build SERVICES=booking"
+    cmds: ["{{.SCRIPTS}}/pipeline-run.sh {{.SERVICES | default \"booking\"}} build {{.BRANCH | default \"step-1\"}}"]
 
-  test:e2e:
-    desc: "Run E2E tests"
-    cmds: ["{{.SCRIPTS}}/test-e2e.sh"]
+  ci:full:
+    desc: "CI full pipeline: task ci:full SERVICES=booking"
+    cmds: ["{{.SCRIPTS}}/pipeline-run.sh {{.SERVICES | default \"booking\"}} full {{.BRANCH | default \"step-1\"}}"]
 
-  test:contract:
-    desc: "Run Pact contract tests"
+  # ============================================================================
+  # KUBERNETES
+  # ============================================================================
+  k8s:render:
+    desc: "Render K8s manifests: task k8s:render SERVICE=booking ENV=dev VERSION=v1.0.0"
+    cmds: ["{{.K8S}}/render.sh {{.SERVICE | default \"booking\"}} {{.ENV | default \"dev\"}} {{.VERSION | default \"latest\"}}"]
+
+  k8s:render:all:
+    desc: "Render all services: task k8s:render:all ENV=dev VERSION=v1.0.0"
+    cmds: ["{{.K8S}}/render-all.sh {{.ENV | default \"dev\"}} {{.VERSION | default \"latest\"}}"]
+
+  k8s:apply:
+    desc: "Apply service to cluster: task k8s:apply SERVICE=booking ENV=dev"
+    cmds: ["{{.K8S}}/apply.sh {{.SERVICE | default \"booking\"}} {{.ENV | default \"dev\"}}"]
+
+  k8s:apply:dry:
+    desc: "Dry-run apply: task k8s:apply:dry SERVICE=booking ENV=dev"
+    cmds: ["{{.K8S}}/apply.sh {{.SERVICE | default \"booking\"}} {{.ENV | default \"dev\"}} --dry-run"]
+
+  k8s:apply:all:
+    desc: "Apply all services: task k8s:apply:all ENV=dev"
+    cmds: ["{{.K8S}}/apply-all.sh {{.ENV | default \"dev\"}}"]
+
+  k8s:diff:
+    desc: "Show diff with cluster: task k8s:diff SERVICE=booking ENV=dev"
+    cmds: ["{{.K8S}}/diff.sh {{.SERVICE | default \"booking\"}} {{.ENV | default \"dev\"}}"]
+
+  k8s:delete:
+    desc: "Delete service from cluster: task k8s:delete SERVICE=booking ENV=dev"
+    cmds: ["{{.K8S}}/delete.sh {{.SERVICE | default \"booking\"}} {{.ENV | default \"dev\"}}"]
+
+  k8s:deploy:
+    desc: "Full deploy: render + apply: task k8s:deploy SERVICE=booking ENV=dev VERSION=v1.0.0"
     cmds:
-      - "{{.SCRIPTS}}/contract-consumer.sh"
-      - "{{.SCRIPTS}}/contract-verify.sh"
+      - task: k8s:render
+        vars: { SERVICE: "{{.SERVICE}}", ENV: "{{.ENV}}", VERSION: "{{.VERSION}}" }
+      - task: k8s:apply
+        vars: { SERVICE: "{{.SERVICE}}", ENV: "{{.ENV}}" }
 
-  test:ci:
-    desc: "CI: lint + unit + contracts + coverage"
-    cmds: ["{{.SCRIPTS}}/test-ci.sh"]
+  k8s:deploy:all:
+    desc: "Deploy all services: task k8s:deploy:all ENV=dev VERSION=v1.0.0"
+    cmds:
+      - task: k8s:render:all
+        vars: { ENV: "{{.ENV}}", VERSION: "{{.VERSION}}" }
+      - task: k8s:apply:all
+        vars: { ENV: "{{.ENV}}" }
 
-  test:coverage:
-    desc: "Check coverage: task test:coverage THRESHOLD=80"
-    cmds: ["{{.SCRIPTS}}/test-coverage.sh {{.THRESHOLD | default \"80\"}}"]
+  k8s:validate:
+    desc: "Validate cluster prerequisites"
+    cmds: ["{{.K8S}}/validate-cluster.sh"]
 
-  # PIPELINE
-  pipeline:run:
-    desc: "Run CI pipeline: task pipeline:run SERVICES=booking RUN_MODE=validate"
-    cmds: ["{{.SCRIPTS}}/pipeline-run.sh {{.SERVICES | default \"booking\"}} {{.RUN_MODE | default \"validate\"}} {{.BRANCH | default \"step-1\"}}"]
+  k8s:infra:render:
+    desc: "Render infrastructure manifests: task k8s:infra:render COMPONENT=all"
+    cmds: ["{{.K8S}}/render-infra.sh {{.COMPONENT | default \"all\"}}"]
+
+  k8s:infra:
+    desc: "Deploy infrastructure (MongoDB, Jaeger, Ingress): task k8s:infra ENV=dev"
+    cmds: ["{{.K8S}}/deploy-infra.sh {{.ENV | default \"dev\"}}"]
+
+  k8s:full:
+    desc: "Full deployment (infra + services): task k8s:full ENV=dev VERSION=v1.0.0"
+    cmds: ["{{.K8S}}/deploy-full.sh {{.ENV | default \"dev\"}} {{.VERSION | default \"latest\"}}"]
+
+  # ============================================================================
+  # CD PIPELINE (mirrors Harness CD - Kubernetes pipeline)
+  # ============================================================================
+  cd:validate:
+    desc: "Pre-deploy validation (schema + OPA): task cd:validate SERVICE=movie ENV=dev"
+    cmds:
+      - "{{.K8S}}/validate-values.sh {{.SERVICE | default \"movie\"}} {{.ENV | default \"dev\"}}"
+
+  cd:render:
+    desc: "Render templates: task cd:render SERVICE=movie ENV=dev VERSION=v0.0.2"
+    cmds:
+      - "{{.K8S}}/render.sh {{.SERVICE | default \"movie\"}} {{.ENV | default \"dev\"}} {{.VERSION | default \"latest\"}}"
+
+  cd:deploy:
+    desc: "Deploy to cluster: task cd:deploy SERVICE=movie ENV=dev"
+    cmds:
+      - "{{.K8S}}/apply.sh {{.SERVICE | default \"movie\"}} {{.ENV | default \"dev\"}}"
+
+  cd:smoke:
+    desc: "Smoke test (HTTP health check): task cd:smoke SERVICE=movie ENV=dev"
+    vars:
+      NAMESPACE: "cinema-{{.ENV | default \"dev\"}}"
+      PORT: '{{.PORT | default "8002"}}'
+    cmds:
+      - |
+        echo "=== Smoke Test: {{.SERVICE}} ({{.ENV}}) ==="
+        POD=$(kubectl get pods -n {{.NAMESPACE}} -l app.kubernetes.io/name={{.SERVICE}} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        if [ -z "$POD" ]; then
+          echo "ERROR: No pod found for {{.SERVICE}}"
+          exit 1
+        fi
+        echo "Pod: $POD"
+        echo ""
+        echo "Testing: /health/live"
+        kubectl exec $POD -n {{.NAMESPACE}} -- wget -qO- -T 5 http://localhost:{{.PORT}}/health/live || exit 1
+        echo ""
+        echo "Testing: /health/ready"
+        kubectl exec $POD -n {{.NAMESPACE}} -- wget -qO- -T 5 http://localhost:{{.PORT}}/health/ready || exit 1
+        echo ""
+        echo "=== Smoke Test PASSED ==="
+
+  cd:rollback:
+    desc: "Rollback deployment: task cd:rollback SERVICE=movie ENV=dev"
+    cmds:
+      - "kubectl rollout undo deployment/{{.SERVICE | default \"movie\"}} -n cinema-{{.ENV | default \"dev\"}}"
+
+  cd:pipeline:
+    desc: "Full CD pipeline (validate → render → deploy → smoke): task cd:pipeline SERVICE=movie ENV=dev VERSION=v0.0.2"
+    cmds:
+      - task: cd:validate
+        vars: { SERVICE: "{{.SERVICE}}", ENV: "{{.ENV}}" }
+      - task: cd:render
+        vars: { SERVICE: "{{.SERVICE}}", ENV: "{{.ENV}}", VERSION: "{{.VERSION}}" }
+      - task: cd:deploy
+        vars: { SERVICE: "{{.SERVICE}}", ENV: "{{.ENV}}" }
+      - task: cd:smoke
+        vars: { SERVICE: "{{.SERVICE}}", ENV: "{{.ENV}}", PORT: "{{.PORT}}" }
+
+  # ============================================================================
+  # JAVA SERVICES
+  # ============================================================================
+  java:test:
+    desc: "Run Java tests: task java:test SERVICE=analytics"
+    cmds: ["{{.SCRIPTS}}/java-test.sh {{.SERVICE | default \"analytics\"}}"]
+
+  java:test:all:
+    desc: "Run tests for all Java services"
+    cmds:
+      - |
+        for svc in analytics loyalty reviews; do
+          echo "=== Testing: $svc ===" && {{.SCRIPTS}}/java-test.sh $svc || true
+        done
+
+  java:build:
+    desc: "Build Java Docker image: task java:build SERVICE=analytics [VERSION=1.0.0]"
+    cmds: ["{{.SCRIPTS}}/java-build.sh {{.SERVICE | default \"analytics\"}} {{.VERSION | default \"latest\"}}"]
+
+  java:build:push:
+    desc: "Build and push Java Docker image: task java:build:push SERVICE=analytics"
+    cmds: ["{{.SCRIPTS}}/java-build.sh {{.SERVICE | default \"analytics\"}} {{.VERSION | default \"latest\"}} --push"]
+
+  java:build:all:
+    desc: "Build all Java services"
+    cmds:
+      - |
+        for svc in analytics loyalty reviews; do
+          echo "=== Building: $svc ===" && {{.SCRIPTS}}/java-build.sh $svc || true
+        done
+
+  java:quality:
+    desc: "Run Java quality checks: task java:quality SERVICE=analytics"
+    cmds: ["{{.SCRIPTS}}/java-quality.sh {{.SERVICE | default \"analytics\"}} all"]
+
+  java:quality:all:
+    desc: "Run quality checks for all Java services"
+    cmds:
+      - |
+        for svc in analytics loyalty reviews; do
+          echo "=== Quality: $svc ===" && {{.SCRIPTS}}/java-quality.sh $svc all || true
+        done
+
+  java:run:
+    desc: "Run Java service locally: task java:run SERVICE=analytics"
+    cmds:
+      - |
+        cd services/{{.SERVICE | default "analytics"}}
+        if [ -f "build.gradle" ]; then
+          ./gradlew run --no-daemon
+        else
+          mvn spring-boot:run 2>/dev/null || mvn quarkus:dev 2>/dev/null || mvn mn:run
+        fi
+
+  # ============================================================================
+  # HELP
+  # ============================================================================
+  default:
+    desc: "Show available tasks"
+    cmds: ["task --list"]

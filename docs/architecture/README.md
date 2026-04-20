@@ -2,8 +2,8 @@
 
 > **AI Agent Context**: This document describes the complete system architecture, service interactions, and design decisions. For implementation details of specific services, see [Services Documentation](../services/README.md).
 
-**Last Updated**: 2026-04-08  
-**Architecture Version**: 2.0
+**Last Updated**: 2026-04-17  
+**Architecture Version**: 3.0 (Polyglot)
 
 ---
 
@@ -30,10 +30,12 @@ The Cinema Ticketing System enables users to:
 
 ### Architecture Style
 
-**Microservices with Event-Driven Communication**
+**Polyglot Microservices with Event-Driven Communication**
 
+- **Languages**: Go (core platform), Java 21 (business intelligence)
+- **Java Frameworks**: Spring Boot 3.2, Quarkus 3.x, Micronaut 4.x
 - **Synchronous**: HTTP/REST for user-facing operations
-- **Asynchronous**: RabbitMQ for notifications and compensation
+- **Asynchronous**: NATS JetStream for notifications and compensation
 - **State Management**: MongoDB for persistence, Redis for temporary holds
 
 ### High-Level Architecture
@@ -119,6 +121,8 @@ The Cinema Ticketing System enables users to:
 
 ### Service Catalog
 
+#### Go Services (Core Platform)
+
 | Service | Type | Dependencies | Database | Status |
 |---------|------|--------------|----------|--------|
 | **user** | Authentication | - | MongoDB (users) | Planned |
@@ -129,6 +133,16 @@ The Cinema Ticketing System enables users to:
 | **booking** | Orchestration | seat, payment, notification, showtime | MongoDB (booking) | Production |
 | **payment** | Transaction | Stripe API | MongoDB (payment) | Production |
 | **notification** | Messaging | Gmail, Twilio | - | Production |
+
+#### Java Services (Business Intelligence)
+
+| Service | Framework | Build | Port | Purpose | Status |
+|---------|-----------|-------|------|---------|--------|
+| **analytics** | Spring Boot 3.2 | Maven | 8010 | Reports, sales metrics, BI dashboards | Development |
+| **loyalty** | Quarkus 3.x | Maven | 8011 | Points program, tiers, rewards | Development |
+| **reviews** | Micronaut 4.x | Gradle | 8012 | Movie reviews, ratings, statistics | Development |
+
+> **Note**: Java services use package domain `dev.cinema.latam.*` following Java naming conventions.
 
 ### Service Responsibilities
 
@@ -441,6 +455,40 @@ Used for:
 - Independent builds per service
 - Zero-config for new services
 - Centralized control of CI standards
+
+### ADR-008: Polyglot Architecture with Java Services
+
+**Decision**: Add Java 21 services using Spring Boot, Quarkus, and Micronaut frameworks.
+
+**Context**: Need business intelligence capabilities and framework comparison for demos.
+
+**Rationale**:
+- Spring Boot: Industry standard, extensive ecosystem, familiar to most Java developers
+- Quarkus: Native compilation ready, fast startup, low memory footprint
+- Micronaut: Compile-time DI, GraalVM native support, minimal reflection
+
+**Consequences**:
+- (+) Framework comparison in production conditions
+- (+) Demonstrates polyglot CI/CD capabilities
+- (+) Enables Java-specific integrations (e.g., Kafka Streams, Spring Batch)
+- (-) Additional build tooling (Maven + Gradle)
+- (-) Larger devcontainer image
+
+### ADR-009: Java Package Domain Convention
+
+**Decision**: Use `dev.cinema.latam` as the base package for all Java services.
+
+**Context**: Following Java reversed domain naming convention.
+
+**Alternatives considered**:
+- `com.cinema.latam` - Traditional commercial domain
+- `io.cinema.latam` - Modern API-style domain
+- `dev.cinema.latam` - Development/demo-focused (chosen)
+
+**Consequences**:
+- Consistent namespace across all Java services
+- Clear separation from Go services
+- Suitable for demo/educational purposes
 
 ---
 

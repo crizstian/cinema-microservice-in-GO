@@ -1,0 +1,54 @@
+# Staging Environment Values
+# Pre-production environment for testing
+
+environment: staging
+namespace: cinema-staging
+
+# Database
+database:
+  servers: mongodb-0.mongodb.mongodb.svc.cluster.local:27017,mongodb-1.mongodb.mongodb.svc.cluster.local:27017,mongodb-2.mongodb.mongodb.svc.cluster.local:27017
+  replica: rs0
+  user: "${DB_USER}"
+  password: "${DB_PASS}"
+
+# Observability
+observability:
+  logLevel: info
+
+# Service discovery
+services:
+  booking: http://booking.cinema-staging.svc.cluster.local
+  movie: http://movie.cinema-staging.svc.cluster.local
+  cinema: http://cinema.cinema-staging.svc.cluster.local
+  user: http://user.cinema-staging.svc.cluster.local
+  seat: http://seat.cinema-staging.svc.cluster.local
+  showtime: http://showtime.cinema-staging.svc.cluster.local
+  payment: http://payment.cinema-staging.svc.cluster.local
+  notification: http://notification.cinema-staging.svc.cluster.local
+
+# Ingress
+ingress:
+  host: cinema.staging.example.com
+  sslRedirect: "true"
+  tlsSecret: cinema-tls-staging
+
+# Scaling (production-like but smaller)
+replicas: 2
+autoscaling:
+  minReplicas: 2
+  maxReplicas: 4
+  cpuThreshold: 70
+  memoryThreshold: 80
+
+# Resources (moderate)
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# PDB
+pdb:
+  minAvailable: 1

@@ -1,0 +1,327 @@
+openapi: 3.0.3
+info:
+  title: Reviews Service API
+  description: |
+    Cinema ticketing system - Reviews and ratings microservice.
+
+    Provides movie review capabilities:
+    - Create, read, update, delete reviews
+    - Get reviews by movie or user
+    - Movie rating statistics
+    - Mark reviews as helpful
+  version: 1.0.0
+  contact:
+    name: Cinema Ticketing Team
+    email: team@cinema.local
+
+servers:
+  - url: http://localhost:8012
+    description: Local development server
+  - url: http://reviews-service:8012
+    description: Docker/Kubernetes internal
+
+tags:
+  - name: reviews
+    description: Review management
+  - name: stats
+    description: Rating statistics
+  - name: health
+    description: Service health check
+
+paths:
+  /health:
+    get:
+      tags:
+        - health
+      summary: Health check endpoint
+      operationId: health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ping:
+    get:
+      tags:
+        - health
+      summary: Simple ping endpoint
+      operationId: ping
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: pong
+
+  /api/reviews:
+    get:
+      tags:
+        - reviews
+      summary: Get all reviews
+      operationId: getAllReviews
+      responses:
+        '200':
+          description: List of all reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
+
+    post:
+      tags:
+        - reviews
+      summary: Create a new review
+      operationId: createReview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRequest'
+      responses:
+        '200':
+          description: Review created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+
+  /api/reviews/{id}:
+    get:
+      tags:
+        - reviews
+      summary: Get review by ID
+      operationId: getReview
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Review found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '404':
+          description: Review not found
+
+    put:
+      tags:
+        - reviews
+      summary: Update a review
+      operationId: updateReview
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRequest'
+      responses:
+        '200':
+          description: Review updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '404':
+          description: Review not found
+
+    delete:
+      tags:
+        - reviews
+      summary: Delete a review
+      operationId: deleteReview
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Review deleted
+        '404':
+          description: Review not found
+
+  /api/reviews/{id}/helpful:
+    post:
+      tags:
+        - reviews
+      summary: Mark review as helpful
+      operationId: markHelpful
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Review marked as helpful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '404':
+          description: Review not found
+
+  /api/reviews/movie/{movieId}:
+    get:
+      tags:
+        - reviews
+      summary: Get reviews by movie
+      operationId: getReviewsByMovie
+      parameters:
+        - name: movieId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reviews for the movie
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
+
+  /api/reviews/movie/{movieId}/stats:
+    get:
+      tags:
+        - stats
+      summary: Get movie rating statistics
+      operationId: getMovieStats
+      parameters:
+        - name: movieId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Movie statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewStats'
+
+  /api/reviews/user/{userId}:
+    get:
+      tags:
+        - reviews
+      summary: Get reviews by user
+      operationId: getReviewsByUser
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reviews by the user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: UP
+        service:
+          type: string
+          example: reviews
+
+    ReviewRequest:
+      type: object
+      required:
+        - movieId
+        - userId
+        - userName
+        - rating
+        - title
+        - content
+      properties:
+        movieId:
+          type: string
+        userId:
+          type: string
+        userName:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        title:
+          type: string
+        content:
+          type: string
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        movieId:
+          type: string
+        userId:
+          type: string
+        userName:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        title:
+          type: string
+        content:
+          type: string
+        helpfulCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ReviewStats:
+      type: object
+      properties:
+        movieId:
+          type: string
+        averageRating:
+          type: number
+          format: double
+        totalReviews:
+          type: integer
+        ratingDistribution:
+          type: object
+          additionalProperties:
+            type: integer

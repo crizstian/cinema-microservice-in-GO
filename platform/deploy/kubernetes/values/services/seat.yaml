@@ -1,0 +1,23 @@
+# Seat Service Values
+# Manages seat availability and reservations
+
+port: 8005
+dbName: seat
+
+dependencies:
+  - showtime
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  minReplicas: 2
+  maxReplicas: 8
+
+pdb:
+  minAvailable: 1

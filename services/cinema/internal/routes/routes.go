@@ -9,6 +9,9 @@ import (
 // Setup configures all routes for the cinema service.
 func Setup(e *echo.Echo, h *api.Handler) {
 	e.GET("/ping", h.Ping)
+	// Kubernetes health endpoints
+	e.GET("/health/live", h.Ping)
+	e.GET("/health/ready", h.Ping)
 
 	cinemas := e.Group("/cinemas")
 	cinemas.GET("", h.ListCinemas)

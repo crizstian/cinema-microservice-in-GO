@@ -1,0 +1,22 @@
+# User Service Values
+# Manages user accounts and authentication
+
+port: 8004
+dbName: user
+
+dependencies: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  minReplicas: 1
+  maxReplicas: 5
+
+pdb:
+  minAvailable: 1

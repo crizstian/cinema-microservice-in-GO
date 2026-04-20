@@ -59,8 +59,8 @@ func LoadConfigFromEnv() (*Config, error) {
 	replicaSet := os.Getenv("DB_REPLICA")
 
 	// DB_SERVERS, DB_NAME, DB_REPLICA are required; DB_USER/DB_PASS are optional (for no-auth mode)
-	if servers == "" || dbName == "" || replicaSet == "" {
-		return nil, fmt.Errorf("missing required environment variables: DB_USER, DB_PASS, DB_SERVERS, DB_NAME, DB_REPLICA")
+	if servers == "" || dbName == "" {
+		return nil, fmt.Errorf("missing required environment variables: DB_SERVERS, DB_NAME")
 	}
 
 	serverList := strings.Split(servers, ",")
@@ -120,32 +120,38 @@ func Connect(ctx context.Context, cfg *Config) (*MongoConnection, error) {
 	// Build connection URI
 	serversStr := strings.Join(cfg.Servers, ",")
 
-	// Build URI with proper query parameters (support no-auth mode when user/pass are empty)
+	// Build URI with proper query parameters
+	// Support: auth/no-auth and standalone/replica-set modes
 	var uri string
+	var replicaSetParam string
+	if cfg.ReplicaSet != "" {
+		replicaSetParam = "&replicaSet=" + cfg.ReplicaSet
+	}
+
 	if cfg.User != "" && cfg.Pass != "" {
 		uri = fmt.Sprintf(
-			"mongodb://%s:%s@%s/%s?replicaSet=%s&authSource=%s&w=majority&readPreference=primaryPreferred&maxPoolSize=%d&minPoolSize=%d",
+			"mongodb://%s:%s@%s/%s?authSource=%s%s&w=majority&maxPoolSize=%d&minPoolSize=%d",
 			cfg.User,
 			cfg.Pass,
 			serversStr,
 			cfg.Database,
-			cfg.ReplicaSet,
 			cfg.AuthSource,
+			replicaSetParam,
 			cfg.MaxPoolSize,
 			cfg.MinPoolSize,
 		)
-		log.Infof("Connecting to MongoDB: mongodb://%s:****@%s/%s?replicaSet=%s",
+		log.Infof("Connecting to MongoDB: mongodb://%s:****@%s/%s (replicaSet=%s)",
 			cfg.User, serversStr, cfg.Database, cfg.ReplicaSet)
 	} else {
 		uri = fmt.Sprintf(
-			"mongodb://%s/%s?replicaSet=%s&w=majority&readPreference=primaryPreferred&maxPoolSize=%d&minPoolSize=%d",
+			"mongodb://%s/%s?w=majority%s&maxPoolSize=%d&minPoolSize=%d",
 			serversStr,
 			cfg.Database,
-			cfg.ReplicaSet,
+			replicaSetParam,
 			cfg.MaxPoolSize,
 			cfg.MinPoolSize,
 		)
-		log.Infof("Connecting to MongoDB (no-auth): mongodb://%s/%s?replicaSet=%s",
+		log.Infof("Connecting to MongoDB (no-auth): mongodb://%s/%s (replicaSet=%s)",
 			serversStr, cfg.Database, cfg.ReplicaSet)
 	}
 

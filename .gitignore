@@ -21,6 +21,16 @@ tests/test-results/
 *.test
 *.out
 
+# Go compiled binaries (microservices)
+services/booking/booking
+services/cinema/cinema
+services/movie/movie
+services/notification/notification
+services/payment/payment
+services/seat/seat
+services/showtime/showtime
+services/user/user
+
 # Go workspace and cache
 .go/
 /tmp/go-cache/

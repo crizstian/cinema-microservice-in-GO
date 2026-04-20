@@ -1,0 +1,129 @@
+pipeline:
+  name: CD - Kubernetes
+  identifier: CD_Kubernetes
+  projectIdentifier: CristianRamirez
+  orgIdentifier: sandbox
+  tags: {}
+  stages:
+    - stage:
+        name: DEV
+        identifier: DEV
+        description: "Deploy microservice to DEV environment with full validation"
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: <+input>
+            serviceInputs: <+input>
+          environment:
+            environmentRef: sandbox
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: sesandboxkubernetes
+                inputs:
+                  identifier: sesandboxkubernetes
+                  type: KubernetesDirect
+                  spec:
+                    namespace: <+input>
+          execution:
+            steps:
+              - step:
+                  name: Validate Values
+                  identifier: validateValues
+                  type: ShellScript
+                  timeout: 2m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+                          echo "=== Validating values for <+service.name> (dev) ==="
+                          cd /harness
+
+                          # Clone repo if not present
+                          if [ ! -d "cinema-monorepo" ]; then
+                            git clone https://github.com/crizstian/cinema-monorepo.git
+                          fi
+                          cd cinema-monorepo/platform/deploy/kubernetes
+
+                          # Run validation script
+                          ./scripts/validate-values.sh <+service.name> dev
+                          echo "=== Validation PASSED ==="
+                    environmentVariables: []
+                    outputVariables: []
+              - step:
+                  name: Render Templates
+                  identifier: renderTemplates
+                  type: ShellScript
+                  timeout: 2m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+                          echo "=== Rendering templates for <+service.name> (dev) ==="
+                          cd /harness/cinema-monorepo/platform/deploy/kubernetes
+
+                          # Build renderer if needed
+                          if [ ! -f "bin/render" ]; then
+                            cd cmd/render && go build -o ../../bin/render . && cd ../..
+                          fi
+
+                          # Render templates
+                          ./scripts/render.sh <+service.name> dev <+artifact.tag>
+                          echo "=== Render PASSED ==="
+                    environmentVariables: []
+                    outputVariables: []
+              - step:
+                  name: Rollout Deployment
+                  identifier: rolloutDeployment
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+              - step:
+                  name: Smoke Test - Liveness
+                  identifier: smokeTestLive
+                  type: Http
+                  timeout: 30s
+                  spec:
+                    url: http://<+service.name>.cinema-dev.svc.cluster.local:<+serviceVariables.port>/health/live
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                    outputVariables: []
+              - step:
+                  name: Smoke Test - Readiness
+                  identifier: smokeTestReady
+                  type: Http
+                  timeout: 30s
+                  spec:
+                    url: http://<+service.name>.cinema-dev.svc.cluster.local:<+serviceVariables.port>/health/ready
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                    outputVariables: []
+            rollbackSteps:
+              - step:
+                  name: Rollback Rollout Deployment
+                  identifier: rollbackRolloutDeployment
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec:
+                    pruningEnabled: false
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback

@@ -1,0 +1,54 @@
+# Production Environment Values
+# Production cluster configuration
+
+environment: prod
+namespace: cinema-prod
+
+# Database (production MongoDB cluster)
+database:
+  servers: mongodb-0.mongodb.mongodb.svc.cluster.local:27017,mongodb-1.mongodb.mongodb.svc.cluster.local:27017,mongodb-2.mongodb.mongodb.svc.cluster.local:27017
+  replica: rs0
+  user: "${DB_USER}"
+  password: "${DB_PASS}"
+
+# Observability
+observability:
+  logLevel: warn
+
+# Service discovery
+services:
+  booking: http://booking.cinema-prod.svc.cluster.local
+  movie: http://movie.cinema-prod.svc.cluster.local
+  cinema: http://cinema.cinema-prod.svc.cluster.local
+  user: http://user.cinema-prod.svc.cluster.local
+  seat: http://seat.cinema-prod.svc.cluster.local
+  showtime: http://showtime.cinema-prod.svc.cluster.local
+  payment: http://payment.cinema-prod.svc.cluster.local
+  notification: http://notification.cinema-prod.svc.cluster.local
+
+# Ingress
+ingress:
+  host: cinema.example.com
+  sslRedirect: "true"
+  tlsSecret: cinema-tls-prod
+
+# Scaling (production)
+replicas: 3
+autoscaling:
+  minReplicas: 3
+  maxReplicas: 10
+  cpuThreshold: 60
+  memoryThreshold: 70
+
+# Resources (production)
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# PDB (high availability)
+pdb:
+  minAvailable: 2

@@ -18,4 +18,7 @@ func ShowtimeAPI(app *echo.Group, repo api.Repository) {
 // HealthyAPI registers health check routes
 func HealthyAPI(app *echo.Echo) {
 	app.GET("/ping", api.PingAPI)
+	// Kubernetes health endpoints
+	app.GET("/health/live", api.PingAPI)
+	app.GET("/health/ready", api.PingAPI)
 }
