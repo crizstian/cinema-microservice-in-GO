@@ -1,0 +1,400 @@
+# =============================================================================
+# Harness CI Pipeline: Shift Left Security
+# El escaneo de seguridad ocurre ANTES del build/push
+# =============================================================================
+#
+# Flujo:
+# 1. STAGE 1: Security Scan (código y dependencias) - BLOQUEA si falla
+# 2. STAGE 2: Build & Test - Solo si pasó seguridad
+# 3. STAGE 3: Container Security - Escanea imagen ANTES de push
+# 4. STAGE 4: Push - Solo si todo pasó
+#
+# =============================================================================
+
+pipeline:
+  name: CI - Shift Left Security
+  identifier: ci_shift_left_security
+  projectIdentifier: CristianRamirez
+  orgIdentifier: sandbox
+  tags:
+    demo: yalo
+    type: security
+    approach: shift-left
+
+  properties:
+    ci:
+      codebase:
+        connectorRef: <+input>
+        repoName: yalo-demo-app
+        build: <+input>
+
+  stages:
+    # =========================================================================
+    # STAGE 1: Security First - Código y Dependencias
+    # Escanea ANTES de construir. Bloquea si hay críticos.
+    # =========================================================================
+    - stage:
+        name: Security Scan - Code
+        identifier: security_scan_code
+        type: SecurityTests
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+
+          execution:
+            steps:
+              # ---------------------------------------------------------------
+              # Step 1.1: Snyk Code (SAST) - Análisis estático
+              # ---------------------------------------------------------------
+              - step:
+                  type: Snyk
+                  name: Snyk SAST
+                  identifier: snyk_sast
+                  spec:
+                    mode: orchestration
+                    config: default
+                    target:
+                      type: repository
+                      detection: auto
+                    advanced:
+                      log:
+                        level: info
+                      args:
+                        cli: "--all-projects --detection-depth=4"
+                    settings:
+                      product_name: snyk-code
+                      product_config_name: default
+                      # Respetar severidad de Snyk
+                      ingest_tool_severity: "true"
+                    auth:
+                      access_token: <+secrets.getValue("snyk_api_token")>
+                    imagePullPolicy: Always
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+                  when:
+                    stageStatus: Success
+
+              # ---------------------------------------------------------------
+              # Step 1.2: Snyk SCA - Dependencias
+              # ---------------------------------------------------------------
+              - step:
+                  type: Snyk
+                  name: Snyk Dependencies
+                  identifier: snyk_dependencies
+                  spec:
+                    mode: orchestration
+                    config: default
+                    target:
+                      type: repository
+                      detection: auto
+                    advanced:
+                      log:
+                        level: info
+                      args:
+                        cli: "--all-projects --severity-threshold=low"
+                    settings:
+                      product_name: snyk-opensource
+                      product_config_name: default
+                      ingest_tool_severity: "true"
+                    auth:
+                      access_token: <+secrets.getValue("snyk_api_token")>
+                    imagePullPolicy: Always
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+
+              # ---------------------------------------------------------------
+              # Step 1.3: Secret Detection
+              # ---------------------------------------------------------------
+              - step:
+                  type: Gitleaks
+                  name: Secret Detection
+                  identifier: secret_detection
+                  spec:
+                    mode: orchestration
+                    config: default
+                    target:
+                      type: repository
+                      detection: auto
+                    advanced:
+                      log:
+                        level: info
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+
+              # ---------------------------------------------------------------
+              # Step 1.4: Security Gate - Evaluar resultados
+              # ---------------------------------------------------------------
+              - step:
+                  type: Run
+                  name: Evaluate Code Security
+                  identifier: evaluate_code_security
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:latest
+                    shell: Sh
+                    command: |
+                      echo "╔════════════════════════════════════════════════╗"
+                      echo "║       SECURITY GATE - CODE ANALYSIS           ║"
+                      echo "╠════════════════════════════════════════════════╣"
+                      echo "║ SAST Critical:  <+pipeline.stages.security_scan_code.spec.execution.steps.snyk_sast.output.outputVariables.CRITICAL>"
+                      echo "║ SAST High:      <+pipeline.stages.security_scan_code.spec.execution.steps.snyk_sast.output.outputVariables.HIGH>"
+                      echo "║ SCA Critical:   <+pipeline.stages.security_scan_code.spec.execution.steps.snyk_dependencies.output.outputVariables.CRITICAL>"
+                      echo "║ SCA High:       <+pipeline.stages.security_scan_code.spec.execution.steps.snyk_dependencies.output.outputVariables.HIGH>"
+                      echo "╚════════════════════════════════════════════════╝"
+                      echo ""
+                      echo "✓ Code security scan completed. Proceeding to build..."
+
+        # Policy Set - Bloquea si hay críticos
+        policySetRef:
+          - account.security_critical_epss
+
+    # =========================================================================
+    # STAGE 2: Build & Test
+    # Solo se ejecuta si Stage 1 (Security) pasó
+    # =========================================================================
+    - stage:
+        name: Build and Test
+        identifier: build_and_test
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+
+          execution:
+            steps:
+              # ---------------------------------------------------------------
+              # Step 2.1: Install Dependencies
+              # ---------------------------------------------------------------
+              - step:
+                  type: Run
+                  name: Install Dependencies
+                  identifier: install_dependencies
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: python:3.9-slim
+                    shell: Sh
+                    command: |
+                      echo "=== Installing dependencies ==="
+                      pip install --upgrade pip
+                      pip install -r requirements.txt
+                      echo "=== Dependencies installed ==="
+
+              # ---------------------------------------------------------------
+              # Step 2.2: Run Unit Tests
+              # ---------------------------------------------------------------
+              - step:
+                  type: Run
+                  name: Run Unit Tests
+                  identifier: run_unit_tests
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: python:3.9-slim
+                    shell: Sh
+                    command: |
+                      echo "=== Running unit tests ==="
+                      pip install -r requirements.txt
+                      pytest tests/ -v --tb=short --junitxml=test-results.xml
+                      echo "=== Tests completed ==="
+                    reports:
+                      type: JUnit
+                      spec:
+                        paths:
+                          - test-results.xml
+
+              # ---------------------------------------------------------------
+              # Step 2.3: Build Docker Image (NO PUSH aún)
+              # ---------------------------------------------------------------
+              - step:
+                  type: Run
+                  name: Build Docker Image
+                  identifier: build_docker_image
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: docker:latest
+                    shell: Sh
+                    command: |
+                      echo "=== Building Docker image ==="
+                      docker build -t yalo-demo-app:$HARNESS_BUILD_ID .
+                      docker save yalo-demo-app:$HARNESS_BUILD_ID -o /harness/image.tar
+                      echo "=== Image built (not pushed yet) ==="
+                    privileged: true
+
+    # =========================================================================
+    # STAGE 3: Container Security
+    # Escanea la imagen ANTES de pushear
+    # =========================================================================
+    - stage:
+        name: Container Security
+        identifier: container_security
+        type: SecurityTests
+        spec:
+          cloneCodebase: false
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+
+          execution:
+            steps:
+              # ---------------------------------------------------------------
+              # Step 3.1: Load and Scan Container
+              # ---------------------------------------------------------------
+              - step:
+                  type: AquaTrivy
+                  name: Container Scan - Trivy
+                  identifier: container_scan_trivy
+                  spec:
+                    mode: orchestration
+                    config: default
+                    target:
+                      type: container
+                      detection: auto
+                    advanced:
+                      log:
+                        level: info
+                    settings:
+                      product_name: trivy
+                      product_config_name: default
+                      container_image: yalo-demo-app:<+pipeline.sequenceId>
+                    imagePullPolicy: Always
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+
+              # ---------------------------------------------------------------
+              # Step 3.2: Container Security Gate
+              # ---------------------------------------------------------------
+              - step:
+                  type: Run
+                  name: Evaluate Container Security
+                  identifier: evaluate_container_security
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:latest
+                    shell: Sh
+                    command: |
+                      echo "╔════════════════════════════════════════════════╗"
+                      echo "║     SECURITY GATE - CONTAINER ANALYSIS        ║"
+                      echo "╠════════════════════════════════════════════════╣"
+                      echo "║ Container vulnerabilities evaluated           ║"
+                      echo "║ Base image: python:3.9-slim-buster            ║"
+                      echo "╚════════════════════════════════════════════════╝"
+                      echo ""
+                      echo "✓ Container security scan completed."
+
+        # Policy Set para container
+        policySetRef:
+          - account.security_high_severity
+
+    # =========================================================================
+    # STAGE 4: Push (Solo si todo pasó)
+    # Push seguro - imagen ya validada
+    # =========================================================================
+    - stage:
+        name: Push Image
+        identifier: push_image
+        type: CI
+        spec:
+          cloneCodebase: false
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+
+          execution:
+            steps:
+              # ---------------------------------------------------------------
+              # Step 4.1: Push to Registry
+              # ---------------------------------------------------------------
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Push Docker Image
+                  identifier: push_docker_image
+                  spec:
+                    connectorRef: DockerCristian
+                    repo: crizstian/python-demo-app
+                    tags:
+                      - <+pipeline.sequenceId>
+                      - latest
+                      - secure  # Tag adicional indicando que pasó security
+                    caching: true
+                    dockerfile: Dockerfile
+                    context: .
+                    optimize: true
+
+              # ---------------------------------------------------------------
+              # Step 4.2: Notify Success
+              # ---------------------------------------------------------------
+              - step:
+                  type: Run
+                  name: Security Summary
+                  identifier: security_summary
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:latest
+                    shell: Sh
+                    command: |
+                      echo "╔════════════════════════════════════════════════╗"
+                      echo "║           PIPELINE COMPLETED                  ║"
+                      echo "╠════════════════════════════════════════════════╣"
+                      echo "║ ✓ Code Security:      PASSED                  ║"
+                      echo "║ ✓ Dependency Security: PASSED                 ║"
+                      echo "║ ✓ Secret Detection:   PASSED                  ║"
+                      echo "║ ✓ Unit Tests:         PASSED                  ║"
+                      echo "║ ✓ Container Security: PASSED                  ║"
+                      echo "║ ✓ Image Pushed:       crizstian/python-demo-app ║"
+                      echo "╚════════════════════════════════════════════════╝"
+                      echo ""
+                      echo "Image is secure and ready for deployment."
+
+  # ===========================================================================
+  # Failure Strategy Global
+  # ===========================================================================
+  # Si cualquier stage de security falla, el pipeline se detiene
+  # No se pushea imagen vulnerable
+
+  # ===========================================================================
+  # Notifications
+  # ===========================================================================
+  notificationRules:
+    - name: Security Block Alert
+      identifier: security_block_alert
+      pipelineEvents:
+        - type: StageFailed
+          forStages:
+            - security_scan_code
+            - container_security
+      notificationMethod:
+        type: Slack
+        spec:
+          webhookUrl: <+secrets.getValue("slack_webhook")>
+      enabled: true

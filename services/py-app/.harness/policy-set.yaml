@@ -1,0 +1,110 @@
+# =============================================================================
+# Harness Policy Set Configuration
+# Define cómo se aplican las OPA policies al pipeline
+# =============================================================================
+
+policySet:
+  name: Security STO Policies
+  identifier: security_sto_policies
+  projectIdentifier: ${PROJECT_ID}
+  orgIdentifier: ${ORG_ID}
+  description: "Policy set for STO security enforcement with EPSS and risk-based evaluation"
+
+  # Policies incluidas en el set
+  policies:
+    # Policy 1: Critical con EPSS alto
+    - name: Critical EPSS Block
+      identifier: security_critical_epss
+      rego: |
+        # Inline o referencia a archivo
+        # Ver: policies/security_critical_epss.rego
+      severity: error  # Bloquea el pipeline
+      enabled: true
+
+    # Policy 2: Threshold por severidad
+    - name: High Severity Threshold
+      identifier: security_high_severity
+      rego: |
+        # Ver: policies/security_high_severity.rego
+      severity: error
+      enabled: true
+
+    # Policy 3: Risk-based (más sofisticada)
+    - name: Risk Based Evaluation
+      identifier: security_risk_based
+      rego: |
+        # Ver: policies/security_risk_based.rego
+      severity: warning  # Solo advierte, no bloquea
+      enabled: true
+
+  # Entidades a las que aplica
+  entitySelector:
+    type: Pipeline
+    filter:
+      pipelineIdentifiers:
+        - yalo_security_scan
+      # O aplicar a todos los pipelines con tag
+      pipelineTags:
+        type: security
+
+  # Configuración de evaluación
+  evaluation:
+    # Cuándo evaluar
+    trigger:
+      - onRun
+      - onSave  # Validar al guardar pipeline
+
+    # Acción cuando falla
+    action:
+      onFailure: Error  # Error = bloquea, Warn = continúa
+
+---
+# =============================================================================
+# Policy Set simplificado para demo rápida
+# =============================================================================
+
+policySet:
+  name: Demo Quick Policy
+  identifier: demo_quick_policy
+  projectIdentifier: ${PROJECT_ID}
+  orgIdentifier: ${ORG_ID}
+  description: "Simplified policy for quick demos"
+
+  policies:
+    - name: Block Critical
+      identifier: block_critical
+      severity: error
+      enabled: true
+      rego: |
+        package security.demo
+
+        deny[msg] {
+          issue := input.issues[_]
+          issue.severity == "CRITICAL"
+          msg := sprintf("BLOCKED: Critical vulnerability found: %s", [issue.title])
+        }
+
+    - name: Warn High EPSS
+      identifier: warn_high_epss
+      severity: warning
+      enabled: true
+      rego: |
+        package security.demo
+
+        warn[msg] {
+          issue := input.issues[_]
+          issue.epss_score > 0.5
+          msg := sprintf("WARNING: High EPSS score (%.2f) for: %s", [issue.epss_score, issue.title])
+        }
+
+  entitySelector:
+    type: Pipeline
+    filter:
+      pipelineTags:
+        demo: "true"
+
+  evaluation:
+    trigger:
+      - onRun
+    action:
+      onFailure: Error

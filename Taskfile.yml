@@ -151,6 +151,18 @@ tasks:
     desc: "Show container status"
     cmds: ["docker compose -f {{.COMPOSE}} --profile dev ps -a"]
 
+  dev:health:
+    desc: "Health check (liveness): task dev:health"
+    cmds: ["{{.SCRIPTS}}/health-check.sh live"]
+
+  dev:health:ready:
+    desc: "Health check (readiness): task dev:health:ready"
+    cmds: ["{{.SCRIPTS}}/health-check.sh ready"]
+
+  dev:health:all:
+    desc: "Health check (all + infra): task dev:health:all"
+    cmds: ["{{.SCRIPTS}}/health-check.sh all"]
+
   # ============================================================================
   # CI PIPELINE
   # ============================================================================

@@ -1,0 +1,40 @@
+# =============================================================================
+# Yalo Demo App - Dependencies
+# ADVERTENCIA: Contiene versiones VULNERABLES intencionales para demo de Harness STO
+# =============================================================================
+
+# Framework web
+Flask==2.0.1  # VULNERABLE: CVE-2023-30861 (Cookie Security), CVSS 7.5
+
+# Serialización
+PyYAML==5.3.1  # VULNERABLE: CVE-2020-14343 (Arbitrary Code Execution), CVSS 9.8
+
+# HTTP Client
+requests==2.25.1  # VULNERABLE: CVE-2023-32681 (Sensitive Info Leak), CVSS 6.1
+urllib3==1.26.4  # VULNERABLE: CVE-2021-33503 (ReDoS), CVSS 7.5
+
+# Procesamiento de datos
+Jinja2==2.11.3  # VULNERABLE: CVE-2024-22195 (XSS), CVSS 6.1
+MarkupSafe==1.1.1  # VULNERABLE: CVE-2024-23334 (ReDoS), CVSS 7.5
+
+# Criptografía
+cryptography==3.4.6  # VULNERABLE: CVE-2023-23931 (Memory Corruption), CVSS 6.5
+pycryptodome==3.9.9  # VULNERABLE: CVE-2022-24083 (Side-channel), CVSS 7.5
+
+# Base de datos
+SQLAlchemy==1.3.23  # VULNERABLE: CVE-2021-3655 (SQL Injection), CVSS 8.1
+
+# Parsing
+lxml==4.6.2  # VULNERABLE: CVE-2021-28957 (XSS), CVSS 6.1
+Pillow==8.1.0  # VULNERABLE: CVE-2021-25287 (Buffer Overflow), CVSS 9.8
+
+# Networking
+paramiko==2.7.2  # VULNERABLE: CVE-2022-24302 (Race Condition), CVSS 5.9
+
+# Utilities
+Werkzeug==2.0.1  # VULNERABLE: CVE-2023-25577 (Path Traversal), CVSS 7.5
+itsdangerous==2.0.1  # Dependency
+
+# Testing (dev)
+pytest==7.4.0
+pytest-cov==4.1.0
