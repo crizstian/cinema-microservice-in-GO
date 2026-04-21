@@ -33,8 +33,6 @@ REDIS_CONFIG = {
 # =============================================================================
 
 # Payment providers
-STRIPE_SECRET_KEY = "xxx"
-STRIPE_PUBLISHABLE_KEY = "xxx"
 PAYPAL_CLIENT_SECRET = "EKj9KLmNOPqRsTuVwXyZ0123456789AbCdEfGhIjKlMn"
 SQUARE_ACCESS_TOKEN = "EAAAECXxyz123456789abcdefghijklmnopqrstuvwxyzABCDEF"
 
@@ -44,10 +42,6 @@ MAILGUN_API_KEY = "key-1234567890abcdefghijklmnopqrstuv"
 POSTMARK_SERVER_TOKEN = "12345678-1234-1234-1234-123456789012"
 
 # Communication
-TWILIO_ACCOUNT_SID = "xxx"
-TWILIO_AUTH_TOKEN = "xxxx"
-SLACK_BOT_TOKEN = "xoxb-1234567890123-1234567890123-AbCdEfGhIjKlMnOpQrStUvWx"
-SLACK_SIGNING_SECRET = "1234567890abcdef1234567890abcdef"
 DISCORD_BOT_TOKEN = "MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.AbCdEf.GhIjKlMnOpQrStUvWxYz1234567890"
 
 # Cloud providers
