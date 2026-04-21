@@ -26,23 +26,25 @@ logger = logging.getLogger(__name__)
 
 # =============================================================================
 # VULNERABILIDAD 1: Hardcoded Secrets (SAST - CWE-798)
-# Severidad: High - Snyk detecta estos patrones
+# Severidad: High - SAST tools should detect these patterns
 # =============================================================================
 DATABASE_PASSWORD = "super_secret_password_123"
 API_KEY = "sk-1234567890abcdef1234567890abcdef"
 JWT_SECRET = "my_jwt_secret_key_do_not_share_with_anyone"
+ENCRYPTION_KEY = "AES256_encryption_key_32bytes!!"
+SIGNING_SECRET = "hmac_signing_secret_for_tokens"
 
-# AWS Credentials hardcoded - Snyk detecta esto muy bien
-AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"
-AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-AWS_SESSION_TOKEN = "FwoGZXIvYXdzEBYaDHVuaXQgdGVzdGluZyKDAdK"
+# Cloud Credentials - example format (CWE-798)
+CLOUD_ACCESS_KEY_ID = "AKIAXXXXXXXXXXEXAMPLE"
+CLOUD_SECRET_ACCESS_KEY = "wJalrXXXXXXXXXXXXXXXXXXXXXXXXXXEXAMPLE"
 
-# GitHub Token hardcoded
-GITHUB_TOKEN = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# SCM Token - example format
+SCM_ACCESS_TOKEN = "ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 # Database connection string with credentials
 DATABASE_URL = "postgresql://admin:password123@localhost:5432/production_db"
 MONGODB_URI = "mongodb://root:secretpassword@mongodb.example.com:27017/admin"
+REDIS_PASSWORD = "redis_secret_password_123"
 
 
 # =============================================================================

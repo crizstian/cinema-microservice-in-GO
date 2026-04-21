@@ -2,115 +2,105 @@
 Configuration file - Contains hardcoded secrets for Snyk detection demo.
 
 WARNING: This file intentionally contains secrets for demo purposes.
+These are FAKE credentials that should still be detected by SAST tools.
 """
 
 import os
 
 # =============================================================================
-# DATABASE CONFIGURATION
+# DATABASE CONFIGURATION - Hardcoded credentials (CWE-798)
 # =============================================================================
 DATABASE_CONFIG = {
     "host": "prod-db.company.internal",
     "port": 5432,
     "database": "production",
     "user": "db_admin",
-    "password": "Pr0duct10n_P@ssw0rd_2024!",  # VULNERABLE: Hardcoded password
+    "password": "Pr0duct10n_P@ssw0rd_2024!",  # Hardcoded password
 }
 
 MONGODB_CONFIG = {
-    "uri": "mongodb://admin:MongoDBPassword123@mongodb.company.com:27017/admin",  # VULNERABLE
+    "uri": "mongodb://admin:MongoDBPassword123@mongodb.company.com:27017/admin",
     "database": "customers",
 }
 
 REDIS_CONFIG = {
     "host": "redis.company.internal",
     "port": 6379,
-    "password": "RedisSecretPassword!",  # VULNERABLE
+    "password": "RedisSecretPassword!",
 }
 
 # =============================================================================
-# API KEYS AND TOKENS
+# API KEYS AND TOKENS - Patterns that SAST should detect
 # =============================================================================
 
-# Payment providers
-PAYPAL_CLIENT_SECRET = "EKj9KLmNOPqRsTuVwXyZ0123456789AbCdEfGhIjKlMn"
-SQUARE_ACCESS_TOKEN = "EAAAECXxyz123456789abcdefghijklmnopqrstuvwxyzABCDEF"
+# Payment providers - fake but detectable patterns
+PAYMENT_API_KEY = "pk_test_TYooMQauvdEDq54NiTphI7jx"  # Test key pattern
+PAYMENT_SECRET_KEY = "sk_test_4eC39HqLyjWDarjtT1zdp7dc"  # Test key pattern
 
 # Email services
-SENDGRID_API_KEY = "SG.abcdefghijklmnopqrstuvwxyz.1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-MAILGUN_API_KEY = "key-1234567890abcdefghijklmnopqrstuv"
-POSTMARK_SERVER_TOKEN = "12345678-1234-1234-1234-123456789012"
+EMAIL_API_KEY = "SG.XXXXXXXXXXXXXXXXXXXXXXXX.YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+MAIL_API_KEY = "key-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 # Communication
-DISCORD_BOT_TOKEN = "MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.AbCdEf.GhIjKlMnOpQrStUvWxYz1234567890"
+SMS_ACCOUNT_SID = "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+SMS_AUTH_TOKEN = "your_auth_token_here_32_characters!"
+CHAT_BOT_TOKEN = "xoxb-XXXXXXXXXXXX-XXXXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXXXXX"
+WEBHOOK_SECRET = "whsec_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
-# Cloud providers
-AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"
-AWS_SECRET_ACCESS_KEY = "xx/x/x"
-AWS_SESSION_TOKEN = "xxx"
+# Cloud providers - Example format credentials
+CLOUD_ACCESS_KEY_ID = "AKIAXXXXXXXXXXXXXXXX"  # AWS format
+CLOUD_SECRET_ACCESS_KEY = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"  # 40 chars
+CLOUD_SESSION_TOKEN = "FwoGZXIvYXdzEXAMPLETOKEN"
 
-AZURE_CLIENT_ID = "12345678-1234-1234-1234-123456789012"
-AZURE_CLIENT_SECRET = "abcdefghijklmnopqrstuvwxyz123456~-"
-AZURE_TENANT_ID = "12345678-1234-1234-1234-123456789012"
-AZURE_SUBSCRIPTION_ID = "12345678-1234-1234-1234-123456789012"
+AZURE_CLIENT_ID = "00000000-0000-0000-0000-000000000000"
+AZURE_CLIENT_SECRET = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX~-"
+AZURE_TENANT_ID = "00000000-0000-0000-0000-000000000000"
 
-GCP_API_KEY = "AIzaSyDaGmWKa4JsXZ-HjGw7ISLn_3namBGewQe"
-GCP_SERVICE_ACCOUNT = """{
+GCP_API_KEY = "AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+GCP_SERVICE_ACCOUNT_KEY = """{
   "type": "service_account",
-  "project_id": "my-project-123456",
-  "private_key_id": "abc123def456ghi789jkl012mno345pqr678stu901",
-  "private_key": "-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7...\\n-----END PRIVATE KEY-----\\n",
-  "client_email": "service-account@my-project-123456.iam.gserviceaccount.com",
-  "client_id": "123456789012345678901",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token"
+  "project_id": "example-project-123456",
+  "private_key_id": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  "private_key": "-----BEGIN PRIVATE KEY-----\\nXXXXXXXX...\\n-----END PRIVATE KEY-----\\n",
+  "client_email": "example@example-project.iam.gserviceaccount.com",
+  "client_id": "000000000000000000000"
 }"""
 
-DIGITALOCEAN_TOKEN = "dop_v1_1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-HEROKU_API_KEY = "12345678-1234-1234-1234-123456789012"
+DO_TOKEN = "dop_v1_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 # Source control
-GITHUB_TOKEN = "ghp_1234567890abcdefghijklmnopqrstuvwxyz"
-GITHUB_APP_PRIVATE_KEY = """-----BEGIN RSA PRIVATE KEY-----
-MIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8PbnGy...
+SCM_TOKEN = "ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+SCM_APP_PRIVATE_KEY = """-----BEGIN RSA PRIVATE KEY-----
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 -----END RSA PRIVATE KEY-----"""
-GITLAB_TOKEN = "glpat-xxxxxxxxxxxxxxxxxxxx"
-BITBUCKET_APP_PASSWORD = "ATBBxxxxxxxxxxxxxxxxxxxxxxxxxx"
+GITLAB_ACCESS_TOKEN = "glpat-XXXXXXXXXXXXXXXXXXXX"
 
 # CI/CD
-CIRCLECI_TOKEN = "1234567890abcdef1234567890abcdef12345678"
-TRAVIS_TOKEN = "1234567890abcdefghij"
-JENKINS_API_TOKEN = "1234567890abcdef1234567890abcdef"
+CI_TOKEN = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+JENKINS_API_TOKEN = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 # Monitoring
-DATADOG_API_KEY = "1234567890abcdef1234567890abcdef"
-DATADOG_APP_KEY = "1234567890abcdef1234567890abcdef12345678"
-NEW_RELIC_LICENSE_KEY = "1234567890abcdef1234567890abcdef12345678NRAL"
-SENTRY_DSN = "https://1234567890abcdef@o123456.ingest.sentry.io/1234567"
-PAGERDUTY_API_KEY = "u+1234567890abcdefghij"
+MONITORING_API_KEY = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+MONITORING_APP_KEY = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+APM_LICENSE_KEY = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXNRAL"
+ERROR_DSN = "https://XXXXXXXX@o123456.ingest.example.io/1234567"
 
 # =============================================================================
-# ENCRYPTION KEYS
+# ENCRYPTION KEYS - Hardcoded (CWE-321)
 # =============================================================================
 JWT_SECRET_KEY = "super-secret-jwt-key-that-should-be-in-env-vars"
 ENCRYPTION_KEY = "ThisIsAHardcodedEncryptionKey123!"
 SIGNING_KEY = "MySigningKeyForHMAC256Operations"
 FERNET_KEY = "ZmVybmV0X2tleV8xMjM0NTY3ODkwYWJjZGVm"
+AES_KEY = "0123456789ABCDEF0123456789ABCDEF"
 
 # =============================================================================
 # OAUTH SECRETS
 # =============================================================================
-GOOGLE_CLIENT_SECRET = "GOCSPX-1234567890abcdefghijklmnop"
-FACEBOOK_APP_SECRET = "1234567890abcdef1234567890abcdef"
-TWITTER_API_SECRET = "1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"
-LINKEDIN_CLIENT_SECRET = "1234567890AbCdEf"
-
-# =============================================================================
-# WEBHOOK SECRETS
-# =============================================================================
-GITHUB_WEBHOOK_SECRET = "webhook_secret_1234567890"
-STRIPE_WEBHOOK_SECRET = "whsec_1234567890abcdefghijklmnopqrstuvwxyz"
-SHOPIFY_WEBHOOK_SECRET = "shpss_1234567890abcdef"
+OAUTH_CLIENT_SECRET = "GOCSPX-XXXXXXXXXXXXXXXXXXXXXXXX"
+SOCIAL_APP_SECRET = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+OAUTH_API_SECRET = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 # =============================================================================
 # INTERNAL SERVICES
@@ -118,34 +108,43 @@ SHOPIFY_WEBHOOK_SECRET = "shpss_1234567890abcdef"
 INTERNAL_API_KEY = "internal-api-key-for-service-to-service"
 SERVICE_AUTH_TOKEN = "service-auth-token-1234567890"
 ADMIN_PASSWORD = "AdminP@ssword123!"
+ROOT_PASSWORD = "r00t_p@ssw0rd_2024"
+MASTER_KEY = "master-key-for-all-services-xyz123"
+
+# =============================================================================
+# DATABASE CONNECTION STRINGS (CWE-798)
+# =============================================================================
+POSTGRES_URI = "postgresql://admin:password123@db.example.com:5432/production"
+MYSQL_URI = "mysql://root:mysqlpassword@mysql.example.com:3306/app"
+MSSQL_URI = "mssql+pyodbc://sa:SqlServer2024!@mssql.example.com/database"
 
 # =============================================================================
 # CONFIGURATION (INSECURE SETTINGS)
 # =============================================================================
 class Config:
-    SECRET_KEY = "you-will-never-guess-this-secret-key"  # VULNERABLE
-    DEBUG = True  # VULNERABLE: Debug in production
+    SECRET_KEY = "you-will-never-guess-this-secret-key"  # Hardcoded
+    DEBUG = True  # Debug in production
     TESTING = False
 
-    # Database
-    SQLALCHEMY_DATABASE_URI = f"postgresql://admin:password123@db.example.com/prod"  # VULNERABLE
+    # Database with credentials
+    SQLALCHEMY_DATABASE_URI = "postgresql://admin:password123@db.example.com/prod"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # Session
-    SESSION_COOKIE_SECURE = False  # VULNERABLE: Cookies over HTTP
-    SESSION_COOKIE_HTTPONLY = False  # VULNERABLE: XSS can steal cookies
-    SESSION_COOKIE_SAMESITE = None  # VULNERABLE: CSRF
-    PERMANENT_SESSION_LIFETIME = 86400 * 365  # VULNERABLE: 1 year session
+    # Insecure session config
+    SESSION_COOKIE_SECURE = False  # Cookies over HTTP
+    SESSION_COOKIE_HTTPONLY = False  # XSS can steal cookies
+    SESSION_COOKIE_SAMESITE = None  # CSRF vulnerable
+    PERMANENT_SESSION_LIFETIME = 86400 * 365  # 1 year session
 
-    # Security
-    WTF_CSRF_ENABLED = False  # VULNERABLE: CSRF disabled
+    # CSRF disabled
+    WTF_CSRF_ENABLED = False
 
-    # CORS
-    CORS_ORIGINS = "*"  # VULNERABLE: Allow all origins
-    CORS_SUPPORTS_CREDENTIALS = True  # VULNERABLE with wildcard origin
+    # Insecure CORS
+    CORS_ORIGINS = "*"  # Allow all origins
+    CORS_SUPPORTS_CREDENTIALS = True  # With wildcard = vulnerable
 
 
 class ProductionConfig(Config):
     """Production config that's actually insecure"""
-    DEBUG = True  # VULNERABLE: Debug enabled in production
+    DEBUG = True  # Debug in production!
     SQLALCHEMY_DATABASE_URI = DATABASE_CONFIG

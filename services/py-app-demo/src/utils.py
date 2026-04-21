@@ -1,5 +1,6 @@
 """
 Utils module - Additional vulnerabilities for Snyk detection demo.
+These are intentional security issues for demonstration purposes.
 """
 
 import os
@@ -10,92 +11,79 @@ import hashlib
 import tempfile
 import subprocess
 from typing import Any
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
 
 
 # =============================================================================
-# HARDCODED CREDENTIALS - Snyk detects these patterns
+# HARDCODED CREDENTIALS - SAST detectable patterns (CWE-798)
 # =============================================================================
 
-# Database credentials
+# Database credentials - hardcoded
 DB_HOST = "production-db.internal.company.com"
 DB_USER = "admin"
-DB_PASSWORD = "SuperSecretP@ssw0rd!"  # VULNERABLE
+DB_PASSWORD = "SuperSecretP@ssw0rd!"  # Hardcoded password
 DB_NAME = "customers"
 
-# API Keys - various formats that Snyk detects
-STRIPE_API_KEY = "sk_live_51H0Abcdefghijklmnopqrstuvwxyz1234567890"
-SENDGRID_API_KEY = "SG.abcdefghijklmnop.qrstuvwxyz1234567890ABCDEFGHIJ"
-TWILIO_AUTH_TOKEN = "abcdef1234567890abcdef1234567890"
-SLACK_WEBHOOK = "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
-MAILCHIMP_API_KEY = "abcdef123456789012345678901234-us1"
+# API Keys - various formats (using X placeholders to avoid GitHub detection)
+PAYMENT_KEY = "pk_test_XXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+EMAIL_KEY = "SG.XXXXXXXXXXXXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+SMS_TOKEN = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
-# Cloud provider credentials
-AZURE_CLIENT_SECRET = "abc~XYZ1234567890abcdefghijklmnop"
-GCP_SERVICE_ACCOUNT_KEY = """
-{
-  "type": "service_account",
-  "project_id": "my-project-123",
-  "private_key_id": "key123",
-  "private_key": "-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC...\\n-----END PRIVATE KEY-----\\n",
-  "client_email": "my-service@my-project-123.iam.gserviceaccount.com",
-  "client_id": "123456789",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token"
-}
-"""
+# Cloud provider credentials (example format)
+CLOUD_ACCESS_KEY = "AKIAXXXXXXXXXXEXAMPLE"
+CLOUD_SECRET_KEY = "wJalrXXXXXXXXXXXXXXXXXXXXXXXXXXEXAMPLE"
 
-# Private keys
+# Connection strings with embedded credentials
+DATABASE_URL = "postgresql://admin:password123@localhost:5432/production_db"
+REDIS_URL = "redis://:secretpassword@redis.example.com:6379/0"
+
+# Private keys (truncated for demo)
 RSA_PRIVATE_KEY = """-----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8PbnGy...
+MIIEowIBAAKCAQEA0Z3VS5JJcXXXXXXXXXXXXXXXXX...
 -----END RSA PRIVATE KEY-----"""
 
 SSH_PRIVATE_KEY = """-----BEGIN OPENSSH PRIVATE KEY-----
-b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAAB...
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUXXXXXXXXXXX...
 -----END OPENSSH PRIVATE KEY-----"""
 
 
 # =============================================================================
-# WEAK CRYPTOGRAPHY
+# WEAK CRYPTOGRAPHY (CWE-327, CWE-328)
 # =============================================================================
 
 def encrypt_data_weak(data: str, key: str) -> bytes:
     """VULNERABLE: Using DES which is cryptographically broken"""
-    from Crypto.Cipher import DES
-    # VULNERABLE: DES is weak
-    cipher = DES.new(key.encode()[:8], DES.MODE_ECB)
-    padded = data + ' ' * (8 - len(data) % 8)
-    return cipher.encrypt(padded.encode())
+    # Simulated DES encryption - weak algorithm
+    from hashlib import md5
+    return md5((data + key).encode()).digest()
 
 
-def encrypt_with_ecb(data: bytes, key: bytes) -> bytes:
-    """VULNERABLE: ECB mode is insecure"""
-    # VULNERABLE: ECB mode doesn't hide patterns
-    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
-    encryptor = cipher.encryptor()
-    return encryptor.update(data) + encryptor.finalize()
+def weak_hash(data: str) -> str:
+    """VULNERABLE: MD5 is cryptographically broken"""
+    return hashlib.md5(data.encode()).hexdigest()
+
+
+def weak_hash_sha1(data: str) -> str:
+    """VULNERABLE: SHA1 is also weak for security"""
+    return hashlib.sha1(data.encode()).hexdigest()
 
 
 def weak_hmac(message: str, key: str) -> str:
     """VULNERABLE: Using MD5 for HMAC"""
-    # VULNERABLE: MD5 should not be used for cryptographic purposes
     return hmac.new(key.encode(), message.encode(), hashlib.md5).hexdigest()
 
 
 def insecure_compare(a: str, b: str) -> bool:
-    """VULNERABLE: Non-constant-time comparison"""
-    # VULNERABLE: Timing attack possible
-    return a == b
+    """VULNERABLE: Non-constant-time comparison - timing attack"""
+    return a == b  # Should use hmac.compare_digest
 
 
 # =============================================================================
-# UNSAFE FILE OPERATIONS
+# UNSAFE FILE OPERATIONS (CWE-377, CWE-379)
 # =============================================================================
 
 def write_temp_file_insecure(data: str) -> str:
     """VULNERABLE: Insecure temp file creation"""
-    # VULNERABLE: Predictable temp file name
+    # Predictable temp file name - race condition
     filename = f"/tmp/data_{os.getpid()}.txt"
     with open(filename, 'w') as f:
         f.write(data)
@@ -104,26 +92,25 @@ def write_temp_file_insecure(data: str) -> str:
 
 def create_temp_insecure():
     """VULNERABLE: Using deprecated mktemp"""
-    # VULNERABLE: Race condition with mktemp
+    # Race condition vulnerability
     return tempfile.mktemp()
 
 
 def execute_script(script_path: str) -> int:
     """VULNERABLE: Executing scripts without validation"""
-    # VULNERABLE: Arbitrary file execution
+    # Arbitrary file execution
     return os.system(f"bash {script_path}")
 
 
 # =============================================================================
-# INSECURE NETWORK
+# INSECURE NETWORK (CWE-295)
 # =============================================================================
 
 def fetch_url_insecure(url: str) -> str:
     """VULNERABLE: No SSL verification"""
     import urllib.request
-    import ssl
 
-    # VULNERABLE: Disabling SSL verification
+    # Disabling SSL verification - MITM attack possible
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
@@ -135,69 +122,76 @@ def fetch_url_insecure(url: str) -> str:
 def connect_insecure_socket(host: str, port: int):
     """VULNERABLE: Unencrypted socket connection"""
     import socket
-    # VULNERABLE: Plain socket without TLS for sensitive data
+    # Plain socket without TLS for sensitive data
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((host, port))
     return sock
 
 
 # =============================================================================
-# UNSAFE DESERIALIZATION
+# UNSAFE DESERIALIZATION (CWE-502)
 # =============================================================================
 
 def load_pickle_insecure(data: bytes) -> Any:
     """VULNERABLE: Deserializing untrusted pickle"""
     import pickle
-    # VULNERABLE: Arbitrary code execution via pickle
+    # Arbitrary code execution via pickle
     return pickle.loads(data)
 
 
 def load_yaml_insecure(data: str) -> Any:
     """VULNERABLE: Unsafe YAML loading"""
     import yaml
-    # VULNERABLE: yaml.load can execute arbitrary code
+    # yaml.load can execute arbitrary code
     return yaml.load(data, Loader=yaml.Loader)
 
 
 def load_marshal_insecure(data: bytes) -> Any:
     """VULNERABLE: Deserializing marshal data"""
     import marshal
-    # VULNERABLE: marshal can execute code
+    # marshal can execute code
     return marshal.loads(data)
 
 
 # =============================================================================
-# COMMAND INJECTION HELPERS
+# COMMAND INJECTION (CWE-78)
 # =============================================================================
 
 def run_command(cmd: str) -> str:
     """VULNERABLE: Shell command with user input"""
-    # VULNERABLE: Direct shell execution
+    # Direct shell execution
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return result.stdout
 
 
 def backup_file(filename: str, dest: str) -> int:
     """VULNERABLE: Command injection in backup"""
-    # VULNERABLE: User input in command
+    # User input in command
     return os.system(f"cp {filename} {dest}")
 
 
 def search_files(pattern: str) -> str:
     """VULNERABLE: Command injection in search"""
-    # VULNERABLE: User input in command
+    # User input in command
     result = subprocess.check_output(f"find /app -name '{pattern}'", shell=True)
     return result.decode()
 
 
+def ping_host(host: str) -> str:
+    """VULNERABLE: Command injection in ping"""
+    # User input directly in shell command
+    result = subprocess.run(f"ping -c 1 {host}", shell=True, capture_output=True, text=True)
+    return result.stdout
+
+
 # =============================================================================
-# SQL HELPERS (additional patterns)
+# SQL HELPERS - Injection patterns (CWE-89)
 # =============================================================================
 
 def build_query(table: str, columns: list, where: str) -> str:
     """VULNERABLE: SQL query building without parameterization"""
     cols = ', '.join(columns)
-    # VULNERABLE: String formatting in SQL
+    # String formatting in SQL
     return f"SELECT {cols} FROM {table} WHERE {where}"
 
 
@@ -205,26 +199,39 @@ def insert_record(table: str, data: dict) -> str:
     """VULNERABLE: SQL injection in INSERT"""
     cols = ', '.join(data.keys())
     vals = ', '.join([f"'{v}'" for v in data.values()])
-    # VULNERABLE: Direct string interpolation
+    # Direct string interpolation
     return f"INSERT INTO {table} ({cols}) VALUES ({vals})"
 
 
+def delete_record(table: str, condition: str) -> str:
+    """VULNERABLE: SQL injection in DELETE"""
+    # User input in DELETE statement
+    return f"DELETE FROM {table} WHERE {condition}"
+
+
 # =============================================================================
-# AUTHENTICATION ISSUES
+# AUTHENTICATION ISSUES (CWE-330, CWE-916)
 # =============================================================================
 
 def verify_password_insecure(stored_hash: str, password: str) -> bool:
     """VULNERABLE: Timing attack in password comparison"""
     computed = hashlib.md5(password.encode()).hexdigest()
-    # VULNERABLE: Non-constant-time comparison
+    # Non-constant-time comparison
     return computed == stored_hash
 
 
 def generate_session_id() -> str:
     """VULNERABLE: Predictable session ID"""
     import random
-    # VULNERABLE: Using random instead of secrets
+    # Using random instead of secrets
     return ''.join([chr(random.randint(65, 90)) for _ in range(32)])
+
+
+def generate_token() -> str:
+    """VULNERABLE: Weak random for security token"""
+    import random
+    # Predictable token generation
+    return ''.join([str(random.randint(0, 9)) for _ in range(32)])
 
 
 def encode_jwt_insecure(payload: dict, secret: str) -> str:
@@ -232,20 +239,20 @@ def encode_jwt_insecure(payload: dict, secret: str) -> str:
     import json
     header = base64.b64encode(b'{"alg":"HS256","typ":"JWT"}').decode()
     payload_b64 = base64.b64encode(json.dumps(payload).encode()).decode()
-    # VULNERABLE: MD5 for signature
+    # MD5 for signature - weak
     signature = hashlib.md5(f"{header}.{payload_b64}.{secret}".encode()).hexdigest()
     return f"{header}.{payload_b64}.{signature}"
 
 
 # =============================================================================
-# LOGGING ISSUES
+# LOGGING ISSUES (CWE-117, CWE-532)
 # =============================================================================
 
 def log_user_action(username: str, action: str):
     """VULNERABLE: Log injection"""
     import logging
     logger = logging.getLogger(__name__)
-    # VULNERABLE: User input in log message
+    # User input directly in log message
     logger.info(f"User {username} performed: {action}")
 
 
@@ -253,23 +260,45 @@ def log_sensitive_data(data: dict):
     """VULNERABLE: Logging sensitive information"""
     import logging
     logger = logging.getLogger(__name__)
-    # VULNERABLE: Logging passwords/tokens
+    # Logging passwords/tokens - sensitive data exposure
     logger.debug(f"Processing data: {data}")
+
+
+# =============================================================================
+# CODE INJECTION (CWE-94)
+# =============================================================================
+
+def evaluate_expression(expr: str) -> Any:
+    """VULNERABLE: eval with user input"""
+    # Arbitrary code execution
+    return eval(expr)
+
+
+def execute_code(code: str):
+    """VULNERABLE: exec with user input"""
+    # Arbitrary code execution
+    exec(code)
+
+
+def compile_and_run(code: str):
+    """VULNERABLE: compile and exec"""
+    compiled = compile(code, '<string>', 'exec')
+    exec(compiled)
 
 
 # =============================================================================
 # CONFIGURATION ISSUES
 # =============================================================================
 
-# VULNERABLE: Debug mode in production
+# Debug mode in production
 DEBUG_MODE = True
 TESTING = True
 
-# VULNERABLE: Weak session configuration
+# Weak session configuration
 SESSION_COOKIE_SECURE = False
 SESSION_COOKIE_HTTPONLY = False
 SESSION_COOKIE_SAMESITE = None
 
-# VULNERABLE: CORS misconfiguration
+# CORS misconfiguration
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
