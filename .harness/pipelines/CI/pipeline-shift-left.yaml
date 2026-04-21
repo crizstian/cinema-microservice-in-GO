@@ -29,31 +29,72 @@ pipeline:
             spec: {}
           execution:
             steps:
+              - step:
+                  type: Run
+                  name: Install Dependencies
+                  identifier: install_dependencies
+                  spec:
+                    connectorRef: account.harnessImageV1
+                    image: python:3.9-slim
+                    shell: Sh
+                    command: |-
+                      cd /harness/services/py-app-demo
+                      echo "=== Installing dependencies ==="
+                      pip install --upgrade pip
+                      pip install -r requirements.txt
+                      echo "=== Dependencies installed ==="
               - stepGroup:
                   name: SCA Scans
                   identifier: SCA
                   steps:
-                    - step:
-                        type: Snyk
-                        name: Snyk SCA
-                        identifier: Snyk_SCA
-                        spec:
-                          mode: ingestion
-                          config: default
-                          target:
-                            type: repository
-                            detection: manual
-                            name: seworkshop/boutique-pmservice
-                            variant: main
-                          advanced:
-                            log:
-                              level: info
-                          privileged: true
-                          ingestion:
-                            file: sto_tests/scan_tools/snyk/test_data/002
-                        when:
-                          stageStatus: Success
-                          condition: "false"
+                    - parallel:
+                        - step:
+                            type: HarnessSAST
+                            name: HarnessSCA
+                            identifier: HarnessSCA
+                            spec:
+                              mode: orchestration
+                              config: sca
+                              target:
+                                type: repository
+                                workspace: /harness/services/py-app-demo
+                                detection: auto
+                              advanced:
+                                log:
+                                  level: info
+                                fail_on_severity: none
+                            enforce:
+                              policySets:
+                                - STO_Policy
+                        - step:
+                            type: Snyk
+                            name: Snyk SCA
+                            identifier: Snyk_SCA
+                            spec:
+                              mode: orchestration
+                              config: default
+                              target:
+                                type: repository
+                                workspace: /harness/services/py-app-demo
+                                detection: manual
+                                name: py-app-demo
+                                variant: <+codebase.branch>
+                              advanced:
+                                log:
+                                  level: info
+                                fail_on_severity: none
+                                args:
+                                  cli: "--skip-unresolved"
+                              privileged: true
+                              auth:
+                                access_token: <+secrets.getValue("snyk_token")>
+                              sbom:
+                                format: spdx-json
+                            enforce:
+                              policySets:
+                                - STO_Policy
+                            when:
+                              stageStatus: Success
                   when:
                     stageStatus: Success
               - stepGroup:
@@ -67,81 +108,277 @@ pipeline:
                             identifier: HarnessSAST_1
                             spec:
                               mode: orchestration
-                              config: default
+                              config: sast
                               target:
                                 type: repository
-                                workspace: /harness/services/py-app
+                                workspace: /harness/services/py-app-demo
                                 detection: auto
                               advanced:
                                 log:
                                   level: info
+                                fail_on_severity: none
+                            enforce:
+                              policySets:
+                                - STO_Policy
                         - step:
                             type: Snyk
                             name: Snyk SAST
                             identifier: Snyk_SAST
                             spec:
-                              mode: ingestion
+                              mode: orchestration
                               config: default
                               target:
                                 type: repository
-                                name: seworkshop/boutique-pmservice
+                                name: py-app-demo
                                 variant: main
                               advanced:
                                 log:
                                   level: info
                                 fail_on_severity: none
+                                args:
+                                  cli: "--skip-unresolved"
                               privileged: true
-                              ingestion:
-                                file: services/py-app/automation/sto_test/scan_tools/sonarqube/001
-                            failureStrategies:
-                              - onFailure:
-                                  errors:
-                                    - AllErrors
-                                  action:
-                                    type: MarkAsSuccess
+                              auth:
+                                access_token: <+secrets.getValue("snyk_token")>
+                              sbom:
+                                format: spdx-json
+                            enforce:
+                              policySets:
+                                - STO_Policy
                   when:
                     stageStatus: Success
               - step:
                   type: Gitleaks
-                  name: Secret Detection
-                  identifier: secret_detection
+                  name: Gitleaks
+                  identifier: Gitleaks
                   spec:
                     mode: orchestration
                     config: default
                     target:
                       type: repository
-                      workspace: /harness/services/py-app
+                      workspace: /harness/services/py-app-demo
                       detection: auto
                     advanced:
                       log:
                         level: info
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
+                      fail_on_severity: none
+                  enforce:
+                    policySets:
+                      - security_secrets
               - step:
                   type: Run
                   name: Evaluate Code Security
                   identifier: evaluate_code_security
                   spec:
-                    connectorRef: account.harnessImage
+                    connectorRef: account.harnessImageV1
                     image: alpine:latest
                     shell: Sh
-                    command: |
-                      echo "╔════════════════════════════════════════════════╗"
-                      echo "║       SECURITY GATE - CODE ANALYSIS           ║"
-                      echo "╠════════════════════════════════════════════════╣"
-                      echo "║ SAST Critical:  <+pipeline.stages.security_scan_code.spec.execution.steps.snyk_sast.output.outputVariables.CRITICAL>"
-                      echo "║ SAST High:      <+pipeline.stages.security_scan_code.spec.execution.steps.snyk_sast.output.outputVariables.HIGH>"
-                      echo "║ SCA Critical:   <+pipeline.stages.security_scan_code.spec.execution.steps.snyk_dependencies.output.outputVariables.CRITICAL>"
-                      echo "║ SCA High:       <+pipeline.stages.security_scan_code.spec.execution.steps.snyk_dependencies.output.outputVariables.HIGH>"
-                      echo "╚════════════════════════════════════════════════╝"
+                    command: |-
+                      #!/bin/sh
+
+                      # ============================================================
+                      # Security Gate - Aggregate Results from All Scanners
+                      # ============================================================
+
+                      # --- Helper: Convert null/empty to 0 ---
+                      sanitize() {
+                        val="$1"
+                        if [ -z "$val" ] || [ "$val" = "null" ] || [ "$val" = "<+null>" ]; then
+                          echo "0"
+                        else
+                          echo "$val"
+                        fi
+                      }
+
+                      # --- Thresholds (customize as needed) ---
+                      MAX_CRITICAL=0
+                      MAX_HIGH=5
+                      MAX_SECRETS=0
+
+                      # --- Sanitize Scanner Results ---
+                      # HarnessSCA
+                      H_SCA_C=$(sanitize "$HARNESS_SCA_CRITICAL")
+                      H_SCA_H=$(sanitize "$HARNESS_SCA_HIGH")
+                      H_SCA_M=$(sanitize "$HARNESS_SCA_MEDIUM")
+                      H_SCA_T=$(sanitize "$HARNESS_SCA_TOTAL")
+
+                      # Snyk SCA
+                      S_SCA_C=$(sanitize "$SNYK_SCA_CRITICAL")
+                      S_SCA_H=$(sanitize "$SNYK_SCA_HIGH")
+                      S_SCA_M=$(sanitize "$SNYK_SCA_MEDIUM")
+                      S_SCA_T=$(sanitize "$SNYK_SCA_TOTAL")
+
+                      # HarnessSAST
+                      H_SAST_C=$(sanitize "$HARNESS_SAST_CRITICAL")
+                      H_SAST_H=$(sanitize "$HARNESS_SAST_HIGH")
+                      H_SAST_M=$(sanitize "$HARNESS_SAST_MEDIUM")
+                      H_SAST_T=$(sanitize "$HARNESS_SAST_TOTAL")
+
+                      # Snyk SAST
+                      S_SAST_C=$(sanitize "$SNYK_SAST_CRITICAL")
+                      S_SAST_H=$(sanitize "$SNYK_SAST_HIGH")
+                      S_SAST_M=$(sanitize "$SNYK_SAST_MEDIUM")
+                      S_SAST_T=$(sanitize "$SNYK_SAST_TOTAL")
+
+                      # Gitleaks
+                      GL_T=$(sanitize "$GITLEAKS_TOTAL")
+                      GL_C=$(sanitize "$GITLEAKS_CRITICAL")
+                      GL_H=$(sanitize "$GITLEAKS_HIGH")
+
+                      # --- Calculate Totals ---
+                      TOTAL_SCA_CRITICAL=$((H_SCA_C + S_SCA_C))
+                      TOTAL_SCA_HIGH=$((H_SCA_H + S_SCA_H))
+                      TOTAL_SAST_CRITICAL=$((H_SAST_C + S_SAST_C))
+                      TOTAL_SAST_HIGH=$((H_SAST_H + S_SAST_H))
+                      TOTAL_CRITICAL=$((TOTAL_SCA_CRITICAL + TOTAL_SAST_CRITICAL))
+                      TOTAL_HIGH=$((TOTAL_SCA_HIGH + TOTAL_SAST_HIGH))
+                      TOTAL_SECRETS=$GL_T
+
+                      # --- Display Report ---
                       echo ""
-                      echo "✓ Code security scan completed. Proceeding to build..."
+                      echo "======================================================================"
+                      echo "              SECURITY GATE - CODE ANALYSIS REPORT                   "
+                      echo "======================================================================"
+                      echo ""
+                      echo "  SCA SCANNERS (Dependency Vulnerabilities)"
+                      echo "  ---------------------------------------------------------"
+                      echo "  Scanner         | Critical | High | Medium | Total"
+                      echo "  ---------------------------------------------------------"
+                      printf "  HarnessSCA      | %8s | %4s | %6s | %5s\n" "$H_SCA_C" "$H_SCA_H" "$H_SCA_M" "$H_SCA_T"
+                      printf "  Snyk SCA        | %8s | %4s | %6s | %5s\n" "$S_SCA_C" "$S_SCA_H" "$S_SCA_M" "$S_SCA_T"
+                      echo "  ---------------------------------------------------------"
+                      echo ""
+                      echo "  SAST SCANNERS (Code Vulnerabilities)"
+                      echo "  ---------------------------------------------------------"
+                      echo "  Scanner         | Critical | High | Medium | Total"
+                      echo "  ---------------------------------------------------------"
+                      printf "  HarnessSAST     | %8s | %4s | %6s | %5s\n" "$H_SAST_C" "$H_SAST_H" "$H_SAST_M" "$H_SAST_T"
+                      printf "  Snyk SAST       | %8s | %4s | %6s | %5s\n" "$S_SAST_C" "$S_SAST_H" "$S_SAST_M" "$S_SAST_T"
+                      echo "  ---------------------------------------------------------"
+                      echo ""
+                      echo "  SECRET DETECTION"
+                      echo "  ---------------------------------------------------------"
+                      printf "  Gitleaks        | %s secrets detected\n" "$TOTAL_SECRETS"
+                      echo "  ---------------------------------------------------------"
+                      echo ""
+                      echo "======================================================================"
+                      echo "  AGGREGATED TOTALS"
+                      echo "======================================================================"
+                      printf "  Total Critical: %s (SCA: %s + SAST: %s)\n" "$TOTAL_CRITICAL" "$TOTAL_SCA_CRITICAL" "$TOTAL_SAST_CRITICAL"
+                      printf "  Total High:     %s (SCA: %s + SAST: %s)\n" "$TOTAL_HIGH" "$TOTAL_SCA_HIGH" "$TOTAL_SAST_HIGH"
+                      printf "  Total Secrets:  %s\n" "$TOTAL_SECRETS"
+                      echo ""
+                      echo "======================================================================"
+                      echo "  SECURITY GATE EVALUATION"
+                      echo "======================================================================"
+                      printf "  Critical threshold: %s (found: %s)\n" "$MAX_CRITICAL" "$TOTAL_CRITICAL"
+                      printf "  High threshold:     %s (found: %s)\n" "$MAX_HIGH" "$TOTAL_HIGH"
+                      printf "  Secrets threshold:  %s (found: %s)\n" "$MAX_SECRETS" "$TOTAL_SECRETS"
+                      echo ""
+
+                      # --- Evaluate Gate ---
+                      GATE_PASSED=true
+                      BLOCK_REASONS=""
+
+                      if [ "$TOTAL_CRITICAL" -gt "$MAX_CRITICAL" ]; then
+                        GATE_PASSED=false
+                        BLOCK_REASONS="$BLOCK_REASONS- Critical vulnerabilities ($TOTAL_CRITICAL) exceed threshold ($MAX_CRITICAL)\n"
+                      fi
+
+                      if [ "$TOTAL_HIGH" -gt "$MAX_HIGH" ]; then
+                        GATE_PASSED=false
+                        BLOCK_REASONS="$BLOCK_REASONS- High vulnerabilities ($TOTAL_HIGH) exceed threshold ($MAX_HIGH)\n"
+                      fi
+
+                      if [ "$TOTAL_SECRETS" -gt "$MAX_SECRETS" ]; then
+                        GATE_PASSED=false
+                        BLOCK_REASONS="$BLOCK_REASONS- Secrets detected ($TOTAL_SECRETS) exceed threshold ($MAX_SECRETS)\n"
+                      fi
+
+                      echo "======================================================================"
+                      if [ "$GATE_PASSED" = "true" ]; then
+                        echo "  RESULT: PASSED"
+                        echo "  All security checks within acceptable thresholds."
+                      else
+                        echo "  RESULT: BLOCKED"
+                        echo "  Security gate failed due to:"
+                        printf "  $BLOCK_REASONS"
+                      fi
+                      echo "======================================================================"
+                      echo ""
+
+                      # --- Export Output Variables ---
+                      echo "TOTAL_CRITICAL=$TOTAL_CRITICAL" >> $HARNESS_OUTPUT_FILE
+                      echo "TOTAL_HIGH=$TOTAL_HIGH" >> $HARNESS_OUTPUT_FILE
+                      echo "TOTAL_SECRETS=$TOTAL_SECRETS" >> $HARNESS_OUTPUT_FILE
+                      echo "GATE_PASSED=$GATE_PASSED" >> $HARNESS_OUTPUT_FILE
+
+                      # --- Final Status ---
+                      echo "======================================================================"
+                      if [ "$GATE_PASSED" = "true" ]; then
+                        echo "  STATUS: PASSED - All checks within thresholds"
+                      else
+                        echo "  STATUS: ISSUES FOUND - Policy evaluation will determine outcome"
+                      fi
+                      echo "======================================================================"
+                      echo ""
+                      echo "Aggregation complete. Stage-level OPA policy will evaluate results."
+                      # NOTE: No exit 1 here - let stage policySetRef decide pass/fail
+                    envVariables:
+                      HARNESS_SCA_CRITICAL: <+execution.steps.SCA.steps.HarnessSCA.output.outputVariables.CRITICAL>
+                      HARNESS_SCA_HIGH: <+execution.steps.SCA.steps.HarnessSCA.output.outputVariables.HIGH>
+                      HARNESS_SCA_MEDIUM: <+execution.steps.SCA.steps.HarnessSCA.output.outputVariables.MEDIUM>
+                      HARNESS_SCA_TOTAL: <+execution.steps.SCA.steps.HarnessSCA.output.outputVariables.TOTAL>
+                      SNYK_SCA_CRITICAL: <+execution.steps.SCA.steps.Snyk_SCA.output.outputVariables.CRITICAL>
+                      SNYK_SCA_HIGH: <+execution.steps.SCA.steps.Snyk_SCA.output.outputVariables.HIGH>
+                      SNYK_SCA_MEDIUM: <+execution.steps.SCA.steps.Snyk_SCA.output.outputVariables.MEDIUM>
+                      SNYK_SCA_TOTAL: <+execution.steps.SCA.steps.Snyk_SCA.output.outputVariables.TOTAL>
+                      HARNESS_SAST_CRITICAL: <+execution.steps.SAST.steps.HarnessSAST_1.output.outputVariables.CRITICAL>
+                      HARNESS_SAST_HIGH: <+execution.steps.SAST.steps.HarnessSAST_1.output.outputVariables.HIGH>
+                      HARNESS_SAST_MEDIUM: <+execution.steps.SAST.steps.HarnessSAST_1.output.outputVariables.MEDIUM>
+                      HARNESS_SAST_TOTAL: <+execution.steps.SAST.steps.HarnessSAST_1.output.outputVariables.TOTAL>
+                      SNYK_SAST_CRITICAL: <+execution.steps.SAST.steps.Snyk_SAST.output.outputVariables.CRITICAL>
+                      SNYK_SAST_HIGH: <+execution.steps.SAST.steps.Snyk_SAST.output.outputVariables.HIGH>
+                      SNYK_SAST_MEDIUM: <+execution.steps.SAST.steps.Snyk_SAST.output.outputVariables.MEDIUM>
+                      SNYK_SAST_TOTAL: <+execution.steps.SAST.steps.Snyk_SAST.output.outputVariables.TOTAL>
+                      GITLEAKS_TOTAL: <+execution.steps.Gitleaks.output.outputVariables.TOTAL>
+                      GITLEAKS_CRITICAL: <+execution.steps.Gitleaks.output.outputVariables.CRITICAL>
+                      GITLEAKS_HIGH: <+execution.steps.Gitleaks.output.outputVariables.HIGH>
+                    outputVariables:
+                      - name: TOTAL_CRITICAL
+                        type: String
+                        value: TOTAL_CRITICAL
+                      - name: TOTAL_HIGH
+                        type: String
+                        value: TOTAL_HIGH
+                      - name: TOTAL_SECRETS
+                        type: String
+                        value: TOTAL_SECRETS
+                      - name: GATE_PASSED
+                        type: String
+                        value: GATE_PASSED
+                  enforce:
+                    policySets:
+                      - security_gate_code
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: ManualIntervention
+                          spec:
+                            timeout: 4h
+                            onTimeout:
+                              action:
+                                type: Abort
+          caching:
+            enabled: false
+            paths: []
+          buildIntelligence:
+            enabled: false
         policySetRef:
-          - account.security_critical_epss
+          - security_gate_code
+        description: ""
     - stage:
         name: Build and Test
         identifier: build_and_test
@@ -161,47 +398,35 @@ pipeline:
                   name: Run Unit Tests
                   identifier: run_unit_tests
                   spec:
-                    connectorRef: account.harnessImage
+                    connectorRef: account.harnessImageV1
                     image: python:3.9-slim
                     shell: Sh
                     command: |-
+                      cd /harness/services/py-app-demo/
                       echo "=== Running unit tests ==="
                       pip install -r requirements.txt
-                      pytest /harness/services/py-app/tests/ -v --tb=short --junitxml=test-results.xml
+                      pytest /harness/services/py-app-demo/tests/ -v --tb=short --junitxml=test-results.xml
                       echo "=== Tests completed ==="
                     reports:
                       type: JUnit
                       spec:
                         paths:
-                          - test-results.xml
+                          - "**/*.xml"
               - step:
                   type: Run
                   name: Build Docker Image
                   identifier: build_docker_image
                   spec:
-                    connectorRef: account.harnessImage
+                    connectorRef: account.harnessImageV1
                     image: docker:latest
                     shell: Sh
                     command: |-
+                      cd /harness/services/py-app-demo
                       echo "=== Building Docker image ==="
-                      docker build -t py-app-demo:$HARNESS_BUILD_ID .
-                      docker save py-app-demo:$HARNESS_BUILD_ID -o /harness/image.tar
+                      docker build -t py-app-demo:<+pipeline.sequenceId> .
+                      docker save py-app-demo:<+pipeline.sequenceId> -o /harness/image.tar
                       echo "=== Image built (not pushed yet) ==="
                     privileged: true
-    - stage:
-        name: Container Security
-        identifier: container_security
-        type: SecurityTests
-        spec:
-          cloneCodebase: false
-          platform:
-            os: Linux
-            arch: Amd64
-          runtime:
-            type: Cloud
-            spec: {}
-          execution:
-            steps:
               - step:
                   type: AquaTrivy
                   name: Container Scan - Trivy
@@ -210,55 +435,196 @@ pipeline:
                     mode: orchestration
                     config: default
                     target:
+                      name: py-app-demo
                       type: container
-                      workspace: /harness/image.tar
-                      detection: auto
+                      variant: <+pipeline.sequenceId>
                     advanced:
                       log:
                         level: info
-                    settings:
-                      product_name: trivy
-                      product_config_name: default
-                      container_image: py-app-demo:<+pipeline.sequenceId>
+                      fail_on_severity: none
                     privileged: true
-                    imagePullPolicy: Always
                     image:
-                      type: local_archive
-                      tag: latest
-                      name: py-app
+                      type: local_image
+                      name: py-app-demo
+                      tag: <+pipeline.sequenceId>
                     sbom:
                       format: spdx-json
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
+                  enforce:
+                    policySets:
+                      - security_container
               - step:
                   type: Run
                   name: Evaluate Container Security
                   identifier: evaluate_container_security
                   spec:
-                    connectorRef: account.harnessImage
+                    connectorRef: account.harnessImageV1
                     image: alpine:latest
                     shell: Sh
-                    command: |
-                      echo "╔════════════════════════════════════════════════╗"
-                      echo "║     SECURITY GATE - CONTAINER ANALYSIS        ║"
-                      echo "╠════════════════════════════════════════════════╣"
-                      echo "║ Container vulnerabilities evaluated           ║"
-                      echo "║ Base image: python:3.9-slim-buster            ║"
-                      echo "╚════════════════════════════════════════════════╝"
+                    command: |-
+                      #!/bin/sh
+
+                      # ============================================================
+                      # Security Gate - Container Vulnerability Analysis
+                      # ============================================================
+
+                      # --- Helper: Convert null/empty to 0 ---
+                      sanitize() {
+                        val="$1"
+                        if [ -z "$val" ] || [ "$val" = "null" ] || [ "$val" = "<+null>" ]; then
+                          echo "0"
+                        else
+                          echo "$val"
+                        fi
+                      }
+
+                      # --- Thresholds ---
+                      MAX_CRITICAL=0
+                      MAX_HIGH=3
+
+                      # --- Sanitize Trivy Results ---
+                      CONTAINER_CRITICAL=$(sanitize "$TRIVY_CRITICAL")
+                      CONTAINER_HIGH=$(sanitize "$TRIVY_HIGH")
+                      CONTAINER_MEDIUM=$(sanitize "$TRIVY_MEDIUM")
+                      CONTAINER_LOW=$(sanitize "$TRIVY_LOW")
+                      CONTAINER_TOTAL=$(sanitize "$TRIVY_TOTAL")
+                      NEW_CRITICAL=$(sanitize "$TRIVY_NEW_CRITICAL")
+                      NEW_HIGH=$(sanitize "$TRIVY_NEW_HIGH")
+
+                      # --- Sanitize Code Results ---
+                      CODE_CRIT=$(sanitize "$CODE_CRITICAL")
+                      CODE_HI=$(sanitize "$CODE_HIGH")
+                      CODE_SEC=$(sanitize "$CODE_SECRETS")
+
+                      # --- Calculate Pipeline Totals ---
+                      PIPELINE_CRITICAL=$((CODE_CRIT + CONTAINER_CRITICAL))
+                      PIPELINE_HIGH=$((CODE_HI + CONTAINER_HIGH))
+
+                      # --- Display Report ---
                       echo ""
-                      echo "✓ Container security scan completed."
+                      echo "======================================================================"
+                      echo "          SECURITY GATE - CONTAINER ANALYSIS REPORT"
+                      echo "======================================================================"
+                      echo ""
+                      echo "  CONTAINER VULNERABILITIES (AquaTrivy)"
+                      echo "  ---------------------------------------------------------"
+                      echo "  Severity    | Count"
+                      echo "  ---------------------------------------------------------"
+                      printf "  Critical    | %s\n" "$CONTAINER_CRITICAL"
+                      printf "  High        | %s\n" "$CONTAINER_HIGH"
+                      printf "  Medium      | %s\n" "$CONTAINER_MEDIUM"
+                      printf "  Low         | %s\n" "$CONTAINER_LOW"
+                      printf "  Total       | %s\n" "$CONTAINER_TOTAL"
+                      echo "  ---------------------------------------------------------"
+                      printf "  New Critical| %s\n" "$NEW_CRITICAL"
+                      printf "  New High    | %s\n" "$NEW_HIGH"
+                      echo ""
+                      echo "  PIPELINE SUMMARY (Code + Container)"
+                      echo "  ---------------------------------------------------------"
+                      printf "  Code Stage:      Critical=%s  High=%s  Secrets=%s\n" "$CODE_CRIT" "$CODE_HI" "$CODE_SEC"
+                      printf "  Container Stage: Critical=%s  High=%s\n" "$CONTAINER_CRITICAL" "$CONTAINER_HIGH"
+                      echo "  ---------------------------------------------------------"
+                      printf "  TOTAL:           Critical=%s  High=%s\n" "$PIPELINE_CRITICAL" "$PIPELINE_HIGH"
+                      echo ""
+                      echo "======================================================================"
+                      echo "  GATE EVALUATION"
+                      echo "======================================================================"
+                      printf "  Critical threshold: %s (found: %s)\n" "$MAX_CRITICAL" "$CONTAINER_CRITICAL"
+                      printf "  High threshold:     %s (found: %s)\n" "$MAX_HIGH" "$CONTAINER_HIGH"
+                      echo ""
+
+                      # --- Evaluate Gate ---
+                      GATE_PASSED=true
+
+                      if [ "$CONTAINER_CRITICAL" -gt "$MAX_CRITICAL" ]; then
+                        GATE_PASSED=false
+                        echo "  BLOCKED: Critical ($CONTAINER_CRITICAL) > threshold ($MAX_CRITICAL)"
+                      fi
+
+                      if [ "$CONTAINER_HIGH" -gt "$MAX_HIGH" ]; then
+                        GATE_PASSED=false
+                        echo "  BLOCKED: High ($CONTAINER_HIGH) > threshold ($MAX_HIGH)"
+                      fi
+
+                      if [ "$NEW_CRITICAL" -gt 0 ]; then
+                        GATE_PASSED=false
+                        echo "  BLOCKED: New critical vulnerabilities introduced ($NEW_CRITICAL)"
+                      fi
+
+                      echo ""
+                      echo "======================================================================"
+                      if [ "$GATE_PASSED" = "true" ]; then
+                        echo "  RESULT: PASSED"
+                      else
+                        echo "  RESULT: ISSUES FOUND - Policy will determine outcome"
+                      fi
+                      echo "======================================================================"
+
+                      # --- Export Output Variables ---
+                      echo "CONTAINER_CRITICAL=$CONTAINER_CRITICAL" >> $HARNESS_OUTPUT_FILE
+                      echo "CONTAINER_HIGH=$CONTAINER_HIGH" >> $HARNESS_OUTPUT_FILE
+                      echo "CONTAINER_TOTAL=$CONTAINER_TOTAL" >> $HARNESS_OUTPUT_FILE
+                      echo "PIPELINE_CRITICAL=$PIPELINE_CRITICAL" >> $HARNESS_OUTPUT_FILE
+                      echo "PIPELINE_HIGH=$PIPELINE_HIGH" >> $HARNESS_OUTPUT_FILE
+                      echo "CONTAINER_GATE_PASSED=$GATE_PASSED" >> $HARNESS_OUTPUT_FILE
+                    envVariables:
+                      TRIVY_CRITICAL: <+execution.steps.container_scan_trivy.output.outputVariables.CRITICAL>
+                      TRIVY_HIGH: <+execution.steps.container_scan_trivy.output.outputVariables.HIGH>
+                      TRIVY_MEDIUM: <+execution.steps.container_scan_trivy.output.outputVariables.MEDIUM>
+                      TRIVY_LOW: <+execution.steps.container_scan_trivy.output.outputVariables.LOW>
+                      TRIVY_TOTAL: <+execution.steps.container_scan_trivy.output.outputVariables.TOTAL>
+                      TRIVY_NEW_CRITICAL: <+execution.steps.container_scan_trivy.output.outputVariables.NEW_CRITICAL>
+                      TRIVY_NEW_HIGH: <+execution.steps.container_scan_trivy.output.outputVariables.NEW_HIGH>
+                      CODE_CRITICAL: <+pipeline.stages.security_scan_code.spec.execution.steps.evaluate_code_security.output.outputVariables.TOTAL_CRITICAL>
+                      CODE_HIGH: <+pipeline.stages.security_scan_code.spec.execution.steps.evaluate_code_security.output.outputVariables.TOTAL_HIGH>
+                      CODE_SECRETS: <+pipeline.stages.security_scan_code.spec.execution.steps.evaluate_code_security.output.outputVariables.TOTAL_SECRETS>
+                    outputVariables:
+                      - name: CONTAINER_CRITICAL
+                        type: String
+                        value: CONTAINER_CRITICAL
+                      - name: CONTAINER_HIGH
+                        type: String
+                        value: CONTAINER_HIGH
+                      - name: CONTAINER_TOTAL
+                        type: String
+                        value: CONTAINER_TOTAL
+                      - name: PIPELINE_CRITICAL
+                        type: String
+                        value: PIPELINE_CRITICAL
+                      - name: PIPELINE_HIGH
+                        type: String
+                        value: PIPELINE_HIGH
+                      - name: CONTAINER_GATE_PASSED
+                        type: String
+                        value: CONTAINER_GATE_PASSED
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: ManualIntervention
+                          spec:
+                            timeout: 4h
+                            onTimeout:
+                              action:
+                                type: Abort
+                  enforce:
+                    policySets:
+                      - security_gate_container
+          caching:
+            enabled: false
+            paths:
+              - ""
+          buildIntelligence:
+            enabled: false
         policySetRef:
-          - account.security_high_severity
+          - security_gate_container
+        description: ""
     - stage:
         name: Push Image
         identifier: push_image
         type: CI
         spec:
-          cloneCodebase: false
+          cloneCodebase: true
           platform:
             os: Linux
             arch: Amd64
@@ -276,43 +642,127 @@ pipeline:
                     repo: crizstian/python-demo-app
                     tags:
                       - <+pipeline.sequenceId>
-                      - latest
-                      - secure
                     caching: true
-                    dockerfile: Dockerfile
-                    context: .
+                    dockerfile: /harness/services/py-app-demo/Dockerfile
+                    context: /harness/services/py-app-demo
                     optimize: true
               - step:
                   type: Run
                   name: Security Summary
                   identifier: security_summary
                   spec:
-                    connectorRef: account.harnessImage
+                    connectorRef: account.harnessImageV1
                     image: alpine:latest
                     shell: Sh
+                    envVariables:
+                      CODE_CRITICAL: <+pipeline.stages.security_scan_code.spec.execution.steps.evaluate_code_security.output.outputVariables.TOTAL_CRITICAL>
+                      CODE_HIGH: <+pipeline.stages.security_scan_code.spec.execution.steps.evaluate_code_security.output.outputVariables.TOTAL_HIGH>
+                      CODE_SECRETS: <+pipeline.stages.security_scan_code.spec.execution.steps.evaluate_code_security.output.outputVariables.TOTAL_SECRETS>
+                      CODE_GATE: <+pipeline.stages.security_scan_code.spec.execution.steps.evaluate_code_security.output.outputVariables.GATE_PASSED>
+                      CONTAINER_CRITICAL: <+pipeline.stages.build_and_test.spec.execution.steps.evaluate_container_security.output.outputVariables.CONTAINER_CRITICAL>
+                      CONTAINER_HIGH: <+pipeline.stages.build_and_test.spec.execution.steps.evaluate_container_security.output.outputVariables.CONTAINER_HIGH>
+                      CONTAINER_GATE: <+pipeline.stages.build_and_test.spec.execution.steps.evaluate_container_security.output.outputVariables.CONTAINER_GATE_PASSED>
+                      PIPELINE_CRITICAL: <+pipeline.stages.build_and_test.spec.execution.steps.evaluate_container_security.output.outputVariables.PIPELINE_CRITICAL>
+                      PIPELINE_HIGH: <+pipeline.stages.build_and_test.spec.execution.steps.evaluate_container_security.output.outputVariables.PIPELINE_HIGH>
+                      CODE_STAGE_STATUS: <+pipeline.stages.security_scan_code.status>
+                      BUILD_STAGE_STATUS: <+pipeline.stages.build_and_test.status>
                     command: |
-                      echo "╔════════════════════════════════════════════════╗"
-                      echo "║           PIPELINE COMPLETED                  ║"
-                      echo "╠════════════════════════════════════════════════╣"
-                      echo "║ ✓ Code Security:      PASSED                  ║"
-                      echo "║ ✓ Dependency Security: PASSED                 ║"
-                      echo "║ ✓ Secret Detection:   PASSED                  ║"
-                      echo "║ ✓ Unit Tests:         PASSED                  ║"
-                      echo "║ ✓ Container Security: PASSED                  ║"
-                      echo "║ ✓ Image Pushed:       crizstian/python-demo-app ║"
-                      echo "╚════════════════════════════════════════════════╝"
+                      #!/bin/sh
+
+                      # Helper: Convert null/empty to default
+                      sanitize() {
+                        val="$1"
+                        default="$2"
+                        if [ -z "$val" ] || [ "$val" = "null" ] || [ "$val" = "<+null>" ]; then
+                          echo "$default"
+                        else
+                          echo "$val"
+                        fi
+                      }
+
+                      # Helper: Determine status icon and label
+                      get_status() {
+                        gate="$1"
+                        stage_status="$2"
+
+                        if [ "$gate" = "true" ]; then
+                          echo "PASSED"
+                        elif [ "$stage_status" = "Succeeded" ] || [ "$stage_status" = "IgnoreFailed" ]; then
+                          echo "APPROVED (Manual Intervention)"
+                        else
+                          echo "ISSUES FOUND"
+                        fi
+                      }
+
+                      # Sanitize values
+                      C_CRIT=$(sanitize "$CODE_CRITICAL" "0")
+                      C_HIGH=$(sanitize "$CODE_HIGH" "0")
+                      C_SEC=$(sanitize "$CODE_SECRETS" "0")
+                      C_GATE=$(sanitize "$CODE_GATE" "unknown")
+
+                      CT_CRIT=$(sanitize "$CONTAINER_CRITICAL" "0")
+                      CT_HIGH=$(sanitize "$CONTAINER_HIGH" "0")
+                      CT_GATE=$(sanitize "$CONTAINER_GATE" "unknown")
+
+                      P_CRIT=$(sanitize "$PIPELINE_CRITICAL" "0")
+                      P_HIGH=$(sanitize "$PIPELINE_HIGH" "0")
+
+                      CODE_STATUS=$(sanitize "$CODE_STAGE_STATUS" "Unknown")
+                      BUILD_STATUS=$(sanitize "$BUILD_STAGE_STATUS" "Unknown")
+
+                      # Determine gate statuses
+                      CODE_RESULT=$(get_status "$C_GATE" "$CODE_STATUS")
+                      CONTAINER_RESULT=$(get_status "$CT_GATE" "$BUILD_STATUS")
+
+                      # Determine overall status
+                      if [ "$C_GATE" = "true" ] && [ "$CT_GATE" = "true" ]; then
+                        OVERALL="SECURE"
+                        OVERALL_MSG="All security gates passed. Image is production-ready."
+                      elif [ "$CODE_STATUS" = "Succeeded" ] && [ "$BUILD_STATUS" = "Succeeded" ]; then
+                        OVERALL="APPROVED WITH EXCEPTIONS"
+                        OVERALL_MSG="Security issues found but approved via Manual Intervention."
+                      else
+                        OVERALL="REVIEW REQUIRED"
+                        OVERALL_MSG="Security issues require attention before deployment."
+                      fi
+
+                      # Display summary
                       echo ""
-                      echo "Image is secure and ready for deployment."
-  notificationRules:
-    - name: Security Block Alert
-      identifier: security_block_alert
-      pipelineEvents:
-        - type: StageFailed
-          forStages:
-            - security_scan_code
-            - container_security
-      notificationMethod:
-        type: Slack
-        spec:
-          webhookUrl: <+secrets.getValue("slack_webhook")>
-      enabled: true
+                      echo "======================================================================"
+                      echo "                    PIPELINE SECURITY SUMMARY"
+                      echo "======================================================================"
+                      echo ""
+                      echo "  CODE SECURITY GATE"
+                      echo "  ---------------------------------------------------------"
+                      printf "  Critical: %-4s | High: %-4s | Secrets: %-4s\n" "$C_CRIT" "$C_HIGH" "$C_SEC"
+                      printf "  Gate Status: %s\n" "$CODE_RESULT"
+                      echo ""
+                      echo "  CONTAINER SECURITY GATE"
+                      echo "  ---------------------------------------------------------"
+                      printf "  Critical: %-4s | High: %-4s\n" "$CT_CRIT" "$CT_HIGH"
+                      printf "  Gate Status: %s\n" "$CONTAINER_RESULT"
+                      echo ""
+                      echo "  PIPELINE TOTALS"
+                      echo "  ---------------------------------------------------------"
+                      printf "  Total Critical: %-4s | Total High: %-4s\n" "$P_CRIT" "$P_HIGH"
+                      echo ""
+                      echo "======================================================================"
+                      printf "  OVERALL STATUS: %s\n" "$OVERALL"
+                      echo "======================================================================"
+                      printf "  %s\n" "$OVERALL_MSG"
+                      echo ""
+                      echo "  Image: crizstian/python-demo-app:<+pipeline.sequenceId>"
+                      echo "======================================================================"
+                      echo ""
+
+                      # Export for downstream use
+                      echo "SECURITY_STATUS=$OVERALL" >> $HARNESS_OUTPUT_FILE
+                    outputVariables:
+                      - name: SECURITY_STATUS
+          caching:
+            enabled: false
+            paths: []
+          buildIntelligence:
+            enabled: false
+        description: ""
+  allowStageExecutions: true
