@@ -13,9 +13,9 @@ PyYAML==5.3.1  # VULNERABLE: CVE-2020-14343 (Arbitrary Code Execution), CVSS 9.8
 requests==2.25.1  # VULNERABLE: CVE-2023-32681 (Sensitive Info Leak), CVSS 6.1
 urllib3==1.26.4  # VULNERABLE: CVE-2021-33503 (ReDoS), CVSS 7.5
 
-# Procesamiento de datos
-Jinja2==2.11.3  # VULNERABLE: CVE-2024-22195 (XSS), CVSS 6.1
-MarkupSafe==1.1.1  # VULNERABLE: CVE-2024-23334 (ReDoS), CVSS 7.5
+# Procesamiento de datos (ajustado para compatibilidad con Flask 2.0.1)
+Jinja2==3.0.0  # VULNERABLE: CVE-2024-22195 (XSS), CVSS 6.1 - mínimo requerido por Flask
+MarkupSafe==2.0.0  # Compatible con Jinja2 3.x
 
 # Criptografía
 cryptography==3.4.6  # VULNERABLE: CVE-2023-23931 (Memory Corruption), CVSS 6.5
