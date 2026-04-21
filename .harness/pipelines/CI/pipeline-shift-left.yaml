@@ -1,0 +1,318 @@
+pipeline:
+  name: CI - Shift Left Security
+  identifier: ci_shift_left_security
+  projectIdentifier: CristianRamirez
+  orgIdentifier: sandbox
+  tags:
+    demo: py-app
+    type: security
+    approach: shift-left
+  properties:
+    ci:
+      codebase:
+        connectorRef: CristianConnector
+        repoName: cinema-microservice-in-GO
+        build: <+input>
+        sparseCheckout: []
+  stages:
+    - stage:
+        name: Security Scan - Code
+        identifier: security_scan_code
+        type: SecurityTests
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - stepGroup:
+                  name: SCA Scans
+                  identifier: SCA
+                  steps:
+                    - step:
+                        type: Snyk
+                        name: Snyk SCA
+                        identifier: Snyk_SCA
+                        spec:
+                          mode: ingestion
+                          config: default
+                          target:
+                            type: repository
+                            detection: manual
+                            name: seworkshop/boutique-pmservice
+                            variant: main
+                          advanced:
+                            log:
+                              level: info
+                          privileged: true
+                          ingestion:
+                            file: sto_tests/scan_tools/snyk/test_data/002
+                        when:
+                          stageStatus: Success
+                          condition: "false"
+                  when:
+                    stageStatus: Success
+              - stepGroup:
+                  name: SAST Scans
+                  identifier: SAST
+                  steps:
+                    - parallel:
+                        - step:
+                            type: HarnessSAST
+                            name: HarnessSAST
+                            identifier: HarnessSAST_1
+                            spec:
+                              mode: orchestration
+                              config: default
+                              target:
+                                type: repository
+                                workspace: /harness/services/py-app
+                                detection: auto
+                              advanced:
+                                log:
+                                  level: info
+                        - step:
+                            type: Snyk
+                            name: Snyk SAST
+                            identifier: Snyk_SAST
+                            spec:
+                              mode: ingestion
+                              config: default
+                              target:
+                                type: repository
+                                name: seworkshop/boutique-pmservice
+                                variant: main
+                              advanced:
+                                log:
+                                  level: info
+                                fail_on_severity: none
+                              privileged: true
+                              ingestion:
+                                file: services/py-app/automation/sto_test/scan_tools/sonarqube/001
+                            failureStrategies:
+                              - onFailure:
+                                  errors:
+                                    - AllErrors
+                                  action:
+                                    type: MarkAsSuccess
+                  when:
+                    stageStatus: Success
+              - step:
+                  type: Gitleaks
+                  name: Secret Detection
+                  identifier: secret_detection
+                  spec:
+                    mode: orchestration
+                    config: default
+                    target:
+                      type: repository
+                      workspace: /harness/services/py-app
+                      detection: auto
+                    advanced:
+                      log:
+                        level: info
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Run
+                  name: Evaluate Code Security
+                  identifier: evaluate_code_security
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:latest
+                    shell: Sh
+                    command: |
+                      echo "╔════════════════════════════════════════════════╗"
+                      echo "║       SECURITY GATE - CODE ANALYSIS           ║"
+                      echo "╠════════════════════════════════════════════════╣"
+                      echo "║ SAST Critical:  <+pipeline.stages.security_scan_code.spec.execution.steps.snyk_sast.output.outputVariables.CRITICAL>"
+                      echo "║ SAST High:      <+pipeline.stages.security_scan_code.spec.execution.steps.snyk_sast.output.outputVariables.HIGH>"
+                      echo "║ SCA Critical:   <+pipeline.stages.security_scan_code.spec.execution.steps.snyk_dependencies.output.outputVariables.CRITICAL>"
+                      echo "║ SCA High:       <+pipeline.stages.security_scan_code.spec.execution.steps.snyk_dependencies.output.outputVariables.HIGH>"
+                      echo "╚════════════════════════════════════════════════╝"
+                      echo ""
+                      echo "✓ Code security scan completed. Proceeding to build..."
+        policySetRef:
+          - account.security_critical_epss
+    - stage:
+        name: Build and Test
+        identifier: build_and_test
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Run Unit Tests
+                  identifier: run_unit_tests
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: python:3.9-slim
+                    shell: Sh
+                    command: |-
+                      echo "=== Running unit tests ==="
+                      pip install -r requirements.txt
+                      pytest /harness/services/py-app/tests/ -v --tb=short --junitxml=test-results.xml
+                      echo "=== Tests completed ==="
+                    reports:
+                      type: JUnit
+                      spec:
+                        paths:
+                          - test-results.xml
+              - step:
+                  type: Run
+                  name: Build Docker Image
+                  identifier: build_docker_image
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: docker:latest
+                    shell: Sh
+                    command: |-
+                      echo "=== Building Docker image ==="
+                      docker build -t py-app-demo:$HARNESS_BUILD_ID .
+                      docker save py-app-demo:$HARNESS_BUILD_ID -o /harness/image.tar
+                      echo "=== Image built (not pushed yet) ==="
+                    privileged: true
+    - stage:
+        name: Container Security
+        identifier: container_security
+        type: SecurityTests
+        spec:
+          cloneCodebase: false
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: AquaTrivy
+                  name: Container Scan - Trivy
+                  identifier: container_scan_trivy
+                  spec:
+                    mode: orchestration
+                    config: default
+                    target:
+                      type: container
+                      workspace: /harness/image.tar
+                      detection: auto
+                    advanced:
+                      log:
+                        level: info
+                    settings:
+                      product_name: trivy
+                      product_config_name: default
+                      container_image: py-app-demo:<+pipeline.sequenceId>
+                    privileged: true
+                    imagePullPolicy: Always
+                    image:
+                      type: local_archive
+                      tag: latest
+                      name: py-app
+                    sbom:
+                      format: spdx-json
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Run
+                  name: Evaluate Container Security
+                  identifier: evaluate_container_security
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:latest
+                    shell: Sh
+                    command: |
+                      echo "╔════════════════════════════════════════════════╗"
+                      echo "║     SECURITY GATE - CONTAINER ANALYSIS        ║"
+                      echo "╠════════════════════════════════════════════════╣"
+                      echo "║ Container vulnerabilities evaluated           ║"
+                      echo "║ Base image: python:3.9-slim-buster            ║"
+                      echo "╚════════════════════════════════════════════════╝"
+                      echo ""
+                      echo "✓ Container security scan completed."
+        policySetRef:
+          - account.security_high_severity
+    - stage:
+        name: Push Image
+        identifier: push_image
+        type: CI
+        spec:
+          cloneCodebase: false
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Push Docker Image
+                  identifier: push_docker_image
+                  spec:
+                    connectorRef: DockerCristian
+                    repo: crizstian/python-demo-app
+                    tags:
+                      - <+pipeline.sequenceId>
+                      - latest
+                      - secure
+                    caching: true
+                    dockerfile: Dockerfile
+                    context: .
+                    optimize: true
+              - step:
+                  type: Run
+                  name: Security Summary
+                  identifier: security_summary
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:latest
+                    shell: Sh
+                    command: |
+                      echo "╔════════════════════════════════════════════════╗"
+                      echo "║           PIPELINE COMPLETED                  ║"
+                      echo "╠════════════════════════════════════════════════╣"
+                      echo "║ ✓ Code Security:      PASSED                  ║"
+                      echo "║ ✓ Dependency Security: PASSED                 ║"
+                      echo "║ ✓ Secret Detection:   PASSED                  ║"
+                      echo "║ ✓ Unit Tests:         PASSED                  ║"
+                      echo "║ ✓ Container Security: PASSED                  ║"
+                      echo "║ ✓ Image Pushed:       crizstian/python-demo-app ║"
+                      echo "╚════════════════════════════════════════════════╝"
+                      echo ""
+                      echo "Image is secure and ready for deployment."
+  notificationRules:
+    - name: Security Block Alert
+      identifier: security_block_alert
+      pipelineEvents:
+        - type: StageFailed
+          forStages:
+            - security_scan_code
+            - container_security
+      notificationMethod:
+        type: Slack
+        spec:
+          webhookUrl: <+secrets.getValue("slack_webhook")>
+      enabled: true

@@ -42,7 +42,7 @@ policySet:
     type: Pipeline
     filter:
       pipelineIdentifiers:
-        - yalo_security_scan
+        - py-app_security_scan
       # O aplicar a todos los pipelines con tag
       pipelineTags:
         type: security

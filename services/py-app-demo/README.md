@@ -1,4 +1,4 @@
-# Yalo Demo App - Harness STO Demo
+# Py App Demo - Harness STO Demo
 
 Aplicación de demostración para Harness Security Testing Orchestration (STO).
 
@@ -13,7 +13,7 @@ Esta aplicación contiene **vulnerabilidades intencionales** para demostrar las 
 ## Estructura del Proyecto
 
 ```
-yalo-demo-app/
+py-app-demo/
 ├── src/
 │   └── app.py                 # Aplicación Flask con vulnerabilidades
 ├── tests/
@@ -62,7 +62,7 @@ yalo-demo-app/
 ```bash
 # Clonar repo
 git clone <repo-url>
-cd yalo-demo-app
+cd py-app-demo
 
 # Crear virtualenv
 python -m venv venv
@@ -89,8 +89,8 @@ pytest tests/ --cov=src --cov-report=html
 flask run --host=0.0.0.0 --port=5000
 
 # O con Docker
-docker build -t yalo-demo-app .
-docker run -p 5000:5000 yalo-demo-app
+docker build -t py-app-demo .
+docker run -p 5000:5000 py-app-demo
 ```
 
 ### 4. Configurar Harness

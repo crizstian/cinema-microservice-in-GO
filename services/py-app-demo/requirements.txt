@@ -1,5 +1,5 @@
 # =============================================================================
-# Yalo Demo App - Dependencies
+# Py App Demo - Dependencies
 # ADVERTENCIA: Contiene versiones VULNERABLES intencionales para demo de Harness STO
 # =============================================================================
 

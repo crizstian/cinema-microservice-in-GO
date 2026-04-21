@@ -1,5 +1,5 @@
 """
-Unit tests para Yalo Demo App.
+Unit tests para Py App Demo.
 
 Estos tests están diseñados para:
 1. Validar funcionalidad básica
@@ -43,7 +43,7 @@ class TestHealthEndpoints:
         response = client.get('/')
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data['app'] == 'Yalo Demo App'
+        assert data['app'] == 'Py App Demo'
         assert 'endpoints' in data
 
 

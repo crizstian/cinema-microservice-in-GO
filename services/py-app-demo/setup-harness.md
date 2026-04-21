@@ -1,4 +1,4 @@
-# Setup de Harness para Demo Yalo
+# Setup de Harness para Demo Py-App
 
 ## Pre-requisitos
 
@@ -13,8 +13,8 @@
 
 ```
 Organization: default (o crear nueva)
-Project Name: yalo-demo
-Project ID: yalo_demo
+Project Name: py-app-demo
+Project ID: py-app_demo
 ```
 
 ---
@@ -25,11 +25,11 @@ Project ID: yalo_demo
 
 ```yaml
 connector:
-  name: github-yalo
-  identifier: github_yalo
+  name: github-py-app
+  identifier: github_py-app
   type: Github
   spec:
-    url: https://github.com/<org>/yalo-demo-app
+    url: https://github.com/<org>/py-app-demo
     authentication:
       type: Http
       spec:
@@ -95,7 +95,7 @@ Secret Value: <tu-snyk-api-token>
 ```bash
 harness pipeline create \
   --org default \
-  --project yalo_demo \
+  --project py-app_demo \
   --file .harness/pipeline-security-scan.yaml
 ```
 
@@ -103,7 +103,7 @@ harness pipeline create \
 
 ```bash
 curl -X POST \
-  'https://app.harness.io/pipeline/api/pipelines/v2?accountIdentifier=<ACCOUNT_ID>&orgIdentifier=default&projectIdentifier=yalo_demo' \
+  'https://app.harness.io/pipeline/api/pipelines/v2?accountIdentifier=<ACCOUNT_ID>&orgIdentifier=default&projectIdentifier=py-app_demo' \
   -H 'Content-Type: application/yaml' \
   -H 'x-api-key: <API_KEY>' \
   -d @.harness/pipeline-security-scan.yaml
@@ -144,7 +144,7 @@ Branch name pattern: main
 Rules:
   - Require status checks to pass before merging: ✓
     - Required checks:
-      - yalo-security-scan
+      - py-app-security-scan
   - Require branches to be up to date before merging: ✓
 ```
 
@@ -156,19 +156,19 @@ Rules:
 
 ```bash
 # 1. Verificar connectors
-harness connector list --org default --project yalo_demo
+harness connector list --org default --project py-app_demo
 
 # 2. Verificar secrets
-harness secret list --org default --project yalo_demo
+harness secret list --org default --project py-app_demo
 
 # 3. Verificar pipeline
 harness pipeline get \
   --org default \
-  --project yalo_demo \
-  --pipeline yalo_security_scan
+  --project py-app_demo \
+  --pipeline py-app_security_scan
 
 # 4. Verificar policies
-harness policy list --org default --project yalo_demo
+harness policy list --org default --project py-app_demo
 ```
 
 ### Test de pipeline
@@ -218,7 +218,7 @@ Fix: Verificar username/password en connector
 export HARNESS_ACCOUNT_ID="<tu-account-id>"
 export HARNESS_API_KEY="<tu-api-key>"
 export HARNESS_ORG_ID="default"
-export HARNESS_PROJECT_ID="yalo_demo"
+export HARNESS_PROJECT_ID="py-app_demo"
 export SNYK_TOKEN="<snyk-api-token>"
 export GITHUB_TOKEN="<github-pat>"
 ```
@@ -231,26 +231,26 @@ export GITHUB_TOKEN="<github-pat>"
 # Ejecutar pipeline manualmente
 harness pipeline run \
   --org default \
-  --project yalo_demo \
-  --pipeline yalo_security_scan \
+  --project py-app_demo \
+  --pipeline py-app_security_scan \
   --branch main
 
 # Ver ejecución
 harness pipeline execution get \
   --org default \
-  --project yalo_demo \
+  --project py-app_demo \
   --execution <execution-id>
 
 # Ver issues de STO
 harness sto issues list \
   --org default \
-  --project yalo_demo \
-  --pipeline yalo_security_scan
+  --project py-app_demo \
+  --pipeline py-app_security_scan
 
 # Evaluar policy manualmente
 harness policy evaluate \
   --org default \
-  --project yalo_demo \
+  --project py-app_demo \
   --policy security_critical_epss \
   --input test-input.json
 ```

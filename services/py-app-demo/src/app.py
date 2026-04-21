@@ -1,5 +1,5 @@
 """
-Yalo Demo App - Aplicación con vulnerabilidades intencionales para demo de Harness STO.
+Py App Demo - Aplicación con vulnerabilidades intencionales para demo de Harness STO.
 
 ADVERTENCIA: Este código contiene vulnerabilidades INTENCIONALES para propósitos de demo.
 NO usar en producción.
@@ -31,8 +31,8 @@ def get_db_connection():
     conn = sqlite3.connect(':memory:')
     conn.execute('''CREATE TABLE IF NOT EXISTS users
                     (id INTEGER PRIMARY KEY, username TEXT, email TEXT, role TEXT)''')
-    conn.execute("INSERT OR IGNORE INTO users VALUES (1, 'admin', 'admin@yalo.com', 'admin')")
-    conn.execute("INSERT OR IGNORE INTO users VALUES (2, 'user1', 'user1@yalo.com', 'user')")
+    conn.execute("INSERT OR IGNORE INTO users VALUES (1, 'admin', 'admin@py-app.com', 'admin')")
+    conn.execute("INSERT OR IGNORE INTO users VALUES (2, 'user1', 'user1@py-app.com', 'user')")
     return conn
 
 
@@ -219,7 +219,7 @@ def health_check():
 def index():
     """Root endpoint."""
     return jsonify({
-        'app': 'Yalo Demo App',
+        'app': 'Py App Demo',
         'version': '1.0.0',
         'endpoints': [
             '/health',

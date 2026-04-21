@@ -1,5 +1,5 @@
 # =============================================================================
-# Dockerfile para Yalo Demo App
+# Dockerfile para Py App Demo
 # ADVERTENCIA: Contiene configuraciones vulnerables intencionales para demo
 # =============================================================================
 
@@ -8,7 +8,7 @@ FROM python:3.9-slim-buster
 
 # Metadata
 LABEL maintainer="demo@harness.io"
-LABEL description="Yalo Demo App for Harness STO Demo"
+LABEL description="Py App Demo for Harness STO Demo"
 LABEL version="1.0.0"
 
 # VULNERABLE: Running as root (should use non-root user)

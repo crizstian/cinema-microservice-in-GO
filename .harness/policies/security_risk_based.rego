@@ -1,6 +1,6 @@
 # =============================================================================
 # OPA Policy: Risk-Based Security Evaluation
-# Evalúa riesgo combinando múltiples factores (similar al Yalo Risk Framework)
+# Evalúa riesgo combinando múltiples factores (similar al Py-App Risk Framework)
 # =============================================================================
 #
 # Factores evaluados:
@@ -11,7 +11,7 @@
 # 5. Edad del CVE
 # 6. Ambiente (prod vs non-prod) - si está disponible
 #
-# Este approach es más cercano a lo que Yalo ya hace en su framework.
+# Este approach es más cercano a lo que Py-App ya hace en su framework.
 # =============================================================================
 
 package security.sto.risk_based
