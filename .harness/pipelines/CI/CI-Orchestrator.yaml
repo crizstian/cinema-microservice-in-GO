@@ -153,6 +153,7 @@ pipeline:
                       GO_SERVICES=""
                       JAVA_SERVICES=""
                       NODE_SERVICES=""
+                      PYTHON_SERVICES=""
                       UNKNOWN_SERVICES=""
 
                       if [ -z "$SERVICES" ]; then
@@ -170,6 +171,9 @@ pipeline:
                           elif [ -f "$SERVICE_PATH/package.json" ]; then
                             echo "Node (package.json found)"
                             NODE_SERVICES="${NODE_SERVICES:+$NODE_SERVICES,}$service"
+                          elif [ -f "$SERVICE_PATH/requirements.txt" ] || [ -f "$SERVICE_PATH/pyproject.toml" ] || [ -f "$SERVICE_PATH/setup.py" ] || [ -f "$SERVICE_PATH/Pipfile" ]; then
+                            echo "Python (requirements.txt/pyproject.toml/setup.py/Pipfile found)"
+                            PYTHON_SERVICES="${PYTHON_SERVICES:+$PYTHON_SERVICES,}$service"
                           else
                             echo "Unknown (no manifest found)"
                             UNKNOWN_SERVICES="${UNKNOWN_SERVICES:+$UNKNOWN_SERVICES,}$service"
@@ -183,14 +187,17 @@ pipeline:
                       GO_SERVICES_JSON=$(echo "$GO_SERVICES" | tr ',' '\n' | grep -v '^$' | jq -R -s -c 'split("\n") | map(select(length > 0))' 2>/dev/null || echo "[]")
                       JAVA_SERVICES_JSON=$(echo "$JAVA_SERVICES" | tr ',' '\n' | grep -v '^$' | jq -R -s -c 'split("\n") | map(select(length > 0))' 2>/dev/null || echo "[]")
                       NODE_SERVICES_JSON=$(echo "$NODE_SERVICES" | tr ',' '\n' | grep -v '^$' | jq -R -s -c 'split("\n") | map(select(length > 0))' 2>/dev/null || echo "[]")
+                      PYTHON_SERVICES_JSON=$(echo "$PYTHON_SERVICES" | tr ',' '\n' | grep -v '^$' | jq -R -s -c 'split("\n") | map(select(length > 0))' 2>/dev/null || echo "[]")
 
                       GO_COUNT=$(echo "$GO_SERVICES_JSON" | jq 'length')
                       JAVA_COUNT=$(echo "$JAVA_SERVICES_JSON" | jq 'length')
                       NODE_COUNT=$(echo "$NODE_SERVICES_JSON" | jq 'length')
+                      PYTHON_COUNT=$(echo "$PYTHON_SERVICES_JSON" | jq 'length')
 
                       echo "Go services ($GO_COUNT): $GO_SERVICES_JSON"
                       echo "Java services ($JAVA_COUNT): $JAVA_SERVICES_JSON"
                       echo "Node services ($NODE_COUNT): $NODE_SERVICES_JSON"
+                      echo "Python services ($PYTHON_COUNT): $PYTHON_SERVICES_JSON"
                       if [ -n "$UNKNOWN_SERVICES" ]; then
                         echo "Unknown services: $UNKNOWN_SERVICES"
                       fi
@@ -198,12 +205,14 @@ pipeline:
                       HAS_GO=$( [ "$GO_COUNT" -gt 0 ] && echo "true" || echo "false" )
                       HAS_JAVA=$( [ "$JAVA_COUNT" -gt 0 ] && echo "true" || echo "false" )
                       HAS_NODE=$( [ "$NODE_COUNT" -gt 0 ] && echo "true" || echo "false" )
+                      HAS_PYTHON=$( [ "$PYTHON_COUNT" -gt 0 ] && echo "true" || echo "false" )
 
                       echo ""
                       echo "=== Child Pipelines to Trigger ==="
                       echo "Trigger Go pipeline: $HAS_GO"
                       echo "Trigger Java pipeline: $HAS_JAVA"
                       echo "Trigger Node pipeline: $HAS_NODE"
+                      echo "Trigger Python pipeline: $HAS_PYTHON"
                     outputVariables:
                       - name: GO_SERVICES
                         type: String
@@ -223,6 +232,12 @@ pipeline:
                       - name: NODE_SERVICES_JSON
                         type: String
                         value: NODE_SERVICES_JSON
+                      - name: PYTHON_SERVICES
+                        type: String
+                        value: PYTHON_SERVICES
+                      - name: PYTHON_SERVICES_JSON
+                        type: String
+                        value: PYTHON_SERVICES_JSON
                       - name: HAS_GO
                         type: String
                         value: HAS_GO
@@ -232,6 +247,9 @@ pipeline:
                       - name: HAS_NODE
                         type: String
                         value: HAS_NODE
+                      - name: HAS_PYTHON
+                        type: String
+                        value: HAS_PYTHON
               - step:
                   type: Run
                   name: Determine Run Mode
@@ -312,6 +330,43 @@ pipeline:
               - name: VERSION_BUMP
                 type: String
                 value: <+input>.default(patch).allowedValues(patch,minor,major)
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: MarkAsSuccess
+    - stage:
+        name: Trigger Python Services
+        identifier: trigger_python
+        description: Trigger Python child pipeline for detected Python services
+        type: Pipeline
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.detect_classify.spec.execution.steps.classify_language.output.outputVariables.HAS_PYTHON> == "true"
+        spec:
+          org: sandbox
+          pipeline: ci_shift_left_security
+          project: CristianRamirez
+          inputs:
+            identifier: ci_shift_left_security
+            properties:
+              ci:
+                codebase:
+                  build:
+                    type: PR
+                    spec:
+                      number: <+pipeline.stages.detect_classify.spec.execution.steps.determine_run_mode.output.outputVariables.PR_NUMBER>
+            variables:
+              - name: RUN_MODE
+                type: String
+                value: <+pipeline.stages.detect_classify.spec.execution.steps.determine_run_mode.output.outputVariables.RUN_MODE>
+              - name: SERVICES
+                type: String
+                value: <+pipeline.stages.detect_classify.spec.execution.steps.classify_language.output.outputVariables.PYTHON_SERVICES>
+              - name: PYTHON_VERSION
+                type: String
+                value: <+input>.default(3.12).selectOneFrom(3.11,3.12,3.13)
         failureStrategies:
           - onFailure:
               errors:

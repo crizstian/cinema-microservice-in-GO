@@ -1,9 +1,12 @@
 // Step 4: Seed test data
+// Each service uses its own database (see platform/config/services.yaml)
 print("Step 4: Seeding test data...");
 
-db = db.getSiblingDB("cinema");
+// =======================================================================
+// Movie service database: movie
+// =======================================================================
+db = db.getSiblingDB("movie");
 
-// Movies - with 'id' field for movie service queries
 db.movies.insertMany([
   {
     _id: ObjectId("507f1f77bcf86cd799439011"),
@@ -35,7 +38,13 @@ db.movies.insertMany([
   }
 ]);
 
-// Cinema
+print("Seeded 'movie' database: 2 movies");
+
+// =======================================================================
+// Cinema service database: cinema
+// =======================================================================
+db = db.getSiblingDB("cinema");
+
 db.cinemas.insertOne({
   _id: ObjectId("507f1f77bcf86cd799439022"),
   name: "Cinema Downtown",
@@ -44,7 +53,6 @@ db.cinemas.insertOne({
   country: "Testland"
 });
 
-// Rooms (for cinema service)
 db.rooms.insertMany([
   {
     _id: ObjectId("507f1f77bcf86cd799439031"),
@@ -64,7 +72,13 @@ db.rooms.insertMany([
   }
 ]);
 
-// Showtime (tomorrow) - with string ID for showtime service
+print("Seeded 'cinema' database: 1 cinema, 2 rooms");
+
+// =======================================================================
+// Showtime service database: showtime
+// =======================================================================
+db = db.getSiblingDB("showtime");
+
 var tomorrow = new Date();
 tomorrow.setDate(tomorrow.getDate() + 1);
 tomorrow.setHours(19, 0, 0, 0);
@@ -95,7 +109,7 @@ db.showtimes.insertMany([
     cinema_id: "507f1f77bcf86cd799439022",
     room_id: "room_001",
     room_number: 1,
-    start_time: new Date(tomorrow.getTime() + 3 * 60 * 60 * 1000), // +3 hours
+    start_time: new Date(tomorrow.getTime() + 3 * 60 * 60 * 1000),
     end_time: new Date(tomorrow.getTime() + 5.5 * 60 * 60 * 1000),
     price: { regular: 1500, vip: 2500, child: 1000 },
     available_seats: 100,
@@ -105,30 +119,26 @@ db.showtimes.insertMany([
   }
 ]);
 
-// Test user
-db.users.insertOne({
-  _id: ObjectId("507f1f77bcf86cd799439041"),
-  email: "test@example.com",
-  password_hash: "$2a$10$testhashedpassword",
-  name: "Test User",
-  membership_type: "regular",
-  created_at: new Date()
-});
-
-print("Test data seeded in 'cinema' database: 2 movies, 1 cinema, 2 rooms, 2 showtimes, 1 user");
+print("Seeded 'showtime' database: 2 showtimes");
 
 // =======================================================================
-// Seat service uses a separate database: cinema_seats
+// User service database: user
 // =======================================================================
-db = db.getSiblingDB("cinema_seats");
+db = db.getSiblingDB("user");
 
-// IMPORTANT: Clean up previous test data to ensure idempotent test runs
-// Drop reservations from previous runs (these cause stale seat status)
+// Note: No pre-seeded users - let users register fresh to avoid password hash issues
+// bcrypt hashes cannot be reliably generated in mongosh
+
+print("Seeded 'user' database: 0 users (register via API)");
+
+// =======================================================================
+// Seat service database: seat
+// =======================================================================
+db = db.getSiblingDB("seat");
+
 db.reservations.drop();
 print("Cleaned up previous reservations");
 
-// Room layouts for seat service
-// Generate seats for Room 1 (10 rows x 10 seats = 100 seats)
 var room1Seats = [];
 var rowLabels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
 for (var r = 0; r < 10; r++) {
@@ -136,12 +146,10 @@ for (var r = 0; r < 10; r++) {
     var seatType = "regular";
     var priceModifier = 1.0;
 
-    // VIP seats in rows A-B
     if (r < 2) {
       seatType = "vip";
       priceModifier = 1.5;
     }
-    // Wheelchair accessible in row J, seats 1-2
     if (r === 9 && s <= 2) {
       seatType = "wheelchair";
       priceModifier = 1.0;
@@ -167,7 +175,6 @@ db.room_layouts.insertOne({
   updated_at: new Date()
 });
 
-// Also need showtime -> room mapping in cinema_seats database
 db.showtimes.insertMany([
   {
     showtime_id: "sht_001",
@@ -179,4 +186,15 @@ db.showtimes.insertMany([
   }
 ]);
 
-print("Test data seeded in 'cinema_seats' database: 1 room layout (100 seats), 2 showtime mappings");
+print("Seeded 'seat' database: 1 room layout (100 seats), 2 showtime mappings");
+
+// =======================================================================
+// Summary
+// =======================================================================
+print("");
+print("=== Seed Summary ===");
+print("movie:    2 movies");
+print("cinema:   1 cinema, 2 rooms");
+print("showtime: 2 showtimes");
+print("user:     0 users (register via API)");
+print("seat:     1 room layout, 2 showtime mappings");

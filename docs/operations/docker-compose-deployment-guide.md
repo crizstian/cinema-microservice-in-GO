@@ -1,1865 +1,1640 @@
-# Docker Compose Deployment Guide
+# Cinema Microservices: Local Development Stack
 
-Guia completa para desplegar Cinema Microservices en el entorno local con Docker Compose.
-Disenada para todos los niveles: desde principiantes hasta expertos.
+## Executive Summary
+
+Este documento cubre el despliegue local completo del sistema Cinema Microservices usando Docker Compose. Diseñado para ingenieros que quieran entender arquitectura distribuida, patrones de orquestación y técnicas de troubleshooting en sistemas de producción.
+
+**Audiencia:** Staff Engineers, SREs, Backend Engineers con experiencia intermedia-avanzada.
+
+**Propósito triple:**
+1. **Arquitectura** — Entender patrones de microservicios, SAGA, distributed locking
+2. **Despliegue** — Levantar un stack local production-like con Docker Compose
+3. **Troubleshooting** — Diagnosticar y resolver problemas comunes en sistemas distribuidos
+
+**Tiempo estimado:** 30-45 min (primera lectura completa) | 5 min (despliegue subsecuente)
 
 ---
 
 ## Tabla de Contenidos
 
-1. [Arquitectura del Sistema](#arquitectura-del-sistema)
-2. [Prerequisitos](#prerequisitos)
-3. [Fase 1: Configuracion Centralizada](#fase-1-configuracion-centralizada)
-4. [Fase 2: Iniciar el Entorno](#fase-2-iniciar-el-entorno)
-5. [Fase 3: Validacion de Servicios](#fase-3-validacion-de-servicios)
-6. [Fase 4: Testing de APIs](#fase-4-testing-de-apis)
-7. [Fase 5: Troubleshooting](#fase-5-troubleshooting)
-8. [Fase 6: Cleanup](#fase-6-cleanup)
-9. [Quick Reference](#quick-reference)
+1. [Stack Tecnológico](#1-stack-tecnológico)
+2. [Diagramas de Arquitectura](#2-diagramas-de-arquitectura)
+3. [Arquitectura del Sistema](#3-arquitectura-del-sistema)
+4. [Patrones de Diseño](#4-patrones-de-diseño)
+5. [Stack de Infraestructura](#5-stack-de-infraestructura)
+6. [Configuración y Despliegue](#6-configuración-y-despliegue)
+7. [Seguridad](#7-seguridad)
+8. [Validación del Sistema](#8-validación-del-sistema)
+9. [Flujos de Negocio](#9-flujos-de-negocio)
+10. [Troubleshooting Avanzado](#10-troubleshooting-avanzado)
+11. [Referencia Rápida](#11-referencia-rápida)
 
 ---
 
-## Arquitectura del Sistema
+## 1. Stack Tecnológico
 
-### Microservicios de la Aplicacion
+### 1.1 Decisiones Tecnológicas y Justificación
 
-**Objetivo:** Entender que hace cada microservicio y como se relacionan entre si.
+| Tecnología | Versión | Propósito | ¿Por qué esta elección? |
+|------------|---------|-----------|-------------------------|
+| **Go** | 1.24 | Lenguaje de servicios | Compilación a binario estático, bajo footprint de memoria (~10MB), excelente para microservicios con alta concurrencia. Garbage collector optimizado para baja latencia. |
+| **Echo** | v4 | HTTP Framework | Minimalista, alto rendimiento (~30k req/s), middleware composable. Más ligero que Gin con API similar. |
+| **MongoDB** | 8.0 | Base de datos principal | Schema flexible para dominio cinematográfico (películas, horarios variables). Replica set nativo para HA. Transactions desde 4.0. |
+| **Redis** | 7-alpine | Cache y locks | Operaciones atómicas (WATCH/MULTI), TTL nativo para expiración de holds. Sub-millisecond latency. |
+| **Docker Compose** | v2 | Orquestación local | Profiles para múltiples entornos, healthchecks integrados, networking declarativo. |
+| **Alpine Linux** | 3.21 | Base image | ~5MB base, superficie de ataque mínima, musl libc compatible con Go static binaries. |
 
-**Por que es importante:** Cada servicio tiene una responsabilidad especifica. Conocerlos te ayuda a debuggear problemas y entender el flujo de datos.
-
-| Servicio | Puerto | Responsabilidad | Dependencias |
-|----------|--------|-----------------|--------------|
-| **booking** | 8001 | Orquestador SAGA - coordina el flujo completo de reserva | payment, seat, showtime, notification |
-| **movie** | 8002 | Catalogo de peliculas - CRUD de peliculas disponibles | MongoDB |
-| **cinema** | 8003 | Gestion de cines y salas - ubicaciones y capacidades | MongoDB |
-| **user** | 8004 | Autenticacion y usuarios - registro, login, perfiles | MongoDB, Redis |
-| **seat** | 8005 | Mapa de asientos - disponibilidad y holds temporales | MongoDB, Redis |
-| **showtime** | 8006 | Funciones - horarios, precios, disponibilidad | MongoDB, movie |
-| **payment** | 8007 | Procesamiento de pagos - integracion con Stripe (mock) | MongoDB |
-| **notification** | 8008 | Notificaciones - emails de confirmacion (mock) | NATS |
-
-**Diagrama de dependencias:**
+### 1.2 Librerías Clave por Servicio
 
 ```
-                           ┌─────────────────────────────────────────┐
-                           │           BOOKING SERVICE               │
-                           │        (SAGA Orchestrator)              │
-                           │    Coordina transacciones distribuidas  │
-                           │              Puerto: 8001               │
-                           └─────────────────┬───────────────────────┘
-                                             │
-            ┌────────────────┬───────────────┼───────────────┬────────────────┐
-            │                │               │               │                │
-            ▼                ▼               ▼               ▼                ▼
-    ┌───────────────┐ ┌───────────────┐ ┌───────────────┐ ┌───────────────┐
-    │    PAYMENT    │ │     SEAT      │ │   SHOWTIME    │ │ NOTIFICATION  │
-    │ Procesa pagos │ │ Reserva seats │ │   Valida      │ │ Envia emails  │
-    │    :8007      │ │    :8005      │ │  horarios     │ │    :8008      │
-    └───────────────┘ └───────┬───────┘ │    :8006      │ └───────────────┘
-                              │         └───────┬───────┘
-                              │                 │
-                              ▼                 ▼
-                       ┌─────────────────────────────┐
-                       │      MOVIE      │   CINEMA  │
-                       │   Catalogo de   │  Cines y  │
-                       │   peliculas     │   salas   │
-                       │     :8002       │   :8003   │
-                       └─────────────────────────────┘
-                                    │
-    ┌───────────────────────────────┼───────────────────────────────┐
-    │                               │                               │
-    ▼                               ▼                               ▼
-┌─────────┐                   ┌─────────┐                     ┌─────────┐
-│  USER   │                   │ MongoDB │                     │  Redis  │
-│ :8004   │                   │         │                     │         │
-└─────────┘                   └─────────┘                     └─────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           DEPENDENCIAS COMUNES                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  github.com/labstack/echo/v4      → HTTP routing, middleware               │
+│  go.mongodb.org/mongo-driver      → MongoDB driver oficial                 │
+│  github.com/sirupsen/logrus       → Structured logging                     │
+│  github.com/google/uuid           → UUID generation para IDs               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         DEPENDENCIAS ESPECÍFICAS                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  seat-service:                                                              │
+│    github.com/redis/go-redis/v9   → Redis client con WATCH support         │
+│                                                                             │
+│  user-service:                                                              │
+│    github.com/golang-jwt/jwt/v5   → JWT token handling                     │
+│    golang.org/x/crypto/bcrypt     → Password hashing (cost=10)             │
+│                                                                             │
+│  booking-service:                                                           │
+│    github.com/opentracing/opentracing-go  → Distributed tracing            │
+│    github.com/uber/jaeger-client-go       → Jaeger implementation          │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1.3 ¿Por qué Go y no Node.js/Java/Python?
+
+| Criterio | Go | Node.js | Java | Python |
+|----------|----|---------| -----|--------|
+| **Memory footprint** | ~10-20MB | ~50-100MB | ~200-500MB | ~50-100MB |
+| **Startup time** | <100ms | ~500ms | 2-5s (JVM) | ~1s |
+| **Concurrency model** | Goroutines (M:N) | Event loop | Threads | asyncio/threads |
+| **Binary distribution** | Single static binary | node_modules | JAR + JVM | virtualenv |
+| **Type safety** | Compile-time | Runtime (TS helps) | Compile-time | Runtime |
+
+**Conclusión:** Go ofrece el mejor balance entre performance, simplicidad operacional (single binary) y developer experience para microservicios HTTP.
+
+### 1.4 ¿Por qué MongoDB y no PostgreSQL?
+
+| Criterio | MongoDB | PostgreSQL |
+|----------|---------|------------|
+| **Schema flexibility** | Documentos anidados (películas con géneros, horarios con precios por tipo) | Requiere JOINs o JSONB |
+| **Horizontal scaling** | Sharding nativo | Requiere Citus/extensiones |
+| **Replica set** | Built-in, automatic failover | Requiere pgpool/patroni |
+| **Transactions** | Multi-document desde 4.0 | ACID completo |
+| **Query language** | JSON-like, aggregation pipeline | SQL estándar |
+
+**Conclusión:** MongoDB simplifica el modelo de datos para este dominio y facilita el deployment de réplicas.
+
+---
+
+## 2. Diagramas de Arquitectura
+
+### 2.1 C4 Model — Nivel 1: Context Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              SYSTEM CONTEXT                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                            ┌─────────────────┐
+                            │    Customer     │
+                            │    [Person]     │
+                            │                 │
+                            │ Busca películas,│
+                            │ reserva boletos │
+                            └────────┬────────┘
+                                     │
+                                     │ HTTP/JSON
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│                     Cinema Microservices System                             │
+│                         [Software System]                                   │
+│                                                                             │
+│    Permite a los usuarios buscar películas, consultar horarios,            │
+│    seleccionar asientos y completar reservas con pago integrado.           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                    ┌────────────────┼────────────────┐
+                    │                │                │
+                    ▼                ▼                ▼
+           ┌───────────────┐ ┌───────────────┐ ┌───────────────┐
+           │ Payment       │ │ Email/SMS     │ │ External      │
+           │ Gateway       │ │ Provider      │ │ Movie DB      │
+           │ [External]    │ │ [External]    │ │ [External]    │
+           │               │ │               │ │               │
+           │ Stripe (mock) │ │ SendGrid mock │ │ TMDB (futuro) │
+           └───────────────┘ └───────────────┘ └───────────────┘
+```
+
+### 2.2 C4 Model — Nivel 2: Container Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            CONTAINER DIAGRAM                                │
+│                        Cinema Microservices System                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    ┌──────────────────────────────────────────────────────────────────────┐
+    │                         API Layer (HTTP)                             │
+    │  ┌─────────────────────────────────────────────────────────────────┐ │
+    │  │                     [Future: API Gateway]                       │ │
+    │  │            Kong / Traefik / Ambassador                          │ │
+    │  └─────────────────────────────────────────────────────────────────┘ │
+    └──────────────────────────────────────────────────────────────────────┘
+                                     │
+        ┌────────────────────────────┼────────────────────────────────┐
+        │                            │                                │
+        ▼                            ▼                                ▼
+┌───────────────┐          ┌─────────────────┐              ┌───────────────┐
+│    movie      │          │    booking      │              │     user      │
+│   [Container] │          │   [Container]   │              │  [Container]  │
+│    Go/Echo    │          │    Go/Echo      │              │   Go/Echo     │
+│    :8002      │          │     :8001       │              │    :8004      │
+│               │          │                 │              │               │
+│ Catálogo de   │          │ SAGA            │              │ Auth, JWT,    │
+│ películas     │          │ Orchestrator    │              │ Perfiles      │
+└───────┬───────┘          └────────┬────────┘              └───────┬───────┘
+        │                           │                               │
+        │              ┌────────────┴────────────┐                  │
+        │              │                         │                  │
+        │    ┌─────────▼─────────┐   ┌──────────▼──────────┐       │
+        │    │     showtime      │   │       seat          │       │
+        │    │    [Container]    │   │    [Container]      │       │
+        │    │     Go/Echo       │   │     Go/Echo         │       │
+        │    │      :8006        │   │      :8005          │       │
+        │    │                   │   │                     │       │
+        │    │ Funciones,        │   │ Holds (Redis),      │       │
+        │    │ Horarios          │   │ Reservas (Mongo)    │       │
+        │    └─────────┬─────────┘   └──────────┬──────────┘       │
+        │              │                        │                   │
+        │              │              ┌─────────┴─────────┐        │
+        │              │              │                   │        │
+        │              │    ┌────────▼────────┐  ┌───────▼───────┐ │
+        │              │    │    payment      │  │  notification │ │
+        │              │    │   [Container]   │  │  [Container]  │ │
+        │              │    │    Go/Echo      │  │   Go/Echo     │ │
+        │              │    │     :8007       │  │    :8008      │ │
+        │              │    │                 │  │               │ │
+        │              │    │ Mock Stripe     │  │ Mock Email    │ │
+        │              │    └────────┬────────┘  └───────────────┘ │
+        │              │             │                              │
+        └──────────────┴─────────────┴──────────────────────────────┘
+                                     │
+    ┌────────────────────────────────┴────────────────────────────────┐
+    │                        DATA LAYER                               │
+    │  ┌─────────────────────────────────────────────────────────────┐│
+    │  │              MongoDB Replica Set (rs0)                      ││
+    │  │     ┌─────────────┐ ┌─────────────┐ ┌─────────────┐        ││
+    │  │     │   mongo1    │ │   mongo2    │ │   mongo3    │        ││
+    │  │     │  [PRIMARY]  │ │ [SECONDARY] │ │ [SECONDARY] │        ││
+    │  │     │   :27017    │ │   :27018    │ │   :27019    │        ││
+    │  │     └─────────────┘ └─────────────┘ └─────────────┘        ││
+    │  │                                                             ││
+    │  │  Databases: movie | cinema | showtime | user | seat |      ││
+    │  │             booking | payment                               ││
+    │  └─────────────────────────────────────────────────────────────┘│
+    │                                                                 │
+    │  ┌─────────────────────────────────────────────────────────────┐│
+    │  │                    Redis (Standalone)                       ││
+    │  │                        :6379                                ││
+    │  │                                                             ││
+    │  │  Keys: hold:{uuid} | seat_hold:{showtime}:{seat}           ││
+    │  │  Purpose: Distributed locks, TTL-based seat holds           ││
+    │  └─────────────────────────────────────────────────────────────┘│
+    └─────────────────────────────────────────────────────────────────┘
+```
+
+### 2.3 C4 Model — Nivel 3: Component Diagram (Booking Service)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        COMPONENT DIAGRAM                                    │
+│                        booking-service                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           booking-service                                   │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                        cmd/booking/main.go                          │   │
+│  │                         [Entrypoint]                                │   │
+│  │           Dependency injection, server initialization              │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                    │                                        │
+│                                    ▼                                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                    internal/server/server.go                        │   │
+│  │                        [HTTP Server]                                │   │
+│  │         Echo instance, middleware, route registration              │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                    │                                        │
+│           ┌────────────────────────┴────────────────────────┐              │
+│           ▼                                                  ▼              │
+│  ┌─────────────────────┐                      ┌─────────────────────────┐  │
+│  │ internal/routes/    │                      │  internal/tracing/      │  │
+│  │   [Router]          │                      │    [Observability]      │  │
+│  │                     │                      │                         │  │
+│  │ POST /booking       │                      │  OpenTracing spans      │  │
+│  │ GET /booking/:id    │                      │  Jaeger integration     │  │
+│  └──────────┬──────────┘                      └─────────────────────────┘  │
+│             │                                                               │
+│             ▼                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                    internal/api/booking.go                          │   │
+│  │                       [API Handlers]                                │   │
+│  │                                                                     │   │
+│  │  MakeBooking()     → SAGA orchestration                            │   │
+│  │  GetOrderByID()    → Query booking                                 │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                    │                                        │
+│           ┌────────────────────────┴────────────────────────┐              │
+│           ▼                                                  ▼              │
+│  ┌─────────────────────┐                      ┌─────────────────────────┐  │
+│  │ internal/ctrls/     │                      │  internal/config/       │  │
+│  │  [Controllers]      │                      │   [External Clients]    │  │
+│  │                     │                      │                         │  │
+│  │ MakePayment()       │                      │  ShowtimeClient         │  │
+│  │ CreateTicket()      │                      │  SeatClient             │  │
+│  └──────────┬──────────┘                      │  PaymentClient          │  │
+│             │                                 │  NotificationClient     │  │
+│             ▼                                 └─────────────────────────┘  │
+│  ┌─────────────────────┐                                                   │
+│  │ internal/db/        │                                                   │
+│  │  [Repository]       │                                                   │
+│  │                     │                                                   │
+│  │ MongoDB connection  │                                                   │
+│  │ CRUD operations     │                                                   │
+│  └─────────────────────┘                                                   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                    │
+                    │ HTTP calls
+                    ▼
+    ┌───────────────────────────────────────────────────────┐
+    │  External Services (via HTTP)                         │
+    │                                                       │
+    │  showtime:8006  │  seat:8005  │  payment:8007  │     │
+    │  notification:8008                                    │
+    └───────────────────────────────────────────────────────┘
+```
+
+### 2.4 Diagrama de Infraestructura — Docker Compose
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    INFRASTRUCTURE DIAGRAM                                   │
+│                     Docker Compose Stack                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Docker Host                                          │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │                    cinema-dev-network (bridge)                        │ │
+│  │                                                                       │ │
+│  │  ┌─────────────────────────────────────────────────────────────────┐ │ │
+│  │  │                   Application Tier                              │ │ │
+│  │  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐  │ │ │
+│  │  │  │ booking │ │  movie  │ │ cinema  │ │  user   │ │showtime │  │ │ │
+│  │  │  │  :8001  │ │  :8002  │ │  :8003  │ │  :8004  │ │  :8006  │  │ │ │
+│  │  │  │ 256Mi   │ │ 256Mi   │ │ 256Mi   │ │ 256Mi   │ │ 256Mi   │  │ │ │
+│  │  │  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘  │ │ │
+│  │  │       │           │           │           │           │       │ │ │
+│  │  │  ┌─────────┐ ┌─────────┐ ┌─────────┐                          │ │ │
+│  │  │  │  seat   │ │ payment │ │ notif.  │                          │ │ │
+│  │  │  │  :8005  │ │  :8007  │ │  :8008  │                          │ │ │
+│  │  │  │ 512Mi   │ │ 512Mi   │ │ 256Mi   │                          │ │ │
+│  │  │  └────┬────┘ └────┬────┘ └────┬────┘                          │ │ │
+│  │  └───────┼───────────┼───────────┼───────────────────────────────┘ │ │
+│  │          │           │           │                                 │ │
+│  │  ┌───────┴───────────┴───────────┴───────────────────────────────┐ │ │
+│  │  │                     Data Tier                                 │ │ │
+│  │  │                                                               │ │ │
+│  │  │  ┌─────────────────────────────────────────────────────────┐ │ │ │
+│  │  │  │           MongoDB Replica Set (rs0)                     │ │ │ │
+│  │  │  │  ┌───────────┐  ┌───────────┐  ┌───────────┐           │ │ │ │
+│  │  │  │  │  mongo1   │  │  mongo2   │  │  mongo3   │           │ │ │ │
+│  │  │  │  │ PRIMARY   │  │ SECONDARY │  │ SECONDARY │           │ │ │ │
+│  │  │  │  │  :27017   │  │  :27018   │  │  :27019   │           │ │ │ │
+│  │  │  │  │           │  │           │  │           │           │ │ │ │
+│  │  │  │  │ ┌───────┐ │  │ ┌───────┐ │  │ ┌───────┐ │           │ │ │ │
+│  │  │  │  │ │Volume │ │  │ │Volume │ │  │ │Volume │ │           │ │ │ │
+│  │  │  │  │ │mongo1 │ │  │ │mongo2 │ │  │ │mongo3 │ │           │ │ │ │
+│  │  │  │  │ │_data  │ │  │ │_data  │ │  │ │_data  │ │           │ │ │ │
+│  │  │  │  │ └───────┘ │  │ └───────┘ │  │ └───────┘ │           │ │ │ │
+│  │  │  │  └───────────┘  └───────────┘  └───────────┘           │ │ │ │
+│  │  │  └─────────────────────────────────────────────────────────┘ │ │ │
+│  │  │                                                               │ │ │
+│  │  │  ┌─────────────────┐                                         │ │ │
+│  │  │  │     Redis       │                                         │ │ │
+│  │  │  │     :6379       │                                         │ │ │
+│  │  │  │  ┌───────────┐  │                                         │ │ │
+│  │  │  │  │  Volume   │  │                                         │ │ │
+│  │  │  │  │redis_data │  │                                         │ │ │
+│  │  │  │  └───────────┘  │                                         │ │ │
+│  │  │  └─────────────────┘                                         │ │ │
+│  │  └───────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                     │ │
+│  │  ┌─────────────────────────────────────────────────────────────┐   │ │
+│  │  │                  Init Containers                            │   │ │
+│  │  │  ┌─────────────────┐                                        │   │ │
+│  │  │  │ mongo-init-dev  │ → rs.initiate() + seed data            │   │ │
+│  │  │  │ Exited(0)       │                                        │   │ │
+│  │  │  └─────────────────┘                                        │   │ │
+│  │  └─────────────────────────────────────────────────────────────┘   │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Port mappings to host:                                                     │
+│  8001-8008 (services) | 27017-27019 (mongo) | 6379 (redis)                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2.5 Diagrama de Secuencia — Booking Flow (SAGA)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      SEQUENCE DIAGRAM: Booking SAGA                         │
+│                           (Happy Path)                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────┐     ┌─────────┐    ┌──────────┐    ┌──────┐    ┌─────────┐   ┌───────┐
+│Client│     │ booking │    │ showtime │    │ seat │    │ payment │   │notif. │
+└──┬───┘     └────┬────┘    └────┬─────┘    └──┬───┘    └────┬────┘   └───┬───┘
+   │              │              │             │             │            │
+   │ POST /booking│              │             │             │            │
+   │─────────────>│              │             │             │            │
+   │              │              │             │             │            │
+   │              │ ┌──────────────────────────────────────────────────┐ │
+   │              │ │ SAGA Step 1: Validate Showtime                   │ │
+   │              │ └──────────────────────────────────────────────────┘ │
+   │              │              │             │             │            │
+   │              │ GET /showtimes/{id}        │             │            │
+   │              │─────────────>│             │             │            │
+   │              │              │             │             │            │
+   │              │    200 OK {showtime}       │             │            │
+   │              │<─────────────│             │             │            │
+   │              │              │             │             │            │
+   │              │ ┌──────────────────────────────────────────────────┐ │
+   │              │ │ SAGA Step 2: Verify Hold                         │ │
+   │              │ └──────────────────────────────────────────────────┘ │
+   │              │              │             │             │            │
+   │              │ GET /seats/hold/{id}?session_id=X        │            │
+   │              │────────────────────────────>│             │            │
+   │              │              │             │             │            │
+   │              │              │  200 OK {hold}             │            │
+   │              │<────────────────────────────│             │            │
+   │              │              │             │             │            │
+   │              │ ┌──────────────────────────────────────────────────┐ │
+   │              │ │ SAGA Step 3: Process Payment                     │ │
+   │              │ └──────────────────────────────────────────────────┘ │
+   │              │              │             │             │            │
+   │              │ POST /payments/makePurchase              │            │
+   │              │──────────────────────────────────────────>│            │
+   │              │              │             │             │            │
+   │              │              │   201 Created {charge_id} │            │
+   │              │<──────────────────────────────────────────│            │
+   │              │              │             │             │            │
+   │              │ ┌──────────────────────────────────────────────────┐ │
+   │              │ │ SAGA Step 4: Confirm Seats                       │ │
+   │              │ └──────────────────────────────────────────────────┘ │
+   │              │              │             │             │            │
+   │              │ POST /seats/reserve        │             │            │
+   │              │────────────────────────────>│             │            │
+   │              │              │             │             │            │
+   │              │              │  201 {reservation}        │            │
+   │              │<────────────────────────────│             │            │
+   │              │              │             │             │            │
+   │              │ ┌──────────────────────────────────────────────────┐ │
+   │              │ │ SAGA Step 5: Create Ticket (local MongoDB)       │ │
+   │              │ └──────────────────────────────────────────────────┘ │
+   │              │              │             │             │            │
+   │              │ ┌──────────────────────────────────────────────────┐ │
+   │              │ │ SAGA Step 6: Send Notification (fire & forget)   │ │
+   │              │ └──────────────────────────────────────────────────┘ │
+   │              │              │             │             │            │
+   │              │ POST /notification/sendEmail             │            │
+   │              │───────────────────────────────────────────────────────>│
+   │              │              │             │             │            │
+   │              │              │             │             │  202 Accepted
+   │              │<───────────────────────────────────────────────────────│
+   │              │              │             │             │            │
+   │ 201 Created  │              │             │             │            │
+   │ {ticket}     │              │             │             │            │
+   │<─────────────│              │             │             │            │
+   │              │              │             │             │            │
+```
+
+### 2.6 Diagrama de Secuencia — Booking SAGA (Failure + Compensation)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   SEQUENCE DIAGRAM: Booking SAGA                            │
+│                    (Payment Failure → Compensation)                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────┐     ┌─────────┐    ┌──────────┐    ┌──────┐    ┌─────────┐
+│Client│     │ booking │    │ showtime │    │ seat │    │ payment │
+└──┬───┘     └────┬────┘    └────┬─────┘    └──┬───┘    └────┬────┘
+   │              │              │             │             │
+   │ POST /booking│              │             │             │
+   │─────────────>│              │             │             │
+   │              │              │             │             │
+   │              │ Step 1: GET /showtimes/{id}│             │
+   │              │─────────────>│             │             │
+   │              │    200 OK    │             │             │
+   │              │<─────────────│             │             │
+   │              │              │             │             │
+   │              │ Step 2: GET /seats/hold/{id}             │
+   │              │────────────────────────────>│             │
+   │              │              │  200 OK     │             │
+   │              │<────────────────────────────│             │
+   │              │              │             │             │
+   │              │ Step 3: POST /payments/makePurchase      │
+   │              │──────────────────────────────────────────>│
+   │              │              │             │             │
+   │              │              │             │  ╔═══════════════════╗
+   │              │              │             │  ║ 402 Payment       ║
+   │              │              │             │  ║ Failed            ║
+   │              │              │             │  ║ (insufficient     ║
+   │              │              │             │  ║  funds)           ║
+   │              │              │             │  ╚═══════════════════╝
+   │              │              │             │             │
+   │              │         402 Payment Declined             │
+   │              │<──────────────────────────────────────────│
+   │              │              │             │             │
+   │              │ ╔════════════════════════════════════════════════════╗
+   │              │ ║           COMPENSATION TRIGGERED                   ║
+   │              │ ╚════════════════════════════════════════════════════╝
+   │              │              │             │             │
+   │              │ Compensation: DELETE /seats/hold/{id}    │
+   │              │────────────────────────────>│             │
+   │              │              │  200 OK (released)        │
+   │              │<────────────────────────────│             │
+   │              │              │             │             │
+   │ 500 Error    │              │             │             │
+   │ {code:       │              │             │             │
+   │ PAYMENT_     │              │             │             │
+   │ FAILED}      │              │             │             │
+   │<─────────────│              │             │             │
+   │              │              │             │             │
+```
+
+### 2.7 Diagrama de Estado — Seat Lifecycle
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     STATE DIAGRAM: Seat Lifecycle                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              ┌─────────────────┐
+                              │    AVAILABLE    │
+                              │   (default)     │
+                              └────────┬────────┘
+                                       │
+                                       │ POST /seats/hold
+                                       │ HoldSeats()
+                                       │ Redis SET + TTL
+                                       ▼
+                    ┌──────────────────────────────────────┐
+                    │               HELD                   │
+                    │                                      │
+                    │  Storage: Redis                      │
+                    │  TTL: 300s (configurable)            │
+                    │  Key: seat_hold:{showtime}:{seat}    │
+                    │                                      │
+                    │  Owner: session_id                   │
+                    └──────────────────┬───────────────────┘
+                                       │
+                     ┌─────────────────┼─────────────────┐
+                     │                 │                 │
+                     ▼                 ▼                 ▼
+          ┌──────────────────┐  ┌────────────┐  ┌──────────────────┐
+          │  TTL Expires     │  │  Manual    │  │ POST /seats/     │
+          │  (auto)          │  │  Release   │  │ reserve          │
+          │                  │  │            │  │                  │
+          │  Redis auto-     │  │  DELETE    │  │  ReserveSeats()  │
+          │  deletes key     │  │  /hold/:id │  │                  │
+          └────────┬─────────┘  └─────┬──────┘  └────────┬─────────┘
+                   │                  │                  │
+                   ▼                  ▼                  ▼
+          ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+          │   AVAILABLE     │ │   AVAILABLE     │ │    RESERVED     │
+          │   (recycled)    │ │   (explicit)    │ │   (permanent)   │
+          │                 │ │                 │ │                 │
+          │                 │ │                 │ │ Storage: MongoDB│
+          │                 │ │                 │ │ reservations    │
+          │                 │ │                 │ │ collection      │
+          └─────────────────┘ └─────────────────┘ └─────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SPECIAL STATES                                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  UNAVAILABLE (permanent)     ─  Seat physically doesn't exist or is        │
+│                                 blocked (wheelchair space, aisle, etc.)    │
+│                                 Defined in room_layouts.seats[].type       │
+│                                                                             │
+│  CONFLICT (transient)        ─  Two sessions tried to hold same seat       │
+│                                 simultaneously. WATCH transaction fails.   │
+│                                 Returns HTTP 409 with conflicting holds.   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2.8 Diagrama de Flujo de Datos
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        DATA FLOW DIAGRAM                                    │
+│                   Cinema Booking System                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              WRITE PATH                                      │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Customer                                                              
+     │                                                                  
+     │ (1) Select movie/showtime                                        
+     │     Browse catalog                                               
+     ▼                                                                  
+┌─────────┐      ┌─────────────┐                                        
+│  movie  │─────>│  showtime   │  (2) Get available showtimes          
+└─────────┘      └──────┬──────┘      for selected movie                
+                        │                                               
+                        │ (3) Query seat availability                   
+                        ▼                                               
+                  ┌──────────┐     ┌─────────────┐                      
+                  │   seat   │<────│    Redis    │  (4) Check held seats
+                  │          │     │   (reads)   │      (fast path)     
+                  └────┬─────┘     └─────────────┘                      
+                       │                                                
+                       │ (5) Hold seats request                         
+                       ▼                                                
+                  ┌─────────────┐                                       
+                  │    Redis    │  (6) WATCH + SET with TTL             
+                  │   (write)   │      Atomic hold creation             
+                  └─────────────┘                                       
+                       │                                                
+                       │ (7) Proceed to checkout                        
+                       ▼                                                
+                  ┌─────────┐                                           
+                  │ booking │  (8) SAGA orchestration                   
+                  │  (SAGA) │      Coordinates all steps                
+                  └────┬────┘                                           
+                       │                                                
+        ┌──────────────┼──────────────┐                                 
+        │              │              │                                 
+        ▼              ▼              ▼                                 
+   ┌─────────┐   ┌──────────┐   ┌──────────┐                           
+   │ payment │   │   seat   │   │ booking  │                           
+   │         │   │ (reserve)│   │   (db)   │                           
+   └────┬────┘   └────┬─────┘   └────┬─────┘                           
+        │             │              │                                  
+        │             │              │ (9) Write to MongoDB             
+        ▼             ▼              ▼                                  
+   ┌──────────────────────────────────────────┐                        
+   │              MongoDB                     │                        
+   │   payments | reservations | bookings     │                        
+   └──────────────────────────────────────────┘                        
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              READ PATH                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Customer                                                              
+     │                                                                  
+     │ GET /movies                                                      
+     ▼                                                                  
+┌─────────┐                                                             
+│  movie  │──────┐                                                      
+└─────────┘      │                                                      
+                 │                                                      
+     │           │  All reads go                                        
+     │ GET       │  directly to                                         
+     ▼           │  MongoDB                                             
+┌──────────┐     │                                                      
+│ showtime │─────┤  (No read cache                                      
+└──────────┘     │   in current                                         
+                 │   implementation)                                    
+     │           │                                                      
+     │ GET       │                                                      
+     ▼           │                                                      
+┌──────────┐     │                                                      
+│   seat   │─────┤                                                      
+└──────────┘     │                                                      
+                 │                                                      
+                 ▼                                                      
+         ┌──────────────┐                                               
+         │   MongoDB    │  Replica Set                                  
+         │  (PRIMARY)   │  reads from PRIMARY                           
+         └──────────────┘  by default                                   
+                                                                        
+         Note: Could add read preference                                
+         secondaryPreferred for                                         
+         read scaling                                                   
 ```
 
 ---
 
-### Servicios de Infraestructura
+## 3. Arquitectura del Sistema
 
-**Objetivo:** Entender que infraestructura se requiere y por que cada componente es necesario.
-
-**Por que es importante:** Sin la infraestructura correcta, los microservicios no pueden funcionar. Cada componente tiene un proposito especifico.
-
-#### MongoDB (Base de datos)
-
-| Aspecto | Descripcion |
-|---------|-------------|
-| **Que es** | Base de datos NoSQL orientada a documentos |
-| **Por que se usa** | Flexibilidad de schema, buen rendimiento para lecturas, soporte nativo para replica sets |
-| **Configuracion dev** | 3 nodos en replica set (mongo1, mongo2, mongo3) |
-| **Configuracion test** | 1 nodo standalone con tmpfs |
-| **Puertos** | 27017 (mongo1), 27018 (mongo2), 27019 (mongo3) |
-
-**Por que replica set en dev:**
-- Simula produccion (alta disponibilidad)
-- Permite probar transacciones multi-documento
-- El servicio `booking` usa transacciones ACID
-
-```bash
-# Verificar estado del replica set
-docker exec dev-mongo1 mongosh --eval "rs.status().members.map(m => m.name + ' -> ' + m.stateStr)"
-```
-
-**Respuesta esperada:**
-```
-[ 'mongo1:27017 -> PRIMARY', 'mongo2:27017 -> SECONDARY', 'mongo3:27017 -> SECONDARY' ]
-```
-
-#### Redis (Cache y Locks)
-
-| Aspecto | Descripcion |
-|---------|-------------|
-| **Que es** | Almacen de datos en memoria, key-value |
-| **Por que se usa** | Cache de sesiones, locks distribuidos para seat holds |
-| **Quien lo usa** | `user` (sesiones JWT), `seat` (holds temporales) |
-| **Puerto** | 6379 |
-
-**Caso de uso critico - Seat Holds:**
-
-Cuando un usuario selecciona asientos, estos se "reservan temporalmente" por 5 minutos:
+### 3.1 Topología de Servicios
 
 ```
-Usuario A selecciona A1, A2
-    │
-    ▼
-seat-service crea lock en Redis:
-  KEY: "hold:sht_001:A1" = "user_123"
-  KEY: "hold:sht_001:A2" = "user_123"
-  TTL: 300 segundos (5 min)
-    │
-    ▼
-Usuario B intenta seleccionar A1
-    │
-    ▼
-seat-service verifica Redis
-  KEY existe → Asiento NO disponible
-    │
-    ▼
-Respuesta: 409 Conflict
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              API Gateway (futuro)                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                       │
+        ┌──────────────────────────────┼──────────────────────────────┐
+        ▼                              ▼                              ▼
+┌───────────────┐            ┌─────────────────┐            ┌───────────────┐
+│    movie      │            │    booking      │            │     user      │
+│    :8002      │            │     :8001       │            │    :8004      │
+│   Catálogo    │◄───────────│   SAGA Orch.    │            │   Auth/JWT    │
+└───────────────┘            └─────────────────┘            └───────────────┘
+                                     │
+        ┌─────────────────┬──────────┼──────────┬─────────────────┐
+        ▼                 ▼          ▼          ▼                 ▼
+┌───────────────┐ ┌───────────────┐ ┌─────────────────┐ ┌───────────────┐
+│   showtime    │ │     seat      │ │     payment     │ │ notification  │
+│    :8006      │ │    :8005      │ │     :8007       │ │    :8008      │
+│   Horarios    │ │  Locks/Redis  │ │   Mock Stripe   │ │  Mock Email   │
+└───────────────┘ └───────────────┘ └─────────────────┘ └───────────────┘
+        │                 │
+        ▼                 ▼
+┌───────────────┐ ┌───────────────┐
+│    cinema     │ │     Redis     │
+│    :8003      │ │    :6379      │
+│  Salas/Cines  │ │ Distributed   │
+└───────────────┘ │    Locks      │
+                  └───────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    MongoDB Replica Set (rs0)                                │
+│              mongo1:27017 (PRIMARY) | mongo2:27018 | mongo3:27019           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  [PLANNED] Observability Stack                                              │
+│  Jaeger :16686 (tracing) | Prometheus :9090 (metrics) | Grafana :3000      │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-```bash
-# Verificar Redis
-docker exec dev-redis redis-cli ping
-# Respuesta: PONG
+### 3.2 Responsabilidades por Servicio
 
-# Ver keys activos (despues de un hold)
-docker exec dev-redis redis-cli keys "hold:*"
+| Servicio | Puerto | Database | Responsabilidad |
+|----------|--------|----------|-----------------|
+| **booking** | 8001 | booking | SAGA Orchestrator — coordina el flujo de reserva completo |
+| **movie** | 8002 | movie | Catálogo de películas, premieres, metadata |
+| **cinema** | 8003 | cinema | Gestión de cines, salas, capacidades |
+| **user** | 8004 | user | Autenticación, JWT tokens (access/refresh), perfiles |
+| **seat** | 8005 | seat | Disponibilidad, holds temporales (Redis), reservas permanentes (Mongo) |
+| **showtime** | 8006 | showtime | Funciones, horarios, precios por tipo de asiento |
+| **payment** | 8007 | payment | Mock de procesador de pagos (simula Stripe) |
+| **notification** | 8008 | — | Mock de notificaciones (email, SMS) |
+
+### 3.3 Decisiones Arquitectónicas
+
+**Database-per-Service Pattern**
+Cada servicio tiene su propia base de datos lógica en MongoDB. Esto garantiza:
+- Loose coupling entre servicios
+- Escalabilidad independiente
+- Autonomía de deployment
+
+**Configuración centralizada:** `platform/config/services.yaml`
+
+```yaml
+services:
+  movie:
+    port: 8002
+    dbName: movie        # ← Cada servicio usa su propia DB
+    image: crizstian/movie-service
 ```
 
-#### NATS (Mensajeria)
+---
 
-| Aspecto | Descripcion |
-|---------|-------------|
-| **Que es** | Sistema de mensajeria pub/sub de alto rendimiento |
-| **Por que se usa** | Comunicacion asincrona entre servicios |
-| **Quien lo usa** | `booking` (publica eventos), `notification` (consume eventos) |
-| **Puertos** | 4222 (cliente), 8222 (monitoring HTTP) |
+## 4. Patrones de Diseño
 
-**Flujo de notificacion:**
+### 4.1 SAGA Pattern — Booking Orchestrator
+
+El servicio `booking` implementa el patrón SAGA para coordinar transacciones distribuidas con compensaciones automáticas.
+
+**Flujo de reserva (happy path):**
 
 ```
-booking-service confirma reserva
-    │
-    ▼
-Publica evento en NATS:
-  Subject: "booking.confirmed"
-  Data: {order_id, user_email, seats, showtime}
-    │
-    ▼
-notification-service suscrito a "booking.*"
-    │
-    ▼
-Recibe evento → Envia email de confirmacion
+┌────────────────────────────────────────────────────────────────────────────┐
+│ SAGA: MakeBooking                                                          │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  Step 1: ValidateShowtime ──► showtime-service                             │
+│          ↓ success                                                         │
+│  Step 2: VerifyHold ─────────► seat-service (Redis lookup)                 │
+│          ↓ success                                                         │
+│  Step 3: ProcessPayment ─────► payment-service (Stripe mock)               │
+│          ↓ success                                                         │
+│  Step 4: ConfirmSeats ───────► seat-service (Redis→Mongo)                  │
+│          ↓ success                                                         │
+│  Step 5: CreateTicket ───────► booking-service (local Mongo)               │
+│          ↓ success                                                         │
+│  Step 6: SendNotification ───► notification-service (async, no-fail)       │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
-```bash
-# Verificar NATS
-curl -s http://localhost:8222/varz | jq '{server_id, version, connections}'
-```
+**Compensaciones (failure path):**
 
-**Respuesta esperada:**
-```json
-{
-  "server_id": "NXXXXXXXXXXXXXXXXXXXXXXXXX",
-  "version": "2.10.x",
-  "connections": 8
+```go
+// services/booking/internal/api/booking.go:66-72
+// Payment failure → Release hold
+if releaseErr := a.client.API.ReleaseHold(b.Booking.HoldID, b.Booking.SessionID); releaseErr != nil {
+    log.WithError(releaseErr).Error("Failed to release hold during compensation")
+}
+
+// Seat confirmation failure → Refund payment
+if refundErr := a.client.API.RefundPayment(chargeID, "Seat confirmation failed"); refundErr != nil {
+    log.WithError(refundErr).Error("Failed to refund payment during compensation")
 }
 ```
 
-#### mongo-init (Contenedor de inicializacion)
+**¿Por qué SAGA y no 2PC?**
+- 2PC (Two-Phase Commit) requiere locks distribuidos prolongados
+- SAGA permite higher availability con eventual consistency
+- Las compensaciones son explícitas y auditables
 
-| Aspecto | Descripcion |
-|---------|-------------|
-| **Que es** | Contenedor one-shot que configura MongoDB |
-| **Que hace** | 1) Inicia replica set, 2) Crea bases de datos, 3) Carga datos de prueba |
-| **Cuando corre** | Una vez al iniciar, luego termina (Exit 0) |
-| **Ubicacion scripts** | `platform/docker/mongodb/seed/*.js` |
+### 4.2 Distributed Locking — Seat Hold Pattern
 
-**Scripts de inicializacion (orden de ejecucion):**
+El servicio `seat` usa Redis para locks temporales y MongoDB para reservas permanentes.
 
-| Script | Proposito |
-|--------|-----------|
-| `01-init-replica.js` | Configura el replica set rs0 |
-| `02-create-databases.js` | Crea colecciones con schemas |
-| `03-create-indexes.js` | Crea indices para rendimiento |
-| `04-seed-test-data.js` | Inserta datos de prueba |
+**Modelo de estado de asientos:**
 
-**Datos de prueba cargados:**
-
-| Base de datos | Coleccion | Registros | Descripcion |
-|---------------|-----------|-----------|-------------|
-| `cinema` | movies | 2 | The Shawshank Redemption, Inception |
-| `cinema` | cinemas | 1 | Cinema Downtown |
-| `cinema` | rooms | 2 | Room 1 (100 seats), VIP Room (50 seats) |
-| `cinema` | showtimes | 2 | Funciones para manana |
-| `cinema` | users | 1 | test@example.com |
-| `cinema_seats` | room_layouts | 1 | Layout de 100 asientos (10x10) |
-| `cinema_seats` | showtimes | 2 | Mapeo showtime → room |
-
-```bash
-# Ver logs del init (deberia mostrar Exit 0)
-docker logs dev-mongo-init
-
-# Verificar datos cargados
-docker exec dev-mongo1 mongosh --eval "
-  db = db.getSiblingDB('cinema');
-  print('Movies: ' + db.movies.countDocuments());
-  print('Showtimes: ' + db.showtimes.countDocuments());
-  db.movies.find({}, {title: 1, _id: 0}).forEach(m => print('  - ' + m.title));
-"
+```
+            ┌─────────────┐
+            │  available  │
+            └──────┬──────┘
+                   │ HoldSeats() → Redis SET con TTL
+                   ▼
+            ┌─────────────┐
+            │    held     │ ◄── TTL 5 min (auto-expire)
+            └──────┬──────┘
+                   │ ReserveSeats() → Mongo INSERT + Redis DEL
+                   ▼
+            ┌─────────────┐
+            │  reserved   │ ◄── Permanente en MongoDB
+            └─────────────┘
 ```
 
-**Respuesta esperada:**
+**Implementación de lock atómico con WATCH:**
+
+```go
+// services/seat/internal/db/redis.go:69-127
+// Usa WATCH para optimistic locking
+err := r.client.Watch(ctx, txf, watchKeys...)
+
+// Dentro de txf:
+// 1. Verifica que ningún seat esté held
+// 2. Si todos disponibles, ejecuta pipeline SET
+// 3. Si hay conflicto, WATCH aborta la transacción
 ```
-Movies: 2
-Showtimes: 2
-  - The Shawshank Redemption
-  - Inception
+
+**Key structure en Redis:**
 ```
+hold:{uuid}                     → Hold metadata (JSON)
+seat_hold:{showtime_id}:{seat}  → Per-seat hold status
+```
+
+**¿Por qué Redis + MongoDB?**
+- **Redis:** Fast TTL-based expiration, atomic operations
+- **MongoDB:** Durabilidad, queries complejas, historial de reservas
+
+### 4.3 Multi-stage Docker Builds
+
+Cada servicio Go usa un Dockerfile optimizado con soporte dual para desarrollo local y CI:
+
+```dockerfile
+# platform/docker/go-service/Dockerfile
+
+# ARG controla la fuente del binario
+ARG BINARY_SOURCE=builder  # builder (local) | prebuilt (CI)
+
+# Stage 1: Builder (compila desde source - desarrollo local)
+FROM golang:${GO_VERSION}-alpine AS builder
+# - Copia go.mod/go.sum primero (layer caching)
+# - go mod download (cached si deps no cambian)
+# - CGO_ENABLED=0 para binary estático
+
+# Stage 2: Prebuilt (copia binario pre-compilado - CI)
+FROM scratch AS prebuilt
+# - Espera binario en services/<service>/<service>
+# - Usado por Harness CI con Cache Intelligence
+
+# Stage 3: Runtime (alpine:3.21)
+FROM alpine:${ALPINE_VERSION}
+# - COPY --from=${BINARY_SOURCE} /app /app/service
+# - Solo 5-10MB final image
+# - Non-root user (appuser:appgroup)
+# - Health check integrado
+```
+
+**Uso:**
+
+| Escenario | Comando | BINARY_SOURCE |
+|-----------|---------|---------------|
+| Local dev | `task build SERVICE=movie` | `prebuilt` (task compila primero) |
+| docker-compose | `docker compose up` | `builder` (default) |
+| CI Pipeline | BuildAndPushDockerRegistry | `prebuilt` |
+
+**Beneficios:**
+- Imagen final ~10MB vs ~800MB con SDK
+- Sin toolchain de compilación en runtime
+- Healthchecks nativos de Docker
+- **CI optimizado**: Cache Intelligence para Go modules + Docker layer caching
 
 ---
 
-### Resumen de Contenedores
+## 5. Stack de Infraestructura
 
-**Objetivo:** Tener una vista completa de todos los contenedores que se inician.
+### 5.1 MongoDB Replica Set
 
-| Contenedor | Tipo | Puerto | Persistencia | Estado esperado |
-|------------|------|--------|--------------|-----------------|
-| dev-mongo1 | Infra | 27017 | Volume | healthy |
-| dev-mongo2 | Infra | 27018 | Volume | healthy |
-| dev-mongo3 | Infra | 27019 | Volume | healthy |
-| dev-mongo-init | Infra | - | - | Exited (0) |
-| dev-redis | Infra | 6379 | Volume | healthy |
-| cinema-nats | Infra | 4222, 8222 | - | healthy |
-| cinema-movie | App | 8002 | - | healthy |
-| cinema-cinema | App | 8003 | - | healthy |
-| cinema-user | App | 8004 | - | healthy |
-| cinema-seat | App | 8005 | - | healthy |
-| cinema-showtime | App | 8006 | - | healthy |
-| cinema-payment | App | 8007 | - | healthy |
-| cinema-notification | App | 8008 | - | healthy |
-| cinema-booking | App | 8001 | - | healthy |
+**Configuración en Docker Compose:**
 
-**Total:** 14 contenedores (6 infra + 8 app)
-
----
-
-## Prerequisitos
-
-### Herramientas requeridas
-
-#### 1. Verificar Docker
-
-**Objetivo:** Confirmar que tienes Docker instalado y funcionando.
-
-**Por que es importante:** Docker es el runtime que ejecuta los contenedores. Sin Docker, nada funciona.
-
-```bash
-docker --version
-```
-
-**Respuesta esperada:**
-```
-Docker version 24.0.0, build XXXXXXX
-```
-
-**Si falla:** Instala Docker siguiendo la [guia oficial](https://docs.docker.com/get-docker/).
-
-```bash
-# Verificar que Docker daemon esta corriendo
-docker info
-```
-
-**Respuesta esperada:**
-```
-Client: Docker Engine - Community
- Version:           24.0.0
-Server: Docker Engine - Community
- Engine:
-  Version:          24.0.0
-...
-```
-
-**Si falla con "Cannot connect to Docker daemon":**
-- Linux: `sudo systemctl start docker`
-- macOS/Windows: Inicia Docker Desktop
-- DevContainer: Docker se conecta al host automaticamente
-
----
-
-#### 2. Verificar Docker Compose
-
-**Objetivo:** Confirmar que Docker Compose v2 esta instalado.
-
-**Por que es importante:** Docker Compose orquesta multiples contenedores como una unidad. Usamos Compose v2 (integrado en `docker compose`).
-
-```bash
-docker compose version
-```
-
-**Respuesta esperada:**
-```
-Docker Compose version v2.24.0
-```
-
-**Si falla o muestra v1:** Actualiza Docker Desktop o instala el plugin Compose v2.
-
----
-
-#### 3. Verificar Task
-
-**Objetivo:** Confirmar que el task runner esta instalado.
-
-**Por que es importante:** `task` automatiza comandos complejos. Evita errores y asegura consistencia.
-
-```bash
-task --version
-```
-
-**Respuesta esperada:**
-```
-Task version: 3.x.x
-```
-
-**Si falla:**
-```bash
-# macOS
-brew install go-task
-
-# Linux
-sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
-
-# DevContainer: ya incluido
-```
-
----
-
-#### 4. Verificar yq (opcional, para config:generate)
-
-**Objetivo:** Confirmar que yq esta instalado para generar configuracion.
-
-**Por que es importante:** `yq` procesa YAML. Los scripts de generacion de config lo usan.
-
-```bash
-yq --version
-```
-
-**Respuesta esperada:**
-```
-yq (https://github.com/mikefarah/yq/) version v4.x.x
-```
-
-**Si falla:**
-```bash
-# macOS
-brew install yq
-
-# Linux
-wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
-chmod +x /usr/local/bin/yq
-```
-
----
-
-### Requisitos de sistema
-
-**Objetivo:** Asegurar que tu maquina tiene suficientes recursos.
-
-**Por que es importante:** Docker Compose inicia 12+ contenedores. Sin recursos suficientes, los servicios fallan o son muy lentos.
-
-| Recurso | Minimo | Recomendado |
-|---------|--------|-------------|
-| CPU | 2 cores | 4+ cores |
-| RAM | 4GB | 8GB+ |
-| Disco | 10GB | 20GB+ |
-
-```bash
-# Verificar recursos disponibles para Docker
-docker info | grep -E "(CPUs|Memory)"
-```
-
-**Respuesta esperada:**
-```
- CPUs: 4
- Total Memory: 7.775GiB
-```
-
-**Si tienes menos recursos:**
-- Cierra otras aplicaciones
-- Aumenta recursos en Docker Desktop settings
-- Usa el profile `test` (single MongoDB, tmpfs)
-
----
-
-## Fase 1: Configuracion Centralizada
-
-### 1.1 Entender el sistema de configuracion
-
-**Objetivo:** Comprender como la configuracion fluye desde el archivo central hasta Docker Compose.
-
-**Por que es importante:** Toda la configuracion vive en un solo lugar (`platform/config/services.yaml`). Esto elimina inconsistencias entre local y remoto.
-
-```
-platform/config/services.yaml  <-- SINGLE SOURCE OF TRUTH
-         |
-         +--> task config:generate
-         |
-         v
-platform/deploy/docker-compose/.env  <-- Variables para Docker Compose
-```
-
----
-
-### 1.2 Verificar configuracion central
-
-**Objetivo:** Revisar que `platform/config/services.yaml` tiene la configuracion correcta.
-
-**Por que es importante:** Este archivo define puertos, bases de datos e imagenes para TODOS los entornos.
-
-```bash
-cat platform/config/services.yaml
-```
-
-**Respuesta esperada:**
 ```yaml
-services:
-  booking:
-    port: 8001
-    dbName: booking
-    image: crizstian/booking-service
-    resources:
-      cpu_request: 100m
-      mem_request: 128Mi
-      cpu_limit: 500m
-      mem_limit: 512Mi
-    dependencies:
-      - seat-service
-      - payment-service
-      - showtime-service
-      - notification-service
+# Dev: 3 nodos con volumes persistentes
+mongo1, mongo2, mongo3  →  rs0 (1 PRIMARY, 2 SECONDARY)
 
-  movie:
-    port: 8002
-    dbName: movie
-    image: crizstian/movie-service
-    ...
+# Test: 1 nodo con tmpfs (efímero)
+mongo  →  rs0 (single-node)
 ```
 
-**Que verificar:**
-- Cada servicio tiene `port`, `dbName`, `image`
-- Los puertos son unicos (8001-8008)
-- Los nombres de imagen corresponden al Docker registry
+**¿Por qué replica set incluso en local?**
+- Transactions requieren replica set (desde MongoDB 4.0)
+- Change streams requieren oplog
+- Paridad con producción
+
+**Inicialización automática:**
+
+```bash
+# platform/docker/mongodb/Dockerfile
+# Ejecuta init.sh que:
+# 1. rs.initiate() con members
+# 2. Espera PRIMARY election
+# 3. Ejecuta seed scripts (04-seed-test-data.js)
+```
+
+### 5.2 Redis
+
+**Uso principal:** Distributed locks para seat holds
+
+```yaml
+redis-dev:
+  image: redis:7-alpine
+  volumes:
+    - redis_data:/data    # Persistencia AOF
+
+redis-test:
+  tmpfs:
+    - /data               # Efímero para tests
+```
+
+**Monitoreo de locks:**
+
+```bash
+# Ver todos los holds activos
+docker exec dev-redis redis-cli KEYS "seat_hold:*"
+
+# Inspeccionar un hold específico
+docker exec dev-redis redis-cli GET "hold:uuid-here"
+
+# TTL de un seat hold
+docker exec dev-redis redis-cli TTL "seat_hold:sht_001:A1"
+```
+
+### 5.3 NATS (Planned)
+
+> **Nota:** NATS está definido en docker-compose pero **no está implementado** en los servicios actualmente. Está reservado para futuras features como:
+> - Event sourcing
+> - Pub/sub para notificaciones en tiempo real
+> - CQRS con proyecciones
+
+```yaml
+# docker-compose.yml - disponible pero no consumido
+nats:
+  image: nats:2.10-alpine
+  ports:
+    - "4222:4222"   # Client connections
+    - "8222:8222"   # HTTP monitoring
+```
+
+### 5.4 Networking
+
+```yaml
+networks:
+  cinema-network:
+    name: cinema-${ENV_PREFIX:-dev}-network
+```
+
+**Resolución DNS interna:**
+- Desde DevContainer: `http://movie:8002`
+- Desde host: `http://localhost:8002`
+
+**Hostnames disponibles:**
+`mongo1`, `mongo2`, `mongo3`, `mongo`, `redis`, `nats`, `movie`, `cinema`, `user`, `showtime`, `seat`, `payment`, `notification`, `booking`
 
 ---
 
-### 1.3 Generar archivo .env
+## 6. Configuración y Despliegue
 
-**Objetivo:** Generar las variables de entorno para Docker Compose.
-
-**Por que es importante:** Docker Compose lee variables desde `.env`. Este paso transforma `services.yaml` en formato que Compose entiende.
+### 6.1 Prerequisitos
 
 ```bash
+# Verificar versiones
+docker --version          # ≥ 24.x
+docker compose version    # ≥ v2.x
+task --version            # ≥ 3.x (opcional pero recomendado)
+```
+
+### 6.2 Generar Configuración
+
+```bash
+# Source of truth: platform/config/services.yaml
+# Genera: platform/deploy/docker-compose/.env
 task config:generate
-```
 
-**Respuesta esperada:**
-```
-=== Generating Docker Compose .env from services.yaml ===
-Reading platform/config/services.yaml...
-Generating platform/deploy/docker-compose/.env...
-Generated environment variables:
-  BOOKING_PORT=8001
-  BOOKING_DB=booking
-  BOOKING_IMAGE=crizstian/booking-service
-  MOVIE_PORT=8002
-  MOVIE_DB=movie
-  MOVIE_IMAGE=crizstian/movie-service
-  ...
-=== Done ===
-```
-
-**Verificar contenido generado:**
-```bash
-cat platform/deploy/docker-compose/.env
-```
-
-**Respuesta esperada:**
-```bash
-# Generated from platform/config/services.yaml
-# Do not edit manually - run 'task config:generate' to regenerate
-
-# Service Ports
-BOOKING_PORT=8001
-MOVIE_PORT=8002
-CINEMA_PORT=8003
-USER_PORT=8004
-SEAT_PORT=8005
-SHOWTIME_PORT=8006
-PAYMENT_PORT=8007
-NOTIFICATION_PORT=8008
-
-# Database Names
-BOOKING_DB=booking
-MOVIE_DB=movie
-CINEMA_DB=cinema
-USER_DB=user
-SEAT_DB=seat
-SHOWTIME_DB=showtime
-PAYMENT_DB=payment
-NOTIFICATION_DB=notification
-
-# Images
-BOOKING_IMAGE=crizstian/booking-service
-MOVIE_IMAGE=crizstian/movie-service
-...
-```
-
-**Si falla:**
-- Verifica que `yq` esta instalado
-- Verifica que `platform/config/services.yaml` existe y tiene formato valido
-
----
-
-### 1.4 Ver configuracion actual
-
-**Objetivo:** Verificar rapidamente los puertos configurados.
-
-**Por que es importante:** Util para debugging y para saber a que puerto conectarte.
-
-```bash
+# Verificar configuración generada
 task config:show
 ```
 
-**Respuesta esperada:**
-```
-=== Service Configuration ===
-booking: port=8001
-movie: port=8002
-cinema: port=8003
-user: port=8004
-seat: port=8005
-showtime: port=8006
-payment: port=8007
-notification: port=8008
-```
-
----
-
-## Fase 2: Iniciar el Entorno
-
-### 2.1 Entender los perfiles
-
-**Objetivo:** Conocer los diferentes modos de ejecucion disponibles.
-
-**Por que es importante:** Cada perfil optimiza para un caso de uso diferente.
-
-| Perfil | MongoDB | Storage | Caso de uso |
-|--------|---------|---------|-------------|
-| `dev` | 3 replicas | Volumes persistentes | Desarrollo diario |
-| `test` | 1 nodo | tmpfs (RAM) | Tests rapidos |
-| `debug` | 3 replicas | Volumes | Debugging con puertos extra |
-| `perf` | 3 replicas | Volumes | Load testing |
-| `e2e` | - | - | Solo runner de tests E2E |
-
-**Arquitectura del perfil `dev`:**
-```
-                    ┌─────────────────────────────────────────────┐
-                    │              Docker Network                  │
-                    │            (cinema-dev-network)              │
-                    └─────────────────────────────────────────────┘
-                                        │
-        ┌───────────────────────────────┼───────────────────────────────┐
-        │                               │                               │
-        ▼                               ▼                               ▼
-┌───────────────┐              ┌───────────────┐              ┌───────────────┐
-│    MongoDB    │              │     Redis     │              │     NATS      │
-│  (3 replicas) │              │    (cache)    │              │  (messaging)  │
-│ mongo1:27017  │              │   redis:6379  │              │   nats:4222   │
-│ mongo2:27018  │              └───────────────┘              └───────────────┘
-│ mongo3:27019  │
-└───────────────┘
-        │
-        └──────────────────────────────────────────────────────────────┐
-                                                                       │
-┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
-│  movie   │  │  cinema  │  │   user   │  │ showtime │  │   seat   │◄─┘
-│  :8002   │  │  :8003   │  │  :8004   │  │  :8006   │  │  :8005   │
-└──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘
-                                                              │
-        ┌─────────────────────────────────────────────────────┤
-        │                                                     │
-        ▼                                                     ▼
-┌───────────────┐  ┌───────────────┐              ┌───────────────────┐
-│    payment    │  │ notification  │              │      booking      │
-│    :8007      │  │    :8008      │              │ (SAGA orchestrator)│
-└───────────────┘  └───────────────┘              │      :8001        │
-                                                  └───────────────────┘
-```
-
----
-
-### 2.2 Iniciar con task (recomendado)
-
-**Objetivo:** Iniciar el entorno de desarrollo completo con un solo comando.
-
-**Por que es importante:** `task dev:up` maneja todas las complejidades: variables de entorno, orden de inicio, espera de healthchecks.
+### 6.3 Levantar Entorno
 
 ```bash
+# Opción 1: Con Task (recomendado)
 task dev:up
-```
 
-**Respuesta esperada:**
-```
-[+] Building 45.2s (120/120) FINISHED
- => [movie internal] load build definition from Dockerfile
- => [cinema internal] load build definition from Dockerfile
- ...
-[+] Running 14/14
- ✔ Network cinema-dev-network  Created
- ✔ Volume "mongo1_data"        Created
- ✔ Volume "mongo2_data"        Created
- ✔ Volume "mongo3_data"        Created
- ✔ Volume "redis_data"         Created
- ✔ Container dev-mongo1        Healthy
- ✔ Container dev-mongo2        Healthy
- ✔ Container dev-mongo3        Healthy
- ✔ Container dev-mongo-init    Exited
- ✔ Container cinema-nats       Healthy
- ✔ Container dev-redis         Healthy
- ✔ Container cinema-movie      Healthy
- ✔ Container cinema-booking    Healthy
- ...
-Waiting for services...
-NAME                   STATUS
-dev-mongo1             healthy
-dev-mongo2             healthy
-dev-mongo3             healthy
-cinema-movie           healthy
-cinema-booking         healthy
-...
-```
-
-**Tiempo esperado:** 2-5 minutos (primera vez, incluye build de imagenes)
-
-**Si tarda mas de 10 minutos:**
-- Verifica conexion a internet (descarga de imagenes base)
-- Verifica espacio en disco: `docker system df`
-- Considera usar imagenes pre-built con `VERSION=latest`
-
----
-
-### 2.3 Que hace `task dev:up` (desmitificando la magia)
-
-**Objetivo:** Entender exactamente que sucede cuando ejecutas `task dev:up` para poder debuggear problemas.
-
-**Por que es importante:** Cuando algo falla, necesitas saber que archivos, variables y comandos estan involucrados. No es magia - es una secuencia de operaciones bien definida.
-
-#### Archivos involucrados
-
-```
-/workspace/
-├── Taskfile.yml                              # Define el task dev:up
-│   └── calls: platform/scripts/taskfile/dev-up.sh
-│
-├── platform/scripts/taskfile/dev-up.sh       # Script que ejecuta el comando
-│   └── calls: docker compose ... --profile dev up
-│
-├── platform/deploy/docker-compose/
-│   ├── docker-compose.yml                    # Definicion de todos los servicios
-│   └── .env                                  # Variables (generado por config:generate)
-│
-├── platform/config/services.yaml             # Source of truth para puertos/config
-│
-└── platform/docker/
-    ├── go-service/Dockerfile                 # Dockerfile para microservicios Go
-    └── mongodb/
-        ├── Dockerfile                        # Init container de MongoDB
-        └── seed/*.js                         # Scripts de inicializacion
-```
-
-#### Contenido del script dev-up.sh
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-COMPOSE_FILE="platform/deploy/docker-compose/docker-compose.yml"
-
-# Variables de entorno que se exportan
-export ENV_PREFIX=dev
-export MONGO_SERVERS="mongo1:27017,mongo2:27017,mongo3:27017"
-
-# Comando que se ejecuta
-docker compose -f "$COMPOSE_FILE" --profile dev up -d --build
-
-# Espera y muestra estado
-echo "Waiting for services..."
-sleep 10
-docker compose -f "$COMPOSE_FILE" --profile dev ps
-```
-
-#### Variables de entorno en juego
-
-| Variable | Valor | Definida en | Usada por |
-|----------|-------|-------------|-----------|
-| `ENV_PREFIX` | `dev` | dev-up.sh | docker-compose.yml (nombres de contenedores) |
-| `MONGO_SERVERS` | `mongo1:27017,...` | dev-up.sh | Servicios Go (conexion a MongoDB) |
-| `MOVIE_PORT` | `8002` | .env (generado) | docker-compose.yml |
-| `MOVIE_DB` | `movie` | .env (generado) | docker-compose.yml |
-| `MOVIE_IMAGE` | `crizstian/movie-service` | .env (generado) | docker-compose.yml |
-| `VERSION` | `dev` (default) | No definida | docker-compose.yml (tag de imagen) |
-
-**Como docker-compose.yml usa las variables:**
-
-```yaml
-# Ejemplo: servicio movie en docker-compose.yml
-movie:
-  image: ${MOVIE_IMAGE:-crizstian/movie-service}:${VERSION:-dev}
-  container_name: ${ENV_PREFIX:-cinema}-movie
-  ports:
-    - "${MOVIE_PORT:-8002}:${MOVIE_PORT:-8002}"
-  environment:
-    DB_SERVERS: "${MONGO_SERVERS:-mongo:27017}"
-    DB_NAME: "${MOVIE_DB:-movie}"
-    SERVICE_PORT: "${MOVIE_PORT:-8002}"
-```
-
-#### Orden de operaciones
-
-```
-task dev:up
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  1. Taskfile.yml busca el task "dev:up"                             │
-│     - Ubicacion: /workspace/Taskfile.yml                            │
-│     - Linea: dev:up → calls platform/scripts/taskfile/dev-up.sh     │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  2. Script dev-up.sh se ejecuta                                     │
-│     - Exporta ENV_PREFIX=dev                                        │
-│     - Exporta MONGO_SERVERS=mongo1:27017,mongo2:27017,mongo3:27017  │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  3. Docker Compose lee configuracion                                │
-│     - Lee docker-compose.yml                                        │
-│     - Lee .env automaticamente (mismo directorio)                   │
-│     - Combina variables de entorno exportadas + .env                │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  4. Docker Compose filtra por profile "dev"                         │
-│     - Solo inicia servicios con "profiles: [dev, ...]"              │
-│     - Excluye servicios con otros profiles (ej: test, e2e)          │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  5. Docker construye imagenes (--build)                             │
-│     - Para cada servicio, lee el Dockerfile especificado            │
-│     - Construye imagen con tag ${VERSION:-dev}                      │
-│     - Cache de layers acelera rebuilds                              │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  6. Docker crea recursos                                            │
-│     - Network: cinema-dev-network                                   │
-│     - Volumes: mongo1_data, mongo2_data, mongo3_data, redis_data    │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  7. Docker inicia contenedores (respetando depends_on)              │
-│                                                                     │
-│     Orden de inicio:                                                │
-│     ┌─────────────────────────────────────────────────────────────┐ │
-│     │  Primero: mongo1, mongo2, mongo3 (en paralelo)              │ │
-│     │  Esperan: healthcheck (mongosh ping)                        │ │
-│     └───────────────────────────┬─────────────────────────────────┘ │
-│                                 │                                   │
-│     ┌───────────────────────────▼─────────────────────────────────┐ │
-│     │  Segundo: mongo-init (depends_on: mongo1,2,3 healthy)       │ │
-│     │  Ejecuta: /init.sh (rs.initiate + seed scripts)             │ │
-│     │  Termina: Exit 0                                            │ │
-│     └───────────────────────────┬─────────────────────────────────┘ │
-│                                 │                                   │
-│     ┌───────────────────────────▼─────────────────────────────────┐ │
-│     │  Tercero: redis, nats (en paralelo, sin dependencias)       │ │
-│     │  Esperan: healthcheck propio                                │ │
-│     └───────────────────────────┬─────────────────────────────────┘ │
-│                                 │                                   │
-│     ┌───────────────────────────▼─────────────────────────────────┐ │
-│     │  Cuarto: Todos los microservicios Go (en paralelo)          │ │
-│     │  Esperan: healthcheck /health/live                          │ │
-│     └─────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-#### Troubleshooting de `task dev:up`
-
-**Problema: "task: command not found"**
-
-```bash
-# Verificar instalacion
-which task
-
-# Si no existe, instalar
-brew install go-task  # macOS
-# o
-sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin  # Linux
-```
-
-**Problema: "No such file: platform/scripts/taskfile/dev-up.sh"**
-
-```bash
-# Verificar que existe el script
-ls -la platform/scripts/taskfile/dev-up.sh
-
-# Si no existe, verificar la rama
-git status
-```
-
-**Problema: ".env file not found" o variables vacias**
-
-```bash
-# Verificar que .env existe
-ls -la platform/deploy/docker-compose/.env
-
-# Si no existe, generarlo
-task config:generate
-
-# Verificar contenido
-cat platform/deploy/docker-compose/.env | head -20
-```
-
-**Problema: "port is already allocated"**
-
-```bash
-# Ver que usa el puerto
-lsof -i :8002
-
-# Detener compose anterior
-docker compose -f platform/deploy/docker-compose/docker-compose.yml down
-
-# O matar el proceso
-kill -9 <PID>
-```
-
-**Problema: "network not found" o "volume not found"**
-
-```bash
-# Limpiar recursos huerfanos
-docker network prune -f
-docker volume prune -f
-
-# Reintentar
-task dev:up
-```
-
-**Problema: Servicios nunca llegan a "healthy"**
-
-```bash
-# Ver logs del servicio que falla
-docker logs cinema-booking --tail 100
-
-# Ver eventos de Docker
-docker events --filter container=cinema-booking &
-
-# Ver healthcheck especifico
-docker inspect cinema-booking | jq '.[0].State.Health'
-```
-
-#### Ejecutar pasos individualmente (debug avanzado)
-
-Si `task dev:up` falla, puedes ejecutar cada paso manualmente:
-
-```bash
-# Paso 1: Exportar variables manualmente
-export ENV_PREFIX=dev
-export MONGO_SERVERS="mongo1:27017,mongo2:27017,mongo3:27017"
-
-# Paso 2: Iniciar solo infraestructura primero
-docker compose -f platform/deploy/docker-compose/docker-compose.yml \
-  --profile dev up -d mongo1 mongo2 mongo3
-
-# Paso 3: Esperar a que MongoDB este healthy
-docker compose -f platform/deploy/docker-compose/docker-compose.yml \
-  --profile dev ps mongo1 mongo2 mongo3
-
-# Paso 4: Ejecutar init manualmente
-docker compose -f platform/deploy/docker-compose/docker-compose.yml \
-  --profile dev up mongo-init-dev
-
-# Paso 5: Iniciar Redis y NATS
-docker compose -f platform/deploy/docker-compose/docker-compose.yml \
-  --profile dev up -d redis-dev nats
-
-# Paso 6: Iniciar un servicio a la vez
-docker compose -f platform/deploy/docker-compose/docker-compose.yml \
-  --profile dev up -d --build movie
-
-# Paso 7: Verificar logs
-docker logs cinema-movie
-
-# Paso 8: Si funciona, iniciar el resto
-docker compose -f platform/deploy/docker-compose/docker-compose.yml \
-  --profile dev up -d --build
-```
-
----
-
-### 2.4 Iniciar manualmente (avanzado)
-
-**Objetivo:** Entender el comando subyacente para casos especiales.
-
-**Por que es importante:** Util cuando necesitas personalizar el inicio o debuggear problemas.
-
-```bash
-# Paso 1: Definir variables de entorno
-export ENV_PREFIX=dev
-export MONGO_SERVERS="mongo1:27017,mongo2:27017,mongo3:27017"
-
-# Paso 2: Iniciar con el perfil dev
-docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev up -d --build
-```
-
-**Explicacion de flags:**
-- `-f ...`: Especifica ubicacion del docker-compose.yml
-- `--profile dev`: Activa solo contenedores del perfil dev
-- `up`: Crea e inicia contenedores
-- `-d`: Detached mode (background)
-- `--build`: Reconstruye imagenes si hay cambios
-
-**Para iniciar SIN rebuild (mas rapido):**
-```bash
+# Opción 2: Docker Compose directo
 docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev up -d
 ```
 
----
+**Primera vez:** 3-5 minutos (build de imágenes + init MongoDB)
+**Subsecuentes:** 30-60 segundos
 
-### 2.5 Ver estado de contenedores
+### 6.4 Perfiles Disponibles
 
-**Objetivo:** Verificar que todos los contenedores estan corriendo.
-
-**Por que es importante:** Un contenedor caido significa que ese servicio no esta disponible.
+| Perfil | MongoDB | Storage | Caso de uso |
+|--------|---------|---------|-------------|
+| `dev` | 3 replicas | Volumes | Desarrollo diario |
+| `test` | 1 nodo | tmpfs | Tests rápidos, CI |
+| `debug` | 3 replicas | Volumes | + puertos de debug |
+| `perf` | 3 replicas | Volumes | Load testing |
+| `e2e` | (con test) | tmpfs | E2E test runner |
 
 ```bash
+# Cambiar perfil
+docker compose --profile test up -d
+docker compose --profile debug up -d
+```
+
+### 6.5 Variables de Entorno Clave
+
+```bash
+# .env generado
+ENV_PREFIX=dev                    # Prefijo de containers
+MONGO_SERVERS=mongo1:27017        # Connection string
+VERSION=dev                       # Tag de imágenes
+HOLD_TTL_SECONDS=300              # TTL de seat holds (5 min)
+JWT_SECRET=dev-secret-change-in-production
+```
+
+---
+
+## 7. Seguridad
+
+### 7.1 Consideraciones de Seguridad para Desarrollo Local
+
+> **ADVERTENCIA:** Esta configuración es para desarrollo local únicamente. NO usar en producción sin los cambios indicados.
+
+| Componente | Estado Dev | Acción para Producción |
+|------------|------------|------------------------|
+| **JWT_SECRET** | `dev-secret-change-in-production` | Generar secret fuerte (256+ bits), almacenar en secrets manager |
+| **MongoDB** | Sin autenticación | Habilitar auth, crear usuarios con least privilege |
+| **Redis** | Sin password | Configurar `requirepass`, usar TLS |
+| **Stripe keys** | Mock (`pk_test_mock`) | Usar keys reales de Stripe Dashboard |
+| **TLS/HTTPS** | No configurado | Terminar TLS en ingress/load balancer |
+| **Network** | Todos los puertos expuestos | Solo exponer gateway, servicios internos sin puertos públicos |
+
+### 7.2 Autenticación JWT
+
+El servicio `user` implementa JWT con tokens de acceso y refresh:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          JWT Token Flow                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  ┌────────┐                                    ┌────────────┐
+  │ Client │                                    │   user     │
+  └───┬────┘                                    │  service   │
+      │                                         └─────┬──────┘
+      │  POST /users/login                            │
+      │  {email, password}                            │
+      │──────────────────────────────────────────────>│
+      │                                               │
+      │  200 OK                                       │
+      │  {                                            │
+      │    access_token: "eyJ..." (TTL: 15min)       │
+      │    refresh_token: "eyJ..." (TTL: 7 days)     │
+      │    expires_in: 900                            │
+      │  }                                            │
+      │<──────────────────────────────────────────────│
+      │                                               │
+      │  GET /users/me                                │
+      │  Authorization: Bearer {access_token}         │
+      │──────────────────────────────────────────────>│
+      │                                               │
+      │  200 OK {user profile}                        │
+      │<──────────────────────────────────────────────│
+      │                                               │
+      │  ... access_token expires ...                 │
+      │                                               │
+      │  POST /users/refresh                          │
+      │  {refresh_token: "eyJ..."}                    │
+      │──────────────────────────────────────────────>│
+      │                                               │
+      │  200 OK {new access_token, new refresh_token} │
+      │<──────────────────────────────────────────────│
+      │                                               │
+      │  POST /users/logout                           │
+      │  Authorization: Bearer {access_token}         │
+      │──────────────────────────────────────────────>│
+      │                                               │
+      │  200 OK (token blacklisted in Redis)          │
+      │<──────────────────────────────────────────────│
+```
+
+### 7.3 Validaciones de Input
+
+| Servicio | Campo | Validación |
+|----------|-------|------------|
+| user | password | Mínimo 8 caracteres |
+| user | email | Formato válido, único |
+| seat | session_id | Mínimo 10 caracteres |
+| seat | seat_ids | Máximo 10 asientos por hold |
+| booking | hold_id | UUID válido, no expirado |
+
+---
+
+## 8. Validación del Sistema
+
+### 8.1 Estado de Contenedores
+
+```bash
+# Vista rápida
 task dev:status
+
+# O manualmente
+docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev ps
 ```
 
-**O directamente:**
-```bash
-docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev ps -a
-```
+**Estado esperado:**
+- Todos los servicios: `healthy`
+- `dev-mongo-init`: `Exited (0)` — es un init container
 
-**Respuesta esperada:**
-```
-NAME                   IMAGE                              STATUS                   PORTS
-dev-mongo1             mongo:8.0                          healthy                  0.0.0.0:27017->27017/tcp
-dev-mongo2             mongo:8.0                          healthy                  0.0.0.0:27018->27017/tcp
-dev-mongo3             mongo:8.0                          healthy                  0.0.0.0:27019->27017/tcp
-dev-mongo-init         docker-compose-mongo-init-dev      Exited (0)
-dev-redis              redis:7-alpine                     healthy                  0.0.0.0:6379->6379/tcp
-cinema-nats            nats:2.10-alpine                   healthy                  0.0.0.0:4222->4222/tcp
-cinema-movie           crizstian/movie-service:dev        healthy                  0.0.0.0:8002->8002/tcp
-cinema-cinema          crizstian/cinema-service:dev       healthy                  0.0.0.0:8003->8003/tcp
-cinema-user            crizstian/user-service:dev         healthy                  0.0.0.0:8004->8004/tcp
-cinema-seat            crizstian/seat-service:dev         healthy                  0.0.0.0:8005->8005/tcp
-cinema-showtime        crizstian/showtime-service:dev     healthy                  0.0.0.0:8006->8006/tcp
-cinema-payment         crizstian/payment-service:dev      healthy                  0.0.0.0:8007->8007/tcp
-cinema-notification    crizstian/notification-service:dev healthy                  0.0.0.0:8008->8008/tcp
-cinema-booking         crizstian/booking-service:dev      healthy                  0.0.0.0:8001->8001/tcp
-```
-
-**Que verificar:**
-- Todos los servicios muestran `healthy`
-- `mongo-init` muestra `Exited (0)` (es un job one-shot, debe terminar)
-- Los puertos coinciden con `config:show`
-
-**Si un servicio muestra `unhealthy` o `restarting`:**
-```bash
-# Ver logs del servicio problematico
-docker logs cinema-booking --tail 50
-```
-
----
-
-## Fase 3: Validacion de Servicios
-
-### 3.1 Health Checks basicos
-
-**Objetivo:** Verificar que cada servicio responde a su endpoint de salud.
-
-**Por que es importante:** Un contenedor `healthy` no garantiza que la aplicacion funcione. Los health checks verifican la aplicacion real.
+### 8.2 Health Checks Sistemáticos
 
 ```bash
-echo "=== Health Checks ==="
+# Script de validación completa
+services=("booking:8001" "movie:8002" "cinema:8003" "user:8004" "seat:8005" "showtime:8006" "payment:8007" "notification:8008")
 
-for port in 8001 8002 8003 8004 8005 8006 8007 8008; do
-  response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$port/health/live)
-  if [ "$response" = "200" ]; then
-    echo "Port $port: OK"
-  else
-    echo "Port $port: FAIL (HTTP $response)"
-  fi
+for svc in "${services[@]}"; do
+  name="${svc%%:*}"; port="${svc##*:}"
+  status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://$name:$port/health/live)
+  printf "%-15s %s\n" "$name:" "$([[ $status == 200 ]] && echo '✓ healthy' || echo '✗ unhealthy')"
 done
 ```
 
-**Respuesta esperada:**
-```
-=== Health Checks ===
-Port 8001: OK
-Port 8002: OK
-Port 8003: OK
-Port 8004: OK
-Port 8005: OK
-Port 8006: OK
-Port 8007: OK
-Port 8008: OK
-```
+### 8.3 Validación de Infraestructura
 
-**Health endpoints disponibles:**
-
-| Endpoint | Proposito | Cuando falla |
-|----------|-----------|--------------|
-| `/health/live` | Proceso vivo | Contenedor crasheado |
-| `/health/ready` | Listo para trafico | Dependencias caidas |
-| `/ping` | Legacy | Deprecado |
-
----
-
-### 3.2 Verificar MongoDB Replica Set
-
-**Objetivo:** Confirmar que MongoDB esta funcionando como replica set.
-
-**Por que es importante:** Los microservicios usan transacciones que requieren replica set. Sin el, las operaciones de booking fallaran.
+**MongoDB Replica Set:**
 
 ```bash
-docker exec dev-mongo1 mongosh --eval "rs.status()" | grep -E "(name|stateStr)"
+# Estado del replica set
+docker exec dev-mongo1 mongosh --quiet --eval "
+  rs.status().members.forEach(m => 
+    print(m.name + ' → ' + m.stateStr + ' (health: ' + m.health + ')')
+  )
+"
+
+# Esperado:
+# mongo1:27017 → PRIMARY (health: 1)
+# mongo2:27017 → SECONDARY (health: 1)
+# mongo3:27017 → SECONDARY (health: 1)
 ```
 
-**Respuesta esperada:**
-```
-name: 'rs0',
-      name: 'mongo1:27017',
-      stateStr: 'PRIMARY',
-      name: 'mongo2:27017',
-      stateStr: 'SECONDARY',
-      name: 'mongo3:27017',
-      stateStr: 'SECONDARY',
-```
-
-**Que verificar:**
-- Un nodo es `PRIMARY`
-- Dos nodos son `SECONDARY`
-- El replica set se llama `rs0`
-
-**Si falla:**
-```bash
-# Reiniciar el init container
-docker restart dev-mongo-init
-
-# Ver logs del init
-docker logs dev-mongo-init
-```
-
----
-
-### 3.3 Verificar Redis
-
-**Objetivo:** Confirmar que Redis esta disponible para cache de sesiones.
-
-**Por que es importante:** El servicio `seat` usa Redis para locks temporales de asientos. Sin Redis, los holds de asientos no funcionan.
+**Redis:**
 
 ```bash
 docker exec dev-redis redis-cli ping
+# Esperado: PONG
+
+# Info de memoria
+docker exec dev-redis redis-cli INFO memory | grep used_memory_human
 ```
 
-**Respuesta esperada:**
-```
-PONG
-```
+### 8.4 Verificación de Seed Data
 
 ```bash
-# Ver informacion del servidor
-docker exec dev-redis redis-cli info server | head -5
-```
-
-**Respuesta esperada:**
-```
-# Server
-redis_version:7.2.4
-redis_git_sha1:00000000
-redis_git_dirty:0
-redis_build_id:...
-```
-
----
-
-### 3.4 Verificar NATS
-
-**Objetivo:** Confirmar que NATS esta disponible para mensajeria.
-
-**Por que es importante:** Los servicios usan NATS para eventos asincronos (notificaciones, actualizaciones).
-
-```bash
-curl -s http://localhost:8222/healthz
-```
-
-**Respuesta esperada:**
-```
-ok
-```
-
-```bash
-# Ver estado del servidor
-curl -s http://localhost:8222/varz | head -10
-```
-
-**Respuesta esperada:**
-```json
-{
-  "server_id": "XXXXXXXXXXXXXXXXXXXXXXXX",
-  "server_name": "XXXXXXXXXXXXXXXXXXXXXXXX",
-  "version": "2.10.x",
-  "proto": 1,
-  "go": "go1.21.x",
-  ...
-}
-```
-
----
-
-### 3.5 Verificar conectividad entre servicios
-
-**Objetivo:** Confirmar que los servicios pueden comunicarse entre si.
-
-**Por que es importante:** Los servicios se comunican via la red Docker. Si la red falla, las llamadas inter-servicio fallan.
-
-```bash
-# Desde booking, verificar que puede alcanzar payment
-docker exec cinema-booking wget -qO- --timeout=5 http://payment:8007/health/ready
-```
-
-**Respuesta esperada:**
-```
-pong
-```
-
-```bash
-# Verificar todas las dependencias de booking
-echo "=== Conectividad desde booking ==="
-for svc in payment seat showtime notification; do
-  docker exec cinema-booking wget -qO- --timeout=3 http://$svc:80${svc:0:1}0${svc:4:1}/health/live 2>/dev/null \
-    && echo "  $svc: OK" || echo "  $svc: FAIL"
+# Contar documentos por base de datos
+for db in movie cinema showtime seat; do
+  count=$(docker exec dev-mongo1 mongosh $db --quiet --eval "
+    db.getCollectionNames().map(c => c + ':' + db.getCollection(c).countDocuments()).join(', ')
+  ")
+  echo "$db → $count"
 done
-```
 
-**Nota:** El hostname dentro de Docker es el nombre del servicio (`payment`, `seat`, etc.), no `localhost`.
+# Esperado:
+# movie → movies:2
+# cinema → cinemas:1, rooms:2
+# showtime → showtimes:2
+# seat → room_layouts:1, showtimes:2
+```
 
 ---
 
-## Fase 4: Testing de APIs
+## 9. Flujos de Negocio
 
-### 4.1 Listar peliculas
-
-**Objetivo:** Verificar que el servicio movie responde con datos.
-
-**Por que es importante:** Este es el flujo mas simple. Si falla, hay un problema fundamental.
+### 9.1 Catálogo de Películas
 
 ```bash
-curl -s http://localhost:8002/api/movies | jq '.'
+# Listar películas
+curl -s http://movie:8002/movies | jq '.movies[] | {id, title, duration}'
+
+# Detalle de película
+curl -s http://movie:8002/movies/mov_shawshank | jq '{title, director, synopsis}'
+
+# Películas en premiere
+curl -s http://movie:8002/movies/premieres | jq '.movies'
 ```
 
-**Respuesta esperada (con datos de seed):**
-```json
-[
-  {
-    "id": "mov_shawshank",
-    "title": "The Shawshank Redemption",
-    "director": "Frank Darabont",
-    "duration": 142,
-    "rating": "R",
-    "year": 1994
-  },
-  {
-    "id": "mov_inception",
-    "title": "Inception",
-    "director": "Christopher Nolan",
-    "duration": 148,
-    "rating": "PG-13",
-    "year": 2010
-  }
-]
-```
-
-**Si responde `[]` (vacio):**
-- Los datos de seed no se cargaron
-- Verifica logs: `docker logs dev-mongo-init`
-- Re-ejecuta seed: `docker restart dev-mongo-init`
-
-**Si responde error 500:**
-- El servicio no puede conectar a MongoDB
-- Verifica logs: `docker logs cinema-movie`
-
----
-
-### 4.2 Crear usuario
-
-**Objetivo:** Verificar el flujo de creacion de usuarios.
+### 9.2 Autenticación Completa
 
 ```bash
-curl -s -X POST http://localhost:8004/api/users \
+# 1. Registro (password mínimo 8 caracteres)
+curl -s -X POST http://user:8004/users/register \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "test@example.com",
-    "name": "Test User",
-    "password": "test123"
-  }' | jq '.'
+  -d '{"email":"demo@test.com","name":"Demo User","password":"demo12345"}' | jq '.'
+
+# 2. Login
+TOKENS=$(curl -s -X POST http://user:8004/users/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@test.com","password":"demo12345"}')
+
+ACCESS_TOKEN=$(echo $TOKENS | jq -r '.access_token')
+REFRESH_TOKEN=$(echo $TOKENS | jq -r '.refresh_token')
+
+echo "Access Token: ${ACCESS_TOKEN:0:50}..."
+echo "Refresh Token: ${REFRESH_TOKEN:0:50}..."
+
+# 3. Perfil autenticado
+curl -s http://user:8004/users/me \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq '.user'
+
+# 4. Actualizar perfil
+curl -s -X PUT http://user:8004/users/me \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Updated Name"}' | jq '.'
+
+# 5. Ver mis reservas
+curl -s http://user:8004/users/me/bookings \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq '.'
+
+# 6. Refresh token
+curl -s -X POST http://user:8004/users/refresh \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh_token\":\"$REFRESH_TOKEN\"}" | jq '.'
+
+# 7. Logout (blacklist token)
+curl -s -X POST http://user:8004/users/logout \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq '.'
 ```
 
-**Respuesta esperada:**
-```json
-{
-  "id": "usr_xxxxxxxx",
-  "email": "test@example.com",
-  "name": "Test User",
-  "created_at": "2024-04-20T10:30:00Z"
-}
-```
-
----
-
-### 4.3 Obtener showtimes
-
-**Objetivo:** Verificar que showtimes devuelve funciones disponibles.
+### 9.3 Consulta de Funciones
 
 ```bash
-curl -s http://localhost:8006/api/showtimes | jq '.'
+# Listar showtimes
+curl -s http://showtime:8006/showtimes | jq '.data[] | {id, movie_id, start_time, price}'
+
+# Detalle de showtime
+curl -s http://showtime:8006/showtimes/sht_001 | jq '.'
 ```
 
-**Respuesta esperada:**
-```json
-[
-  {
-    "id": "sht_001",
-    "movie_id": "mov_shawshank",
-    "cinema_id": "cin_downtown",
-    "room_id": "room_1",
-    "start_time": "2024-04-21T19:00:00Z",
-    "price": 150
-  }
-]
-```
-
----
-
-### 4.4 Ver mapa de asientos
-
-**Objetivo:** Verificar que el servicio seat devuelve disponibilidad.
+### 9.4 Disponibilidad de Asientos
 
 ```bash
-# Obtener showtime ID primero
-SHOWTIME_ID=$(curl -s http://localhost:8006/api/showtimes | jq -r '.[0].id')
+# Ver mapa de asientos
+curl -s "http://seat:8005/seats/availability?showtime_id=sht_001" | jq '{
+  room: .room_id,
+  layout: "\(.room_layout.rows)x\(.room_layout.columns)",
+  summary: .summary
+}'
 
-# Ver asientos disponibles
-curl -s "http://localhost:8005/api/showtimes/${SHOWTIME_ID}/seats" | jq '.'
+# Esperado:
+# {
+#   "room": "room_001",
+#   "layout": "10x10",
+#   "summary": { "total": 100, "available": 100, "held": 0, "reserved": 0 }
+# }
 ```
 
-**Respuesta esperada:**
-```json
-{
-  "showtime_id": "sht_001",
-  "total_seats": 100,
-  "available": 98,
-  "seats": [
-    {"id": "A1", "row": "A", "number": 1, "type": "VIP", "status": "available"},
-    {"id": "A2", "row": "A", "number": 2, "type": "VIP", "status": "available"},
-    ...
-  ]
-}
-```
-
----
-
-### 4.5 Flujo completo de booking
-
-**Objetivo:** Ejecutar el flujo end-to-end de reserva.
-
-**Por que es importante:** Este flujo involucra todos los servicios (SAGA pattern). Si funciona, todo el sistema esta correcto.
+### 9.5 Flujo Completo de Reserva
 
 ```bash
-# Paso 1: Crear usuario
-USER=$(curl -s -X POST http://localhost:8004/api/users \
-  -H "Content-Type: application/json" \
-  -d '{"email": "booking-test@example.com", "name": "Booking Test", "password": "test123"}')
-USER_ID=$(echo $USER | jq -r '.id')
-echo "Created user: $USER_ID"
+#!/bin/bash
+# E2E booking flow
 
-# Paso 2: Obtener showtime
-SHOWTIME=$(curl -s http://localhost:8006/api/showtimes | jq '.[0]')
-SHOWTIME_ID=$(echo $SHOWTIME | jq -r '.id')
-echo "Using showtime: $SHOWTIME_ID"
+echo "=== Step 1: Get showtime ==="
+SHOWTIME_ID=$(curl -s http://showtime:8006/showtimes | jq -r '.data[0].id')
+echo "Showtime: $SHOWTIME_ID"
 
-# Paso 3: Hold seats
-HOLD=$(curl -s -X POST "http://localhost:8005/api/showtimes/${SHOWTIME_ID}/hold" \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "'$USER_ID'", "seats": ["A1", "A2"]}')
-HOLD_ID=$(echo $HOLD | jq -r '.hold_id')
-echo "Hold created: $HOLD_ID"
+echo -e "\n=== Step 2: Check availability ==="
+curl -s "http://seat:8005/seats/availability?showtime_id=$SHOWTIME_ID" | jq '.summary'
 
-# Paso 4: Create booking
-BOOKING=$(curl -s -X POST http://localhost:8001/api/bookings \
+echo -e "\n=== Step 3: Hold seats ==="
+SESSION_ID="session_$(date +%s)_demo"
+HOLD_RESPONSE=$(curl -s -X POST http://seat:8005/seats/hold \
   -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "'$USER_ID'",
-    "showtime_id": "'$SHOWTIME_ID'",
-    "hold_id": "'$HOLD_ID'",
-    "seats": ["A1", "A2"],
-    "payment": {
-      "method": "card",
-      "token": "tok_mock_visa"
+  -d "{\"showtime_id\":\"$SHOWTIME_ID\",\"seat_ids\":[\"A1\",\"A2\"],\"session_id\":\"$SESSION_ID\"}")
+HOLD_ID=$(echo $HOLD_RESPONSE | jq -r '.hold_id')
+echo "Hold ID: $HOLD_ID"
+echo "Expires: $(echo $HOLD_RESPONSE | jq -r '.expires_at')"
+echo "TTL: $(echo $HOLD_RESPONSE | jq -r '.ttl_seconds')s"
+
+echo -e "\n=== Step 4: Verify hold in Redis ==="
+docker exec dev-redis redis-cli TTL "seat_hold:${SHOWTIME_ID}:A1"
+
+echo -e "\n=== Step 5: Create booking ==="
+BOOKING=$(curl -s -X POST http://booking:8001/booking \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"booking\": {
+      \"showtime_id\": \"$SHOWTIME_ID\",
+      \"hold_id\": \"$HOLD_ID\",
+      \"session_id\": \"$SESSION_ID\",
+      \"payment\": {
+        \"card_number\": \"4242424242424242\",
+        \"exp_month\": 12,
+        \"exp_year\": 2027,
+        \"cvv\": \"123\"
+      }
     }
-  }')
-echo "Booking result:"
-echo $BOOKING | jq '.'
-```
+  }")
+echo "$BOOKING" | jq '{msg, payment, ticket: .ticket.order_id}'
 
-**Respuesta esperada:**
-```json
-{
-  "order_id": "ORD-20240420-XXXXX",
-  "status": "confirmed",
-  "user_id": "usr_xxxxxxxx",
-  "showtime_id": "sht_001",
-  "seats": ["A1", "A2"],
-  "total": 300,
-  "payment_id": "pay_xxxxxxxx",
-  "created_at": "2024-04-20T10:35:00Z"
-}
+echo -e "\n=== Step 6: Verify seat reserved in MongoDB ==="
+docker exec dev-mongo1 mongosh seat --quiet --eval "
+  db.reservations.findOne({showtime_id: '$SHOWTIME_ID'}, {seat_ids: 1, booking_id: 1})
+"
 ```
 
 ---
 
-### 4.6 Ver logs en tiempo real
+## 10. Troubleshooting Avanzado
 
-**Objetivo:** Monitorear la actividad de los servicios durante testing.
+### 10.1 Container en "Restarting" Loop
 
-```bash
-# Logs de todos los servicios
-task dev:logs
+**Síntoma:** `docker ps` muestra estado `Restarting (1)`
 
-# Logs de un servicio especifico
-task dev:logs SERVICE=booking
-
-# O directamente
-docker logs cinema-booking -f --tail 50
-```
-
-**Respuesta esperada:**
-```
-time="2024-04-20T10:30:00Z" level=info msg="--- Booking Service ---"
-time="2024-04-20T10:30:01Z" level=info msg="Connected to MongoDB"
-time="2024-04-20T10:30:01Z" level=info msg="Server started on :8001"
-time="2024-04-20T10:35:00Z" level=info msg="POST /api/bookings" user_id=usr_xxx
-time="2024-04-20T10:35:01Z" level=info msg="SAGA: Validating showtime"
-time="2024-04-20T10:35:01Z" level=info msg="SAGA: Processing payment"
-time="2024-04-20T10:35:02Z" level=info msg="SAGA: Confirming seats"
-time="2024-04-20T10:35:02Z" level=info msg="SAGA: Sending notification"
-time="2024-04-20T10:35:02Z" level=info msg="Booking confirmed" order_id=ORD-xxx
-```
-
----
-
-## Fase 5: Troubleshooting
-
-### 5.1 Contenedor en estado "Restarting"
-
-**Objetivo:** Diagnosticar por que un contenedor se reinicia constantemente.
-
-**Por que ocurre:** La aplicacion falla al iniciar, generalmente por dependencias no disponibles.
+**Diagnóstico:**
 
 ```bash
-# Ver estado actual
-docker ps -a | grep -E "(Restarting|unhealthy)"
+# Ver últimos logs
+docker logs cinema-seat --tail 100
 
-# Ver logs del contenedor
-docker logs cinema-booking --tail 100
+# Patrones comunes:
+# "connection refused" → Dependencia no disponible
+# "no reachable servers" → MongoDB replica set no inicializado
+# "context deadline exceeded" → Timeout de conexión
 ```
 
-**Errores comunes y soluciones:**
-
-| Error en logs | Causa | Solucion |
-|---------------|-------|----------|
-| `connection refused` | MongoDB no disponible | Esperar a que mongo1 este healthy |
-| `no reachable servers` | Replica set no iniciado | Reiniciar `mongo-init` |
-| `dial tcp: lookup` | DNS no resuelve | Verificar red Docker |
-| `context deadline exceeded` | Timeout de conexion | Aumentar timeouts |
+**Solución típica (timing de MongoDB):**
 
 ```bash
-# Reiniciar un servicio especifico
-docker compose -f platform/deploy/docker-compose/docker-compose.yml restart booking
+# Esperar a que MongoDB esté ready
+docker exec dev-mongo1 mongosh --quiet --eval "rs.status().ok"
+# Debe retornar: 1
 
-# Reiniciar solo los servicios (sin infra)
-docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev restart movie cinema user showtime seat payment notification booking
+# Reiniciar servicios afectados
+docker restart cinema-seat cinema-cinema
+
+# Verificar recovery
+docker logs cinema-seat --tail 20 --follow
 ```
 
----
+### 10.2 Replica Set No Inicializado
 
-### 5.2 MongoDB no inicia replica set
+**Síntoma:** Servicios fallan con "no reachable servers"
 
-**Objetivo:** Solucionar problemas con la inicializacion del replica set.
-
-**Por que ocurre:** Los nodos MongoDB necesitan estar healthy antes de configurar el replica set.
+**Diagnóstico:**
 
 ```bash
-# Ver estado de los nodos
-docker ps | grep mongo
-
-# Ver logs del init container
+# Verificar estado de mongo-init
 docker logs dev-mongo-init
 
-# Ver logs de mongo1
-docker logs dev-mongo1 --tail 50
+# Check si rs.initiate() ejecutó
+docker exec dev-mongo1 mongosh --quiet --eval "rs.status().set"
+# Si retorna null → no inicializado
 ```
 
-**Errores comunes:**
-
-| Error | Causa | Solucion |
-|-------|-------|----------|
-| `NotYetInitialized` | rs.initiate no ejecutado | Reiniciar mongo-init |
-| `already initialized` | Ya existe el replica set | Ignorar, es normal |
-| `no host described` | Hostnames incorrectos | Verificar docker-compose.yml |
+**Solución:**
 
 ```bash
-# Forzar reinicializacion del replica set
+# Opción 1: Re-ejecutar init container
+docker restart dev-mongo-init
+
+# Opción 2: Inicializar manualmente
 docker exec dev-mongo1 mongosh --eval "
   rs.initiate({
     _id: 'rs0',
     members: [
-      { _id: 0, host: 'mongo1:27017', priority: 2 },
-      { _id: 1, host: 'mongo2:27017', priority: 1 },
-      { _id: 2, host: 'mongo3:27017', priority: 1 }
+      {_id: 0, host: 'mongo1:27017', priority: 3},
+      {_id: 1, host: 'mongo2:27017', priority: 2},
+      {_id: 2, host: 'mongo3:27017', priority: 1}
     ]
   })
 "
+
+# Esperar election (10-30s)
+sleep 15
+
+# Verificar PRIMARY
+docker exec dev-mongo1 mongosh --quiet --eval "rs.status().members.find(m => m.stateStr === 'PRIMARY').name"
 ```
 
----
+### 10.3 Datos de Seed No Cargados
 
-### 5.3 Puerto ya en uso
+**Síntoma:** APIs retornan arrays vacíos
 
-**Objetivo:** Resolver conflictos de puertos.
-
-**Por que ocurre:** Otra aplicacion (o ejecucion anterior) esta usando el puerto.
+**Diagnóstico:**
 
 ```bash
-# Ver que esta usando el puerto 8002
-lsof -i :8002
-
-# O en Linux
-ss -tlnp | grep 8002
+# Verificar conteo de documentos
+docker exec dev-mongo1 mongosh movie --quiet --eval "db.movies.countDocuments()"
+# Si es 0 → seed no ejecutó
 ```
 
-**Soluciones:**
+**Solución:**
 
 ```bash
-# Opcion 1: Detener el proceso que usa el puerto
-kill -9 <PID>
+# Re-ejecutar seed manualmente
+docker exec dev-mongo1 mongosh < platform/docker/mongodb/seed/04-seed-test-data.js
 
-# Opcion 2: Detener Docker Compose anterior
-docker compose -f platform/deploy/docker-compose/docker-compose.yml down
-
-# Opcion 3: Usar puertos diferentes en .env
-# Editar platform/deploy/docker-compose/.env (no recomendado, regenerar mejor)
-```
-
----
-
-### 5.4 Sin espacio en disco
-
-**Objetivo:** Liberar espacio usado por Docker.
-
-**Por que ocurre:** Imagenes, contenedores y volumes se acumulan.
-
-```bash
-# Ver uso de disco por Docker
-docker system df
-```
-
-**Respuesta esperada:**
-```
-TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
-Images          25        12        8.5GB     4.2GB (49%)
-Containers      15        12        250MB     50MB (20%)
-Local Volumes   10        6         2GB       500MB (25%)
-Build Cache     100       0         3GB       3GB
-```
-
-```bash
-# Limpiar recursos no usados (seguro)
-docker system prune -f
-
-# Limpiar TODO (peligroso - borra imagenes no usadas)
-docker system prune -a -f
-
-# Limpiar volumes no usados (BORRA DATOS!)
-docker volume prune -f
-```
-
----
-
-### 5.5 Build falla
-
-**Objetivo:** Solucionar errores durante la construccion de imagenes.
-
-```bash
-# Ver el error completo
-docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev build movie 2>&1 | tail -50
-```
-
-**Errores comunes:**
-
-| Error | Causa | Solucion |
-|-------|-------|----------|
-| `go: module not found` | Dependencias Go no descargadas | `go mod tidy` en el servicio |
-| `COPY failed` | Archivo no existe | Verificar paths en Dockerfile |
-| `permission denied` | Permisos de archivos | `chmod +x scripts/*.sh` |
-| `no space left` | Sin espacio disco | `docker system prune` |
-
-```bash
-# Rebuild sin cache
-docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev build --no-cache movie
-
-# Rebuild un solo servicio
-docker compose -f platform/deploy/docker-compose/docker-compose.yml up -d --build movie
-```
-
----
-
-### 5.6 Servicio no responde pero container esta healthy
-
-**Objetivo:** Diagnosticar cuando el healthcheck pasa pero la API no funciona.
-
-**Por que ocurre:** El healthcheck verifica `/health/live` pero la logica de negocio tiene errores.
-
-```bash
-# Verificar que el servicio responde
-curl -v http://localhost:8002/api/movies
-
-# Entrar al contenedor para debug
-docker exec -it cinema-movie sh
-
-# Dentro del contenedor:
-wget -qO- http://localhost:8002/health/ready
-wget -qO- http://localhost:8002/api/movies
-```
-
-```bash
-# Ver variables de entorno del contenedor
-docker exec cinema-movie env | sort
-```
-
----
-
-## Fase 6: Cleanup
-
-### 6.1 Detener el entorno
-
-**Objetivo:** Detener todos los contenedores pero mantener los datos.
-
-**Por que es importante:** Libera recursos pero permite reiniciar rapido.
-
-```bash
-task dev:down
-```
-
-**O manualmente:**
-```bash
-docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev down
-```
-
-**Respuesta esperada:**
-```
-[+] Running 14/14
- ✔ Container cinema-booking       Removed
- ✔ Container cinema-notification  Removed
- ✔ Container cinema-payment       Removed
- ✔ Container cinema-seat          Removed
- ✔ Container cinema-showtime      Removed
- ✔ Container cinema-user          Removed
- ✔ Container cinema-cinema        Removed
- ✔ Container cinema-movie         Removed
- ✔ Container cinema-nats          Removed
- ✔ Container dev-redis            Removed
- ✔ Container dev-mongo-init       Removed
- ✔ Container dev-mongo1           Removed
- ✔ Container dev-mongo2           Removed
- ✔ Container dev-mongo3           Removed
- ✔ Network cinema-dev-network     Removed
-```
-
-**Nota:** Los volumes persisten. Los datos de MongoDB siguen disponibles.
-
----
-
-### 6.2 Limpiar todo (incluyendo datos)
-
-**Objetivo:** Eliminar completamente el entorno, incluyendo datos.
-
-**Por que es importante:** Util para empezar de cero o liberar todo el espacio.
-
-```bash
-# Detener Y eliminar volumes
+# O reiniciar todo limpio
 docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev down -v
-```
-
-**Respuesta esperada:**
-```
-[+] Running 18/18
- ...
- ✔ Volume "mongo1_data"  Removed
- ✔ Volume "mongo2_data"  Removed
- ✔ Volume "mongo3_data"  Removed
- ✔ Volume "redis_data"   Removed
-```
-
-**ADVERTENCIA:** Esto elimina TODOS los datos de MongoDB y Redis.
-
----
-
-### 6.3 Limpiar imagenes
-
-**Objetivo:** Eliminar imagenes Docker locales.
-
-**Por que es importante:** Las imagenes ocupan espacio significativo (varios GB).
-
-```bash
-# Ver imagenes del proyecto
-docker images | grep crizstian
-
-# Eliminar imagenes del proyecto
-docker images | grep crizstian | awk '{print $3}' | xargs docker rmi -f
-
-# Eliminar imagenes dangling (sin tag)
-docker image prune -f
-```
-
----
-
-### 6.4 Reset completo
-
-**Objetivo:** Volver al estado inicial limpio.
-
-```bash
-# Paso 1: Detener todo y eliminar volumes
-docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev down -v
-
-# Paso 2: Eliminar imagenes del proyecto
-docker images | grep -E "(crizstian|cinema)" | awk '{print $3}' | xargs docker rmi -f 2>/dev/null || true
-
-# Paso 3: Limpiar build cache
-docker builder prune -f
-
-# Paso 4: Regenerar configuracion
-task config:generate
-
-# Paso 5: Reiniciar
 task dev:up
 ```
 
----
+### 10.4 Seat Hold Expirado Durante Booking
 
-## Quick Reference
+**Síntoma:** Booking falla con `HOLD_EXPIRED`
 
-### Comandos Frecuentes
+**Diagnóstico:**
 
 ```bash
-# === CONFIGURACION ===
-task config:generate              # Genera .env desde services.yaml
-task config:show                  # Muestra puertos configurados
-task config:all                   # Genera .env + Harness services
+# Verificar si hold existe en Redis
+docker exec dev-redis redis-cli GET "hold:$HOLD_ID"
+# Si retorna (nil) → expiró
 
-# === DESARROLLO ===
-task dev:up                       # Iniciar entorno completo
-task dev:down                     # Detener y limpiar
-task dev:status                   # Ver estado de contenedores
-task dev:logs                     # Ver logs de todos los servicios
-task dev:logs SERVICE=booking     # Ver logs de un servicio
-
-# === TESTING ===
-task test:e2e                     # Ejecutar tests E2E
-task test SERVICE=booking         # Tests unitarios de un servicio
-task test:all                     # Tests unitarios de todos
-
-# === DOCKER COMPOSE DIRECTO ===
-docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev up -d
-docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev down
-docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev logs -f
-docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev ps
-
-# === DEBUG ===
-docker logs cinema-booking --tail 100
-docker exec -it cinema-booking sh
-docker exec dev-mongo1 mongosh
-docker exec dev-redis redis-cli
-
-# === CLEANUP ===
-docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev down -v  # Con datos
-docker system prune -f            # Limpiar recursos no usados
+# Ver TTL configurado
+echo $HOLD_TTL_SECONDS  # Default: 300 (5 min)
 ```
 
-### URLs de Acceso
+**Root cause:** El hold tiene TTL de 5 minutos. Si el usuario tarda más, el hold expira automáticamente.
 
-| Servicio | Puerto | URL | Health Check |
-|----------|--------|-----|--------------|
-| booking | 8001 | http://localhost:8001 | /health/live |
-| movie | 8002 | http://localhost:8002 | /health/live |
-| cinema | 8003 | http://localhost:8003 | /health/live |
-| user | 8004 | http://localhost:8004 | /health/live |
-| seat | 8005 | http://localhost:8005 | /health/live |
-| showtime | 8006 | http://localhost:8006 | /health/live |
-| payment | 8007 | http://localhost:8007 | /health/live |
-| notification | 8008 | http://localhost:8008 | /health/live |
-| MongoDB | 27017-27019 | mongodb://localhost:27017 | - |
-| Redis | 6379 | redis://localhost:6379 | - |
-| NATS | 4222 | nats://localhost:4222 | http://localhost:8222/healthz |
+**Prevención en tests:**
 
-### Estructura de Archivos
+```bash
+# Para E2E tests, usar TTL corto
+HOLD_TTL_SECONDS=30 docker compose --profile test up -d
+```
+
+### 10.5 Conflicto de Puertos
+
+**Síntoma:** `bind: address already in use`
+
+**Diagnóstico:**
+
+```bash
+# Identificar proceso usando el puerto
+lsof -i :8002
+
+# O con netstat
+netstat -tlnp | grep 8002
+```
+
+**Solución:**
+
+```bash
+# Detener compose anterior
+docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev down
+
+# Matar proceso huérfano si es necesario
+kill -9 $(lsof -t -i :8002)
+```
+
+### 10.6 Debugging con Logs Estructurados
+
+**Habilitar debug logging:**
+
+```bash
+# Ver logs con contexto
+docker logs cinema-booking 2>&1 | grep -E "(SAGA|error|Error)"
+
+# Seguir logs en tiempo real
+docker logs cinema-booking --follow | jq -R '. as $line | try (fromjson) catch $line'
+```
+
+**Tracing de una request:**
+
+```bash
+# Los servicios usan tracing spans
+# Buscar por operación
+docker logs cinema-booking 2>&1 | grep "make-booking-handler-saga"
+```
+
+### 10.7 MongoDB Query Debugging
+
+```bash
+# Habilitar profiling (nivel 2 = todas las queries)
+docker exec dev-mongo1 mongosh movie --eval "db.setProfilingLevel(2)"
+
+# Ejecutar operación...
+
+# Ver queries lentas
+docker exec dev-mongo1 mongosh movie --eval "
+  db.system.profile.find().sort({millis: -1}).limit(5).forEach(printjson)
+"
+
+# Deshabilitar profiling
+docker exec dev-mongo1 mongosh movie --eval "db.setProfilingLevel(0)"
+```
+
+### 10.8 Redis Lock Debugging
+
+```bash
+# Ver todos los holds activos
+docker exec dev-redis redis-cli KEYS "hold:*" | while read key; do
+  echo "=== $key ==="
+  docker exec dev-redis redis-cli GET "$key" | jq .
+done
+
+# Ver seats held para un showtime
+docker exec dev-redis redis-cli KEYS "seat_hold:sht_001:*"
+
+# Limpiar holds manualmente (testing only)
+docker exec dev-redis redis-cli KEYS "seat_hold:*" | xargs -r docker exec -i dev-redis redis-cli DEL
+```
+
+### 10.9 Network Debugging
+
+```bash
+# Verificar DNS resolution desde un servicio
+docker exec cinema-movie ping -c 1 mongo1
+
+# Verificar conectividad entre servicios
+docker exec cinema-booking wget -qO- http://seat:8005/health/live
+
+# Inspeccionar network
+docker network inspect cinema-dev-network
+```
+
+### 10.10 Container Resource Issues
+
+```bash
+# Ver uso de recursos
+docker stats --no-stream
+
+# Límites configurados por servicio (platform/config/services.yaml)
+# cpu_request: 50m-100m
+# mem_request: 64Mi-128Mi
+# cpu_limit: 250m-500m
+# mem_limit: 256Mi-512Mi
+
+# Si un container es OOMKilled
+docker inspect cinema-seat | jq '.[0].State.OOMKilled'
+```
+
+---
+
+## 11. Referencia Rápida
+
+### 11.1 Task Commands
+
+| Comando | Descripción |
+|---------|-------------|
+| `task dev:up` | Levantar entorno dev |
+| `task dev:down` | Detener entorno |
+| `task dev:status` | Ver estado de containers |
+| `task dev:logs` | Ver logs agregados |
+| `task config:generate` | Generar .env desde services.yaml |
+| `task config:show` | Mostrar configuración actual |
+| `task test:e2e` | Ejecutar tests E2E |
+
+### 11.2 Endpoints por Servicio
+
+| Servicio | Endpoints |
+|----------|-----------|
+| **movie** | `GET /movies`, `GET /movies/all`, `GET /movies/:id`, `GET /movies/premieres` |
+| **user** | `POST /users/register`, `POST /users/login`, `POST /users/refresh`, `POST /users/logout`, `GET /users/me`, `PUT /users/me`, `GET /users/me/bookings` |
+| **showtime** | `GET /showtimes`, `GET /showtimes/:id`, `POST /showtimes`, `PUT /showtimes/:id`, `DELETE /showtimes/:id` |
+| **seat** | `GET /seats/availability?showtime_id=X`, `POST /seats/hold`, `GET /seats/hold/:hold_id`, `DELETE /seats/hold/:hold_id`, `POST /seats/reserve`, `POST /seats/layout`, `GET /seats/layout/:room_id` |
+| **booking** | `POST /booking`, `GET /booking/:orderId` |
+| **cinema** | `GET /cinemas`, `GET /cinemas/:id`, `POST /cinemas`, `GET /cinemas/:id/rooms`, `POST /cinemas/:id/rooms` |
+| **payment** | `POST /payments/makePurchase`, `GET /payments/:id`, `POST /payments/:id/refund` |
+| **notification** | `POST /notification/sendEmail`, `POST /notification/sendSMS` |
+| **all** | `GET /health/live`, `GET /health/ready`, `GET /ping` |
+
+### 11.3 Estructura de Archivos
 
 ```
 platform/
 ├── config/
-│   └── services.yaml              # ← SINGLE SOURCE OF TRUTH
+│   └── services.yaml              # Source of truth
 ├── deploy/
 │   └── docker-compose/
-│       ├── docker-compose.yml     # Definicion de servicios
-│       └── .env                   # ← GENERADO (gitignored)
-├── docker/
-│   ├── go-service/
-│   │   └── Dockerfile             # Dockerfile para servicios Go
-│   ├── mongodb/
-│   │   ├── Dockerfile             # Init container
-│   │   └── seed/                  # Scripts de seed
-│   └── e2e-runner/
-│       └── Dockerfile             # Runner de tests E2E
-└── scripts/
-    └── taskfile/
-        ├── dev-up.sh              # Script para task dev:up
-        ├── dev-down.sh            # Script para task dev:down
-        └── config-generate.sh     # Generador de .env
+│       ├── docker-compose.yml     # Definición de servicios
+│       └── .env                   # Generado por config:generate
+└── docker/
+    ├── go-service/
+    │   └── Dockerfile             # Multi-stage build para Go
+    ├── mongodb/
+    │   ├── Dockerfile             # Init container
+    │   └── seed/*.js              # Scripts de inicialización
+    └── e2e-runner/
+        └── Dockerfile             # Test runner container
+
+services/
+├── booking/                       # SAGA orchestrator
+│   └── contracts/consumer/        # Contract tests
+├── movie/                         # Catálogo
+├── cinema/                        # Cines y salas
+├── user/                          # Auth + JWT
+├── seat/                          # Locks y reservas
+├── showtime/                      # Funciones
+├── payment/                       # Mock payments
+└── notification/                  # Mock notifications
 ```
 
-### Flujo de Configuracion
+### 11.4 Quick Diagnostic Commands
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  platform/config/services.yaml                              │
-│  (SINGLE SOURCE OF TRUTH)                                   │
-│                                                             │
-│  services:                                                  │
-│    movie:                                                   │
-│      port: 8002                                             │
-│      dbName: movie                                          │
-│      image: crizstian/movie-service                         │
-└─────────────────────────────────────────────────────────────┘
-                          │
-                 task config:generate
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│  platform/deploy/docker-compose/.env                        │
-│  (GENERATED - DO NOT EDIT)                                  │
-│                                                             │
-│  MOVIE_PORT=8002                                            │
-│  MOVIE_DB=movie                                             │
-│  MOVIE_IMAGE=crizstian/movie-service                        │
-└─────────────────────────────────────────────────────────────┘
-                          │
-               docker compose reads
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│  docker-compose.yml                                         │
-│                                                             │
-│  movie:                                                     │
-│    image: ${MOVIE_IMAGE}:${VERSION:-dev}                    │
-│    ports:                                                   │
-│      - "${MOVIE_PORT}:${MOVIE_PORT}"                        │
-│    environment:                                             │
-│      DB_NAME: "${MOVIE_DB}"                                 │
-└─────────────────────────────────────────────────────────────┘
+```bash
+# Estado general
+task dev:status && echo "---" && docker exec dev-redis redis-cli ping
+
+# Verificar todo el stack
+for svc in movie:8002 user:8004 booking:8001 seat:8005 showtime:8006; do
+  curl -s -o /dev/null -w "${svc%%:*}: %{http_code}\n" http://${svc}/health/live
+done
+
+# MongoDB status
+docker exec dev-mongo1 mongosh --quiet --eval "rs.status().members.map(m => m.name + ':' + m.stateStr)"
+
+# Redis keys count
+docker exec dev-redis redis-cli DBSIZE
+
+# Logs recientes con errores
+docker compose -f platform/deploy/docker-compose/docker-compose.yml logs --tail 50 2>&1 | grep -i error
 ```
 
-### Checklist de Inicio
+### 11.5 Códigos de Error Comunes
 
-**Prerequisitos:**
-- [ ] Docker instalado y running
-- [ ] Docker Compose v2 instalado
-- [ ] Task instalado (opcional pero recomendado)
-- [ ] yq instalado (para config:generate)
-
-**Configuracion:**
-- [ ] `task config:generate` ejecutado
-- [ ] `platform/deploy/docker-compose/.env` existe
-- [ ] `task config:show` muestra puertos correctos
-
-**Inicio:**
-- [ ] `task dev:up` completa sin errores
-- [ ] `task dev:status` muestra todos los servicios healthy
-- [ ] MongoDB replica set iniciado (1 PRIMARY, 2 SECONDARY)
-
-**Validacion:**
-- [ ] Health checks OK (todos los puertos 8001-8008)
-- [ ] API /api/movies devuelve datos
-- [ ] Logs sin errores criticos
-
-### Comparacion: Dev vs Test Profile
-
-| Aspecto | Profile: dev | Profile: test |
-|---------|--------------|---------------|
-| MongoDB | 3 replicas | 1 nodo |
-| Storage | Volumes persistentes | tmpfs (RAM) |
-| Seed data | Persiste entre reinicios | Se pierde al parar |
-| Velocidad inicio | ~2-3 min | ~30 seg |
-| Caso de uso | Desarrollo diario | CI/CD, tests rapidos |
-| Comando | `task dev:up` | `docker compose --profile test up` |
+| Código | HTTP | Servicio | Significado |
+|--------|------|----------|-------------|
+| `INVALID_REQUEST` | 400 | all | Campos requeridos faltantes o inválidos |
+| `HOLD_EXPIRED` | 404 | seat/booking | El hold expiró (TTL 5min) |
+| `HOLD_NOT_FOUND` | 404 | seat | Hold ID no existe |
+| `SEATS_UNAVAILABLE` | 409 | seat | Asientos ya held/reserved |
+| `SHOWTIME_NOT_FOUND` | 404 | showtime/booking | Showtime ID no existe |
+| `SHOWTIME_UNAVAILABLE` | 409 | booking | Showtime cancelado o pasado |
+| `PAYMENT_FAILED` | 500 | booking | Error en procesamiento de pago |
+| `UNAUTHORIZED` | 401 | user | Token inválido o expirado |
+| `EMAIL_EXISTS` | 409 | user | Email ya registrado |
 
 ---
 
-## Documentacion Relacionada
+## Documentación Relacionada
 
-- [Development Guide](../development/README.md) - Guia general de desarrollo
-- [Configuration Guide](./configuration-guide.md) - Sistema de configuracion centralizada
-- [Kubernetes Deployment Guide](./kubernetes-deployment-guide.md) - Despliegue en Kubernetes
-- [Debugging Runbook](./debugging-runbook.md) - Troubleshooting avanzado
+- [Development Guide](../development/README.md) — Setup de desarrollo local
+- [API Reference](../api/) — OpenAPI specs por servicio
+- [Contract Tests](../api/contracts.md) — Consumer-driven contracts

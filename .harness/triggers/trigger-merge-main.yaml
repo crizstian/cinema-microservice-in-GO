@@ -1,0 +1,45 @@
+trigger:
+  name: Merge to Main - Full Release
+  identifier: trigger_merge_main
+  enabled: true
+  description: |
+    Triggers on push to main/master (PR merged).
+    RUN_MODE=full → All stages (Validate → Build → Push & Release)
+    Single artifact with semantic version tag.
+  tags:
+    event: push
+    mode: full
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  pipelineIdentifier: CI_Unified_v3
+  source:
+    type: Webhook
+    spec:
+      type: Github
+      spec:
+        type: Push
+        spec:
+          connectorRef: CristianConnector
+          autoAbortPreviousExecutions: false
+          payloadConditions:
+            - key: ref
+              operator: In
+              value: refs/heads/main, refs/heads/master
+          headerConditions: []
+          jexlCondition: ""
+  inputYaml: |
+    pipeline:
+      identifier: CI_Unified_v3
+      variables:
+        - name: RUN_MODE
+          type: String
+          value: full
+        - name: SERVICES
+          type: String
+          value: <+trigger.payload.repository.name>
+        - name: LANGUAGE
+          type: String
+          value: go
+        - name: VERSION_BUMP
+          type: String
+          value: patch
