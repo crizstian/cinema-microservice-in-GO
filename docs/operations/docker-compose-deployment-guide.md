@@ -826,9 +826,7 @@ Cada servicio Go usa un Dockerfile optimizado con soporte dual para desarrollo l
 
 ```dockerfile
 # platform/docker/go-service/Dockerfile
-
-# ARG controla la fuente del binario
-ARG BINARY_SOURCE=builder  # builder (local) | prebuilt (CI)
+# Targets: runtime (default) | runtime-prebuilt (CI)
 
 # Stage 1: Builder (compila desde source - desarrollo local)
 FROM golang:${GO_VERSION}-alpine AS builder
@@ -841,21 +839,25 @@ FROM scratch AS prebuilt
 # - Espera binario en services/<service>/<service>
 # - Usado por Harness CI con Cache Intelligence
 
-# Stage 3: Runtime (alpine:3.21)
-FROM alpine:${ALPINE_VERSION}
-# - COPY --from=${BINARY_SOURCE} /app /app/service
+# Stage 3a: runtime (default - usa builder)
+FROM alpine:${ALPINE_VERSION} AS runtime
+# - COPY --from=builder /app /app/service
+# - Compila dentro de Docker (local dev)
+
+# Stage 3b: runtime-prebuilt (CI target)
+FROM alpine:${ALPINE_VERSION} AS runtime-prebuilt
+# - COPY --from=prebuilt /app /app/service
 # - Solo 5-10MB final image
 # - Non-root user (appuser:appgroup)
-# - Health check integrado
 ```
 
 **Uso:**
 
-| Escenario | Comando | BINARY_SOURCE |
-|-----------|---------|---------------|
-| Local dev | `task build SERVICE=movie` | `prebuilt` (task compila primero) |
-| docker-compose | `docker compose up` | `builder` (default) |
-| CI Pipeline | BuildAndPushDockerRegistry | `prebuilt` |
+| Escenario | Comando | --target |
+|-----------|---------|----------|
+| Local dev | `task build SERVICE=movie` | `runtime-prebuilt` (task compila primero) |
+| docker-compose | `docker compose up` | `runtime` (default) |
+| CI Pipeline | BuildAndPushDockerRegistry | `runtime-prebuilt` |
 
 **Beneficios:**
 - Imagen final ~10MB vs ~800MB con SDK

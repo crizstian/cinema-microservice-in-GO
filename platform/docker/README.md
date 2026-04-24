@@ -36,7 +36,7 @@ Centralized multi-stage build supporting both local development and CI pipelines
 │                        DOCKERFILE STAGES                                │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│  ARG BINARY_SOURCE = builder (default) | prebuilt                      │
+│  Targets: runtime (default) | runtime-prebuilt                         │
 │                                                                         │
 │  ┌─────────────────┐       ┌─────────────────┐                         │
 │  │     builder     │       │    prebuilt     │                         │
@@ -46,16 +46,14 @@ Centralized multi-stage build supporting both local development and CI pipelines
 │  │  go build → /app│       │  COPY bin → /app│                         │
 │  └────────┬────────┘       └────────┬────────┘                         │
 │           │                         │                                   │
-│           └────────────┬────────────┘                                   │
-│                        │                                                │
-│                        ▼                                                │
-│               ┌─────────────────┐                                       │
-│               │     runtime     │                                       │
-│               │                 │                                       │
-│               │  alpine:3.21    │                                       │
-│               │  COPY --from=   │                                       │
-│               │  ${BINARY_SRC}  │                                       │
-│               └─────────────────┘                                       │
+│           ▼                         ▼                                   │
+│  ┌─────────────────┐       ┌─────────────────┐                         │
+│  │    runtime      │       │runtime-prebuilt │                         │
+│  │   (default)     │       │   (CI target)   │                         │
+│  │  alpine:3.21    │       │   alpine:3.21   │                         │
+│  │  COPY --from=   │       │  COPY --from=   │                         │
+│  │     builder     │       │    prebuilt     │                         │
+│  └─────────────────┘       └─────────────────┘                         │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -68,7 +66,7 @@ Compiles Go code inside Docker (self-contained):
 # Via Task (recommended)
 task build SERVICE=booking
 
-# Direct docker build
+# Direct docker build (uses default 'runtime' target)
 docker build \
   -f platform/docker/go-service/Dockerfile \
   --build-arg SERVICE_NAME=booking \
@@ -85,12 +83,12 @@ Uses pre-compiled binary for faster builds with Cache Intelligence:
 cd services/booking
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o booking ./cmd/booking
 
-# Step 2: Build image (just copies binary, very fast)
+# Step 2: Build image using 'runtime-prebuilt' target (just copies binary, very fast)
 docker build \
   -f platform/docker/go-service/Dockerfile \
+  --target runtime-prebuilt \
   --build-arg SERVICE_NAME=booking \
   --build-arg SERVICE_PORT=8001 \
-  --build-arg BINARY_SOURCE=prebuilt \
   -t cinema/booking:latest .
 ```
 
@@ -103,7 +101,7 @@ docker build \
 | `VERSION` | 0.0.0-dev | Semantic version |
 | `COMMIT_SHA` | unknown | Git commit SHA |
 | `BUILD_DATE` | unknown | ISO8601 build timestamp |
-| `BINARY_SOURCE` | builder | `builder` (compile) or `prebuilt` (copy) |
+| `--target` | runtime | `runtime` (compile) or `runtime-prebuilt` (copy) |
 | `GO_VERSION` | 1.24 | Go version for builder stage |
 | `ALPINE_VERSION` | 3.21 | Alpine version for runtime |
 
@@ -181,7 +179,7 @@ The Go service Dockerfile is optimized for Harness CI:
 
 | Feature | Local | CI Pipeline |
 |---------|-------|-------------|
-| **BINARY_SOURCE** | `builder` (default) | `prebuilt` |
+| **Target** | `runtime` (default) | `runtime-prebuilt` |
 | **Go module cache** | Docker layer cache | Harness Cache Intelligence |
 | **Build speed** | ~30-60s | ~5-10s (cache hit) |
 | **Context required** | Full repo | Full repo |
@@ -198,7 +196,7 @@ The Go service Dockerfile is optimized for Harness CI:
 │     └─ Output: services/<service>/<service> binary                     │
 │                                                                         │
 │  2. BuildAndPushDockerRegistry Step                                    │
-│     └─ --build-arg BINARY_SOURCE=prebuilt                              │
+│     └─ --target runtime-prebuilt                                       │
 │     └─ Skips builder stage, just copies binary                         │
 │     └─ Uses Docker layer caching for runtime layers                    │
 │                                                                         │

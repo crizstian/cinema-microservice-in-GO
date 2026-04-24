@@ -48,12 +48,12 @@ echo ""
 echo "=== Step 2: Building Docker image (using pre-compiled binary) ==="
 docker build \
   --file platform/docker/go-service/Dockerfile \
+  --target runtime-prebuilt \
   --build-arg SERVICE_NAME="$SERVICE" \
   --build-arg SERVICE_PORT=8000 \
   --build-arg VERSION="$VERSION" \
   --build-arg BUILD_DATE="$BUILD_DATE" \
   --build-arg COMMIT_SHA="$COMMIT_SHA" \
-  --build-arg BINARY_SOURCE=prebuilt \
   --tag "$IMAGE_NAME:v$VERSION" \
   --tag "$IMAGE_NAME:latest" \
   .

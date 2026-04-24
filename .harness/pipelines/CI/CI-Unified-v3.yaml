@@ -43,7 +43,7 @@ pipeline:
       type: String
       description: Go version for builds
       required: false
-      value: <+input>.default(1.24).selectOneFrom(1.24,1.23,1.22)
+      value: <+input>.default(1.26).selectOneFrom(1.24,1.23,1.22,1.26)
     - name: COVERAGE_THRESHOLD
       type: String
       description: Minimum test coverage percentage
@@ -730,11 +730,11 @@ pipeline:
                           caching: true
                           dockerfile: platform/docker/go-service/Dockerfile
                           context: .
+                          target: runtime-prebuilt
                           buildArgs:
                             SERVICE_NAME: <+repeat.item>
                             SERVICE_PORT: "8000"
                             VERSION: <+codebase.shortCommitSha>
-                            BINARY_SOURCE: prebuilt
                           optimize: true
                           envVariables:
                             PLUGIN_TAR_PATH: /harness/<+repeat.item>-service.tar
@@ -748,8 +748,8 @@ pipeline:
                               mode: orchestration
                               config: default
                               target:
-                                name: <+repeat.item>-service
                                 type: container
+                                name: <+repeat.item>-service
                                 variant: <+codebase.shortCommitSha>
                               advanced:
                                 log:
@@ -758,13 +758,15 @@ pipeline:
                               privileged: true
                               image:
                                 type: local_image
-                                name: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
                                 tag: <+codebase.shortCommitSha>
+                                name: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
                               sbom:
                                 format: spdx-json
                             enforce:
                               policySets:
                                 - security_container
+                            when:
+                              stageStatus: Success
                         - step:
                             type: HarnessSCA
                             name: Harness Container SCA
@@ -782,11 +784,13 @@ pipeline:
                               privileged: true
                               image:
                                 type: local_image
-                                name: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
                                 tag: <+codebase.shortCommitSha>
+                                name: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
                             enforce:
                               policySets:
                                 - security_container
+                            when:
+                              stageStatus: Success
                   strategy:
                     repeat:
                       items: <+pipeline.variables.SERVICES.split(",")>
@@ -1175,11 +1179,11 @@ pipeline:
                           caching: true
                           dockerfile: platform/docker/go-service/Dockerfile
                           context: .
+                          target: runtime-prebuilt
                           buildArgs:
                             SERVICE_NAME: <+repeat.item>
                             SERVICE_PORT: "8000"
                             VERSION: <+stepGroup.steps.semantic_version.output.outputVariables.VERSION>
-                            BINARY_SOURCE: prebuilt
                           optimize: true
                     - step:
                         name: Create Git Tag

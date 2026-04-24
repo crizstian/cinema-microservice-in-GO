@@ -3,17 +3,16 @@
 # Supports both local development and CI pipeline builds
 #
 # Usage:
-#   Local:  docker build -f platform/docker/go-service/Dockerfile --build-arg SERVICE_NAME=movie .
-#   CI:     docker build -f platform/docker/go-service/Dockerfile --build-arg SERVICE_NAME=movie --build-arg BINARY_SOURCE=prebuilt .
+#   Local:  docker build -f platform/docker/go-service/Dockerfile --build-arg SERVICE_NAME=movie --target runtime .
+#   CI:     docker build -f platform/docker/go-service/Dockerfile --build-arg SERVICE_NAME=movie --target runtime-prebuilt .
 #
-# BINARY_SOURCE controls where the binary comes from:
-#   - builder (default): Compile from source inside Docker (local dev)
-#   - prebuilt: Use pre-compiled binary from context (CI with Cache Intelligence)
+# Targets:
+#   - runtime (default): Compile from source inside Docker (local dev)
+#   - runtime-prebuilt: Use pre-compiled binary from context (CI with Cache Intelligence)
 # ============================================================
 
 ARG GO_VERSION=1.24
 ARG ALPINE_VERSION=3.21
-ARG BINARY_SOURCE=builder
 
 # ============================================================
 # Stage 1: Builder (used for local development)
@@ -63,12 +62,11 @@ ARG SERVICE_NAME
 COPY services/${SERVICE_NAME}/${SERVICE_NAME} /app
 
 # ============================================================
-# Stage 3: Runtime (Final Image)
-# Uses BINARY_SOURCE arg to select binary source
+# Stage 3a: Runtime (Default - uses builder binary)
+# For local development: compiles source inside Docker
 # ============================================================
 FROM alpine:${ALPINE_VERSION} AS runtime
 
-ARG BINARY_SOURCE
 ARG SERVICE_NAME
 ARG SERVICE_PORT=8000
 ARG VERSION=0.0.0-dev
@@ -94,8 +92,58 @@ RUN addgroup -g 1000 appgroup && \
 
 WORKDIR /app
 
-# Copy binary from selected source (builder or prebuilt)
-COPY --from=${BINARY_SOURCE} /app /app/service
+# Copy binary from builder stage
+COPY --from=builder /app /app/service
+
+# Set ownership
+RUN chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE ${SERVICE_PORT}
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -qO- http://localhost:${SERVICE_PORT}/health/live || exit 1
+
+# Run application
+ENTRYPOINT ["/app/service"]
+
+# ============================================================
+# Stage 3b: Runtime-Prebuilt (uses prebuilt binary)
+# For CI pipeline: uses pre-compiled binary for faster builds
+# ============================================================
+FROM alpine:${ALPINE_VERSION} AS runtime-prebuilt
+
+ARG SERVICE_NAME
+ARG SERVICE_PORT=8000
+ARG VERSION=0.0.0-dev
+ARG COMMIT_SHA=unknown
+ARG BUILD_DATE=unknown
+
+# OCI Standard Labels
+LABEL org.opencontainers.image.title="cinema-${SERVICE_NAME}"
+LABEL org.opencontainers.image.description="Cinema ${SERVICE_NAME} microservice"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.revision="${COMMIT_SHA}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.source="https://github.com/crizstian/cinema-microservices"
+LABEL org.opencontainers.image.vendor="Cinema App"
+LABEL org.opencontainers.image.authors="Cristian Ramirez <cristian@cinema.dev>"
+
+# Install ca-certificates for HTTPS and wget for healthcheck
+RUN apk add --no-cache ca-certificates wget
+
+# Create non-root user for security
+RUN addgroup -g 1000 appgroup && \
+    adduser -D -u 1000 -G appgroup appuser
+
+WORKDIR /app
+
+# Copy binary from prebuilt stage
+COPY --from=prebuilt /app /app/service
 
 # Set ownership
 RUN chown -R appuser:appgroup /app
