@@ -713,7 +713,7 @@ pipeline:
                             SERVICE_NAME: <+repeat.item>
                             SERVICE_PORT: "8000"
                             VERSION: <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
-                          target: runtime-prebuilt
+                          target: runtime
                           optimize: true
                           caching: true
                           envVariables:
@@ -882,7 +882,7 @@ pipeline:
                             SERVICE_NAME: <+repeat.item>
                             SERVICE_PORT: "8000"
                             VERSION: <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
-                          target: runtime-prebuilt
+                          target: runtime
                           optimize: true
                     - step:
                         name: Create Git Tag
