@@ -717,6 +717,7 @@ pipeline:
                           caching: true
                           envVariables:
                             PLUGIN_NO_PUSH: "true"
+                            PLUGIN_LOAD: "true"
                     - parallel:
                         - step:
                             type: AquaTrivy
