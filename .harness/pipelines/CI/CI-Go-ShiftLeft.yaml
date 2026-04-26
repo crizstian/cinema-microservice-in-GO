@@ -701,41 +701,22 @@ pipeline:
                     - step:
                         name: Build Docker Image
                         identifier: build_docker_image
-                        type: Run
+                        type: BuildAndPushDockerRegistry
                         spec:
-                          connectorRef: account.harnessImage
-                          image: docker:24-cli
-                          shell: Sh
-                          command: |
-                            IMAGE_NAME="${DOCKER_REGISTRY}/${SERVICE}-service:${IMAGE_TAG}"
-                            echo "=== Building Docker image: ${IMAGE_NAME} ==="
-
-                            # Debug: verify Dockerfile and git state
-                            echo "=== DEBUG: Git and Dockerfile verification ==="
-                            echo "Current commit: $(git rev-parse HEAD)"
-                            echo "Dockerfile path: ${DOCKERFILE_PATH}"
-                            echo "Dockerfile size: $(wc -c < ${DOCKERFILE_PATH}) bytes"
-                            echo "Dockerfile stages:"
-                            grep -n "^FROM\|AS " ${DOCKERFILE_PATH}
-                            echo "=== END DEBUG ==="
-
-                            docker build \
-                              -f ${DOCKERFILE_PATH} \
-                              --build-arg SERVICE_NAME=${SERVICE} \
-                              --build-arg SERVICE_PORT=8000 \
-                              --build-arg VERSION=${IMAGE_TAG} \
-                              --target runtime \
-                              -t ${IMAGE_NAME} \
-                              .
-
-                            echo "✅ Image built: ${IMAGE_NAME}"
-                            docker images ${IMAGE_NAME}
+                          connectorRef: DockerCristian
+                          repo: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
+                          tags:
+                            - <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                          dockerfile: <+pipeline.variables.DOCKERFILE_PATH>
+                          context: .
+                          buildArgs:
+                            SERVICE_NAME: <+repeat.item>
+                            SERVICE_PORT: "8000"
+                            VERSION: <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                          target: runtime
+                          caching: true
                           envVariables:
-                            SERVICE: <+repeat.item>
-                            DOCKER_REGISTRY: <+pipeline.variables.DOCKER_REGISTRY>
-                            DOCKERFILE_PATH: <+pipeline.variables.DOCKERFILE_PATH>
-                            IMAGE_TAG: <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
-                          privileged: true
+                            PLUGIN_NO_PUSH: "true"
                     - parallel:
                         - step:
                             type: AquaTrivy
