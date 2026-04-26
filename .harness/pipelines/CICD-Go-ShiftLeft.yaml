@@ -29,8 +29,13 @@ pipeline:
       value: <+input>.allowedValues(pr_open,pr_merge,full)
     - name: SERVICES
       type: String
-      description: Comma-separated list of services to process
+      description: Comma-separated list of services to process (e.g., booking,movie)
       required: true
+      value: <+input>
+    - name: SERVICES_LIST
+      type: String
+      description: Comma-separated service identifiers for CD (e.g., bookingservice,movieservice)
+      required: false
       value: <+input>
     - name: GOLANGCI_LINT_VERSION
       type: String
@@ -144,10 +149,12 @@ pipeline:
                           connectorRef: account.harnessImage
                           image: alpine:3.19
                           shell: Sh
+                          envVariables:
+                            GITLEAKS_TOTAL: <+execution.steps.linting.steps.Gitleaks.output.outputVariables.TOTAL>
                           command: |
                             mkdir -p /harness/security-results
-                            SECRETS=$(<+execution.steps.linting.steps.Gitleaks.output.outputVariables.TOTAL>)
-                            [ -z "$SECRETS" ] || [ "$SECRETS" = "null" ] && SECRETS=0
+                            SECRETS="${GITLEAKS_TOTAL:-0}"
+                            [ "$SECRETS" = "null" ] || [ "$SECRETS" = "<+null>" ] && SECRETS=0
                             echo "$SECRETS" >> /harness/security-results/gitleaks.txt
                   strategy:
                     repeat:
@@ -216,16 +223,17 @@ pipeline:
                           connectorRef: account.harnessImage
                           image: alpine:3.19
                           shell: Sh
+                          envVariables:
+                            HARNESS_SCA_CRITICAL: <+execution.steps.sca_scans.steps.HarnessSCA.output.outputVariables.CRITICAL>
+                            HARNESS_SCA_HIGH: <+execution.steps.sca_scans.steps.HarnessSCA.output.outputVariables.HIGH>
+                            SNYK_SCA_CRITICAL: <+execution.steps.sca_scans.steps.Snyk_SCA.output.outputVariables.CRITICAL>
+                            SNYK_SCA_HIGH: <+execution.steps.sca_scans.steps.Snyk_SCA.output.outputVariables.HIGH>
                           command: |
                             mkdir -p /harness/security-results
-                            H_C=$(<+execution.steps.sca_scans.steps.HarnessSCA.output.outputVariables.CRITICAL>)
-                            H_H=$(<+execution.steps.sca_scans.steps.HarnessSCA.output.outputVariables.HIGH>)
-                            S_C=$(<+execution.steps.sca_scans.steps.Snyk_SCA.output.outputVariables.CRITICAL>)
-                            S_H=$(<+execution.steps.sca_scans.steps.Snyk_SCA.output.outputVariables.HIGH>)
-                            [ -z "$H_C" ] || [ "$H_C" = "null" ] && H_C=0
-                            [ -z "$H_H" ] || [ "$H_H" = "null" ] && H_H=0
-                            [ -z "$S_C" ] || [ "$S_C" = "null" ] && S_C=0
-                            [ -z "$S_H" ] || [ "$S_H" = "null" ] && S_H=0
+                            H_C="${HARNESS_SCA_CRITICAL:-0}"; [ "$H_C" = "null" ] && H_C=0
+                            H_H="${HARNESS_SCA_HIGH:-0}"; [ "$H_H" = "null" ] && H_H=0
+                            S_C="${SNYK_SCA_CRITICAL:-0}"; [ "$S_C" = "null" ] && S_C=0
+                            S_H="${SNYK_SCA_HIGH:-0}"; [ "$S_H" = "null" ] && S_H=0
                             echo "$H_C $H_H $S_C $S_H" >> /harness/security-results/sca.txt
                   strategy:
                     repeat:
@@ -293,16 +301,17 @@ pipeline:
                           connectorRef: account.harnessImage
                           image: alpine:3.19
                           shell: Sh
+                          envVariables:
+                            HARNESS_SAST_CRITICAL: <+execution.steps.sast_scans.steps.HarnessSAST.output.outputVariables.CRITICAL>
+                            HARNESS_SAST_HIGH: <+execution.steps.sast_scans.steps.HarnessSAST.output.outputVariables.HIGH>
+                            SNYK_SAST_CRITICAL: <+execution.steps.sast_scans.steps.Snyk_SAST.output.outputVariables.CRITICAL>
+                            SNYK_SAST_HIGH: <+execution.steps.sast_scans.steps.Snyk_SAST.output.outputVariables.HIGH>
                           command: |
                             mkdir -p /harness/security-results
-                            H_C=$(<+execution.steps.sast_scans.steps.HarnessSAST.output.outputVariables.CRITICAL>)
-                            H_H=$(<+execution.steps.sast_scans.steps.HarnessSAST.output.outputVariables.HIGH>)
-                            S_C=$(<+execution.steps.sast_scans.steps.Snyk_SAST.output.outputVariables.CRITICAL>)
-                            S_H=$(<+execution.steps.sast_scans.steps.Snyk_SAST.output.outputVariables.HIGH>)
-                            [ -z "$H_C" ] || [ "$H_C" = "null" ] && H_C=0
-                            [ -z "$H_H" ] || [ "$H_H" = "null" ] && H_H=0
-                            [ -z "$S_C" ] || [ "$S_C" = "null" ] && S_C=0
-                            [ -z "$S_H" ] || [ "$S_H" = "null" ] && S_H=0
+                            H_C="${HARNESS_SAST_CRITICAL:-0}"; [ "$H_C" = "null" ] && H_C=0
+                            H_H="${HARNESS_SAST_HIGH:-0}"; [ "$H_H" = "null" ] && H_H=0
+                            S_C="${SNYK_SAST_CRITICAL:-0}"; [ "$S_C" = "null" ] && S_C=0
+                            S_H="${SNYK_SAST_HIGH:-0}"; [ "$S_H" = "null" ] && S_H=0
                             echo "$H_C $H_H $S_C $S_H" >> /harness/security-results/sast.txt
                   strategy:
                     repeat:
@@ -1083,31 +1092,25 @@ pipeline:
     - stage:
         name: Deploy to DEV
         identifier: deploy_dev
-        description: Multi-service Kubernetes deployment
+        description: Sequential deployment of each service to DEV
         type: Deployment
         when:
           pipelineStatus: Success
-          condition: <+pipeline.variables.RUN_MODE> == "pr_merge" ||
-            <+pipeline.variables.RUN_MODE> == "full"
+          condition: (<+pipeline.variables.RUN_MODE> == "pr_merge" || <+pipeline.variables.RUN_MODE> == "full") && <+pipeline.variables.SERVICES_LIST> != "" && <+pipeline.variables.SERVICES_LIST> != "null"
         spec:
           deploymentType: Kubernetes
-          services:
-            values: <+input>
-            metadata:
-              parallel: false
-          environments:
-            metadata:
-              parallel: false
-            values:
-              - environmentRef: sandbox
-                deployToAll: false
-                infrastructureDefinitions:
-                  - identifier: sesandboxkubernetes
-                    inputs:
-                      identifier: sesandboxkubernetes
-                      type: KubernetesDirect
-                      spec:
-                        namespace: cinema-dev
+          service:
+            serviceRef: <+repeat.item>
+          environment:
+            environmentRef: sandbox
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: sesandboxkubernetes
+                inputs:
+                  identifier: sesandboxkubernetes
+                  type: KubernetesDirect
+                  spec:
+                    namespace: cinema-dev
           execution:
             steps:
               - step:
@@ -1178,4 +1181,8 @@ pipeline:
                 - AllErrors
               action:
                 type: StageRollback
+        strategy:
+          repeat:
+            items: <+pipeline.variables.SERVICES_LIST.split(",")>
+            maxConcurrency: 1
   allowStageExecutions: true
