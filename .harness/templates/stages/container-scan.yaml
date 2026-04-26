@@ -1,0 +1,135 @@
+template:
+  name: Container Security Scan
+  identifier: container_security_scan
+  type: Stage
+  versionLabel: "1.0.0"
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  tags:
+    category: security
+    shared: "true"
+  description: |
+    Shared stage template for container security scanning.
+    Language-agnostic - scans any container image.
+  spec:
+    type: SecurityTests
+    spec:
+      cloneCodebase: false
+      platform:
+        os: Linux
+        arch: Amd64
+      runtime:
+        type: Cloud
+        spec: {}
+      execution:
+        steps:
+          # ── Container Scans ──
+          - stepGroup:
+              name: Container Security
+              identifier: Container_Security
+              steps:
+                - parallel:
+                    - step:
+                        type: AquaTrivy
+                        name: Trivy
+                        identifier: trivy
+                        spec:
+                          mode: orchestration
+                          config: default
+                          target:
+                            name: <+input>
+                            type: container
+                            variant: <+input>
+                          advanced:
+                            log:
+                              level: info
+                            fail_on_severity: none
+                          privileged: true
+                          image:
+                            type: local_image
+                            name: <+input>
+                            tag: <+input>
+                          sbom:
+                            format: spdx-json
+                        enforce:
+                          policySets:
+                            - security_container
+                    - step:
+                        type: HarnessSCA
+                        name: HarnessContainer
+                        identifier: HarnessContainer
+                        spec:
+                          mode: orchestration
+                          config: default
+                          target:
+                            type: container
+                            detection: auto
+                          advanced:
+                            log:
+                              level: info
+                          privileged: true
+                          image:
+                            type: local_image
+                            tag: <+input>
+                            name: <+input>
+
+          # ── Evaluate Container Gate ──
+          - step:
+              type: Run
+              name: Evaluate Container Security
+              identifier: evaluate_container_security
+              spec:
+                connectorRef: account.harnessImage
+                image: alpine:latest
+                shell: Sh
+                command: |
+                  #!/bin/sh
+                  sanitize() {
+                    val="$1"
+                    [ -z "$val" ] || [ "$val" = "null" ] || [ "$val" = "<+null>" ] && echo "0" || echo "$val"
+                  }
+
+                  MAX_CRITICAL=0; MAX_HIGH=3
+
+                  TRIVY_C=$(sanitize "$TRIVY_CRITICAL"); TRIVY_H=$(sanitize "$TRIVY_HIGH")
+                  HARNESS_C=$(sanitize "$HARNESS_CRITICAL"); HARNESS_H=$(sanitize "$HARNESS_HIGH")
+
+                  CONTAINER_CRITICAL=$((TRIVY_C + HARNESS_C))
+                  CONTAINER_HIGH=$((TRIVY_H + HARNESS_H))
+
+                  GATE_PASSED=true; VIOLATIONS=""
+                  [ "$CONTAINER_CRITICAL" -gt "$MAX_CRITICAL" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}CRITICAL: ${CONTAINER_CRITICAL}; "
+                  [ "$CONTAINER_HIGH" -gt "$MAX_HIGH" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}HIGH: ${CONTAINER_HIGH}"
+
+                  echo "Critical: $CONTAINER_CRITICAL | High: $CONTAINER_HIGH | Gate: $GATE_PASSED"
+
+                  echo "CONTAINER_CRITICAL=$CONTAINER_CRITICAL" >> $HARNESS_OUTPUT_FILE
+                  echo "CONTAINER_HIGH=$CONTAINER_HIGH" >> $HARNESS_OUTPUT_FILE
+                  echo "CONTAINER_GATE_PASSED=$GATE_PASSED" >> $HARNESS_OUTPUT_FILE
+                  echo "CONTAINER_VIOLATIONS=$VIOLATIONS" >> $HARNESS_OUTPUT_FILE
+                envVariables:
+                  TRIVY_CRITICAL: <+execution.steps.Container_Security.steps.trivy.output.outputVariables.CRITICAL>
+                  TRIVY_HIGH: <+execution.steps.Container_Security.steps.trivy.output.outputVariables.HIGH>
+                  HARNESS_CRITICAL: <+execution.steps.Container_Security.steps.HarnessContainer.output.outputVariables.CRITICAL>
+                  HARNESS_HIGH: <+execution.steps.Container_Security.steps.HarnessContainer.output.outputVariables.HIGH>
+                outputVariables:
+                  - name: CONTAINER_CRITICAL
+                  - name: CONTAINER_HIGH
+                  - name: CONTAINER_GATE_PASSED
+                  - name: CONTAINER_VIOLATIONS
+              failureStrategies:
+                - onFailure:
+                    errors:
+                      - AllErrors
+                    action:
+                      type: ManualIntervention
+                      spec:
+                        timeout: 4h
+                        onTimeout:
+                          action:
+                            type: Abort
+              enforce:
+                policySets:
+                  - security_gate_container
+    policySetRef:
+      - security_gate_container

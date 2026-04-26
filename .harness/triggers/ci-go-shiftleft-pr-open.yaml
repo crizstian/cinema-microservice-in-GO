@@ -1,0 +1,50 @@
+trigger:
+  name: CI Go ShiftLeft - PR Open
+  identifier: ci_go_shiftleft_pr_open
+  enabled: true
+  description: Triggers Security Code + Test Code stages on PR open/sync
+  tags:
+    type: pr-open
+    pipeline: CI_Go_ShiftLeft
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  pipelineIdentifier: CI_Go_ShiftLeft
+  source:
+    type: Webhook
+    spec:
+      type: Github
+      spec:
+        type: PullRequest
+        spec:
+          connectorRef: CristianConnector
+          autoAbortPreviousExecutions: true
+          payloadConditions:
+            - key: targetBranch
+              operator: In
+              value: main, master, develop, step-1
+            - key: sourceBranch
+              operator: NotEquals
+              value: main
+          headerConditions: []
+          jexlCondition: ""
+          actions:
+            - Open
+            - Reopen
+            - Synchronize
+  inputYaml: |
+    pipeline:
+      identifier: CI_Go_ShiftLeft
+      properties:
+        ci:
+          codebase:
+            build:
+              type: PR
+              spec:
+                number: <+trigger.prNumber>
+      variables:
+        - name: RUN_MODE
+          type: String
+          value: pr_open
+        - name: SERVICES
+          type: String
+          value: <+trigger.payload.pull_request.head.ref>.matches("services/([^/]+)/.*") ? <+trigger.payload.pull_request.head.ref>.replaceAll("services/([^/]+)/.*", "$1") : "booking,movie,showtime,user"

@@ -1,0 +1,241 @@
+template:
+  name: Security Scan - Code
+  identifier: security_scan_code
+  type: Stage
+  versionLabel: "1.0.0"
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  tags:
+    category: security
+    shared: "true"
+  description: |
+    Shared stage template for code security scanning.
+    Supports any language - scanners are language-agnostic.
+  spec:
+    type: SecurityTests
+    spec:
+      cloneCodebase: true
+      caching:
+        enabled: true
+        key: <+input>
+        paths: <+input>
+      buildIntelligence:
+        enabled: true
+      platform:
+        os: Linux
+        arch: Amd64
+      runtime:
+        type: Cloud
+        spec: {}
+      execution:
+        steps:
+          # ── SCA Scans ──
+          - stepGroup:
+              name: SCA Scans
+              identifier: SCA
+              steps:
+                - parallel:
+                    - step:
+                        type: HarnessSAST
+                        name: HarnessSCA
+                        identifier: HarnessSCA
+                        spec:
+                          mode: orchestration
+                          config: sca
+                          target:
+                            type: repository
+                            workspace: <+input>
+                            detection: auto
+                          advanced:
+                            log:
+                              level: info
+                            fail_on_severity: none
+                        enforce:
+                          policySets:
+                            - STO_Policy
+                    - step:
+                        type: Snyk
+                        name: Snyk SCA
+                        identifier: Snyk_SCA
+                        spec:
+                          mode: orchestration
+                          config: default
+                          target:
+                            type: repository
+                            workspace: <+input>
+                            detection: manual
+                            name: <+input>
+                            variant: <+codebase.branch>
+                          advanced:
+                            log:
+                              level: info
+                            fail_on_severity: none
+                            args:
+                              cli: "--skip-unresolved"
+                          privileged: true
+                          auth:
+                            access_token: <+secrets.getValue("snyk_token")>
+                          sbom:
+                            format: spdx-json
+                          tool:
+                            ingest_tool_severity: true
+                        enforce:
+                          policySets:
+                            - STO_Policy
+
+          # ── SAST Scans ──
+          - stepGroup:
+              name: SAST Scans
+              identifier: SAST
+              steps:
+                - parallel:
+                    - step:
+                        type: HarnessSAST
+                        name: HarnessSAST
+                        identifier: HarnessSAST
+                        spec:
+                          mode: orchestration
+                          config: sast
+                          target:
+                            type: repository
+                            workspace: <+input>
+                            detection: auto
+                          advanced:
+                            log:
+                              level: info
+                            fail_on_severity: none
+                        enforce:
+                          policySets:
+                            - STO_Policy
+                    - step:
+                        type: Snyk
+                        name: Snyk SAST
+                        identifier: Snyk_SAST
+                        spec:
+                          mode: orchestration
+                          config: default
+                          target:
+                            type: repository
+                            workspace: <+input>
+                            name: <+input>
+                            variant: <+codebase.branch>
+                          advanced:
+                            log:
+                              level: info
+                            fail_on_severity: none
+                            args:
+                              cli: "--skip-unresolved"
+                          privileged: true
+                          auth:
+                            access_token: <+secrets.getValue("snyk_token")>
+                          sbom:
+                            format: spdx-json
+                          tool:
+                            ingest_tool_severity: true
+                        enforce:
+                          policySets:
+                            - STO_Policy
+                    - step:
+                        type: Semgrep
+                        name: Semgrep
+                        identifier: Semgrep
+                        spec:
+                          mode: orchestration
+                          config: default
+                          target:
+                            type: repository
+                            workspace: <+input>
+                            detection: auto
+                          advanced:
+                            log:
+                              level: info
+
+          # ── Gitleaks ──
+          - step:
+              type: Gitleaks
+              name: Gitleaks
+              identifier: Gitleaks
+              spec:
+                mode: orchestration
+                config: default
+                target:
+                  type: repository
+                  detection: auto
+                advanced:
+                  log:
+                    level: info
+                  fail_on_severity: none
+              enforce:
+                policySets:
+                  - security_secrets
+
+          # ── Evaluate Security Gate ──
+          - step:
+              type: Run
+              name: Evaluate Code Security
+              identifier: evaluate_code_security
+              spec:
+                connectorRef: account.harnessImage
+                image: alpine:latest
+                shell: Sh
+                command: |
+                  #!/bin/sh
+                  sanitize() {
+                    val="$1"
+                    [ -z "$val" ] || [ "$val" = "null" ] || [ "$val" = "<+null>" ] && echo "0" || echo "$val"
+                  }
+
+                  MAX_CRITICAL=0; MAX_HIGH=5; MAX_SECRETS=0
+
+                  H_SCA_C=$(sanitize "$HARNESS_SCA_CRITICAL"); H_SCA_H=$(sanitize "$HARNESS_SCA_HIGH")
+                  S_SCA_C=$(sanitize "$SNYK_SCA_CRITICAL"); S_SCA_H=$(sanitize "$SNYK_SCA_HIGH")
+                  H_SAST_C=$(sanitize "$HARNESS_SAST_CRITICAL"); H_SAST_H=$(sanitize "$HARNESS_SAST_HIGH")
+                  S_SAST_C=$(sanitize "$SNYK_SAST_CRITICAL"); S_SAST_H=$(sanitize "$SNYK_SAST_HIGH")
+                  GL_T=$(sanitize "$GITLEAKS_TOTAL")
+
+                  TOTAL_CRITICAL=$((H_SCA_C + S_SCA_C + H_SAST_C + S_SAST_C))
+                  TOTAL_HIGH=$((H_SCA_H + S_SCA_H + H_SAST_H + S_SAST_H))
+                  TOTAL_SECRETS=$GL_T
+
+                  GATE_PASSED=true; VIOLATIONS=""
+                  [ "$TOTAL_CRITICAL" -gt "$MAX_CRITICAL" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}CRITICAL: ${TOTAL_CRITICAL}; "
+                  [ "$TOTAL_HIGH" -gt "$MAX_HIGH" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}HIGH: ${TOTAL_HIGH}; "
+                  [ "$TOTAL_SECRETS" -gt "$MAX_SECRETS" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}SECRETS: ${TOTAL_SECRETS}"
+
+                  echo "Critical: $TOTAL_CRITICAL | High: $TOTAL_HIGH | Secrets: $TOTAL_SECRETS | Gate: $GATE_PASSED"
+
+                  echo "TOTAL_CRITICAL=$TOTAL_CRITICAL" >> $HARNESS_OUTPUT_FILE
+                  echo "TOTAL_HIGH=$TOTAL_HIGH" >> $HARNESS_OUTPUT_FILE
+                  echo "GATE_PASSED=$GATE_PASSED" >> $HARNESS_OUTPUT_FILE
+                  echo "VIOLATIONS=$VIOLATIONS" >> $HARNESS_OUTPUT_FILE
+                envVariables:
+                  HARNESS_SCA_CRITICAL: <+execution.steps.SCA.steps.HarnessSCA.output.outputVariables.CRITICAL>
+                  HARNESS_SCA_HIGH: <+execution.steps.SCA.steps.HarnessSCA.output.outputVariables.HIGH>
+                  SNYK_SCA_CRITICAL: <+execution.steps.SCA.steps.Snyk_SCA.output.outputVariables.CRITICAL>
+                  SNYK_SCA_HIGH: <+execution.steps.SCA.steps.Snyk_SCA.output.outputVariables.HIGH>
+                  HARNESS_SAST_CRITICAL: <+execution.steps.SAST.steps.HarnessSAST.output.outputVariables.CRITICAL>
+                  HARNESS_SAST_HIGH: <+execution.steps.SAST.steps.HarnessSAST.output.outputVariables.HIGH>
+                  SNYK_SAST_CRITICAL: <+execution.steps.SAST.steps.Snyk_SAST.output.outputVariables.CRITICAL>
+                  SNYK_SAST_HIGH: <+execution.steps.SAST.steps.Snyk_SAST.output.outputVariables.HIGH>
+                  GITLEAKS_TOTAL: <+execution.steps.Gitleaks.output.outputVariables.TOTAL>
+                outputVariables:
+                  - name: TOTAL_CRITICAL
+                  - name: TOTAL_HIGH
+                  - name: GATE_PASSED
+                  - name: VIOLATIONS
+              enforce:
+                policySets:
+                  - security_gate_code
+              failureStrategies:
+                - onFailure:
+                    errors:
+                      - AllErrors
+                    action:
+                      type: ManualIntervention
+                      spec:
+                        timeout: 4h
+                        onTimeout:
+                          action:
+                            type: Abort
+    policySetRef:
+      - security_gate_code
