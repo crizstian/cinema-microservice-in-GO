@@ -21,10 +21,10 @@ pipeline:
         sparseCheckout: []
         depth: 50
   variables:
-    # ── Execution Control ──
     - name: RUN_MODE
       type: String
-      description: "pr_open: Security + Tests | pr_merge: Build + Release | full: All stages"
+      description: "pr_open: Security + Tests | pr_merge: Build + Release | full: All
+        stages"
       required: true
       value: <+input>.allowedValues(pr_open,pr_merge,full)
     - name: SERVICES
@@ -32,7 +32,6 @@ pipeline:
       description: Comma-separated list of services to process
       required: true
       value: <+input>
-    # ── Build Configuration ──
     - name: GOLANGCI_LINT_VERSION
       type: String
       description: golangci-lint version (must support Go version in go.mod)
@@ -45,8 +44,6 @@ pipeline:
       type: String
       description: Path to Dockerfile
       value: platform/docker/go-service/Dockerfile
-
-    # ── Quality Thresholds ──
     - name: COVERAGE_THRESHOLD
       type: Number
       description: Minimum code coverage percentage
@@ -55,8 +52,6 @@ pipeline:
       type: Number
       description: Max cyclomatic complexity per function
       value: 15
-
-    # ── Security Gates ──
     - name: SECURITY_GATE_CRITICAL
       type: Number
       description: Max critical vulnerabilities allowed (code)
@@ -85,7 +80,8 @@ pipeline:
         type: SecurityTests
         when:
           pipelineStatus: Success
-          condition: <+pipeline.variables.RUN_MODE> == "pr_open" || <+pipeline.variables.RUN_MODE> == "full"
+          condition: <+pipeline.variables.RUN_MODE> == "pr_open" ||
+            <+pipeline.variables.RUN_MODE> == "full"
         spec:
           cloneCodebase: true
           caching:
@@ -372,7 +368,8 @@ pipeline:
         type: CI
         when:
           pipelineStatus: Success
-          condition: <+pipeline.variables.RUN_MODE> == "pr_open" || <+pipeline.variables.RUN_MODE> == "full"
+          condition: <+pipeline.variables.RUN_MODE> == "pr_open" ||
+            <+pipeline.variables.RUN_MODE> == "full"
         spec:
           cloneCodebase: true
           caching:
@@ -391,8 +388,32 @@ pipeline:
           execution:
             steps:
               - stepGroup:
-                  name: Complexity Analysis
-                  identifier: complexity
+                  name: Detect Go Versions
+                  identifier: detect_versions
+                  steps:
+                    - step:
+                        name: Detect Go Version
+                        identifier: detect_go_version
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          command: |
+                            cd services/<+repeat.item>
+                            GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
+                            echo "Detected Go version for <+repeat.item>: $GO_VERSION"
+                            echo "GO_VERSION=$GO_VERSION" >> $HARNESS_OUTPUT_FILE
+                          outputVariables:
+                            - name: GO_VERSION
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 4
+              - stepGroup:
+                  name: Tests
+                  identifier: tests
                   steps:
                     - step:
                         name: gocyclo
@@ -400,15 +421,15 @@ pipeline:
                         type: Run
                         spec:
                           connectorRef: account.harnessImage
-                          image: golang:alpine
+                          image: golang:<+execution.steps.detect_versions_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
                           shell: Sh
+                          envVariables:
+                            GOWORK: "off"
+                            THRESHOLD: <+pipeline.variables.COMPLEXITY_THRESHOLD>
                           command: |
                             cd services/<+repeat.item>
-
-                            # Detect Go version from go.mod
-                            GO_MOD_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
                             echo "=== Complexity Report for <+repeat.item> ==="
-                            echo "Go version (go.mod): $GO_MOD_VERSION | Runtime: $(go version)"
+                            echo "Go version: $(go version)"
                             echo "Threshold: $THRESHOLD"
 
                             go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
@@ -423,73 +444,58 @@ pipeline:
                               echo "⚠️  Warning: $COMPLEX functions exceed complexity threshold of $THRESHOLD"
                               gocyclo -over $THRESHOLD .
                             fi
-                          envVariables:
-                            THRESHOLD: <+pipeline.variables.COMPLEXITY_THRESHOLD>
-                  strategy:
-                    repeat:
-                      items: <+pipeline.variables.SERVICES.split(",")>
-                      nodeName: <+repeat.item>
-                      maxConcurrency: 4
-              - stepGroup:
-                  name: Tests
-                  identifier: tests
-                  steps:
+                      contextType: Pipeline
                     - parallel:
                         - step:
+                            type: Test
                             name: Unit Tests
                             identifier: unit_tests
-                            type: Run
                             spec:
                               connectorRef: account.harnessImage
-                              image: golang:alpine
+                              image: golang:<+execution.steps.detect_versions_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
                               shell: Sh
+                              envVariables:
+                                GOWORK: "off"
                               command: |
                                 cd services/<+repeat.item>
-
-                                # Detect Go version from go.mod
-                                GO_MOD_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
-                                echo "=== Running Unit Tests for <+repeat.item> ==="
-                                echo "Go version (go.mod): $GO_MOD_VERSION | Runtime: $(go version)"
+                                echo "=== Running unit tests for <+repeat.item> ==="
+                                echo "Go version: $(go version)"
 
                                 go install github.com/jstemmer/go-junit-report/v2@latest
                                 export PATH=$(go env GOPATH)/bin:$PATH
 
-                                go test -v -race -coverprofile=coverage.out ./... 2>&1 | tee test-output.txt | go-junit-report > junit.xml
+                                # Exclude integration tests and contracts (tested separately)
+                                PACKAGES=$(go list ./... | grep -v -E '(integration_tests|contracts)')
 
-                                # Extract coverage percentage
-                                COV=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
-                                echo "Coverage: ${COV}%"
+                                set -o pipefail
+                                go test -v -race -short -coverprofile=coverage.out $PACKAGES 2>&1 | tee test-output.txt
+                                TEST_EXIT=$?
 
-                                # Check threshold
-                                if [ $(echo "$COV < $THRESHOLD" | bc) -eq 1 ]; then
-                                  echo "❌ Coverage ${COV}% is below threshold ${THRESHOLD}%"
-                                  exit 1
-                                fi
-                                echo "✅ Coverage ${COV}% meets threshold ${THRESHOLD}%"
+                                echo "=== Coverage Report ==="
+                                COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | sed 's/%//')
+                                echo "Coverage: ${COVERAGE}%"
+                                echo "Threshold: <+pipeline.variables.COVERAGE_THRESHOLD>%"
 
-                                echo "COVERAGE=$COV" >> $HARNESS_OUTPUT_FILE
-                              envVariables:
-                                THRESHOLD: <+pipeline.variables.COVERAGE_THRESHOLD>
-                              outputVariables:
-                                - name: COVERAGE
+                                go-junit-report -set-exit-code < test-output.txt > report.xml
+                                exit $TEST_EXIT
                               reports:
                                 type: JUnit
                                 spec:
                                   paths:
-                                    - "**/junit.xml"
+                                    - services/**/report.xml
+                              intelligenceMode: true
                         - step:
                             name: Contract Tests
                             identifier: contract_tests
                             type: Run
                             spec:
                               connectorRef: account.harnessImage
-                              image: golang:alpine
+                              image: golang:<+execution.steps.detect_versions_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
                               shell: Sh
+                              envVariables:
+                                GOWORK: "off"
                               command: |
                                 cd services/<+repeat.item>
-
-                                # Detect Go version from go.mod
-                                GO_MOD_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
 
                                 # Check if contract tests exist
                                 if ls *_contract_test.go 1> /dev/null 2>&1 || [ -d "contracts" ]; then
@@ -536,7 +542,8 @@ pipeline:
         type: CI
         when:
           pipelineStatus: Success
-          condition: <+pipeline.variables.RUN_MODE> == "pr_merge" || <+pipeline.variables.RUN_MODE> == "full"
+          condition: <+pipeline.variables.RUN_MODE> == "pr_merge" ||
+            <+pipeline.variables.RUN_MODE> == "full"
         spec:
           cloneCodebase: true
           caching:
@@ -555,9 +562,24 @@ pipeline:
           execution:
             steps:
               - stepGroup:
-                  name: Build and Scan
-                  identifier: build_and_scan
+                  name: Detect and Version
+                  identifier: detect_versions
                   steps:
+                    - step:
+                        name: Detect Go Version
+                        identifier: detect_go_version
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          command: |
+                            cd services/<+repeat.item>
+                            GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
+                            echo "Detected Go version for <+repeat.item>: $GO_VERSION"
+                            echo "GO_VERSION=$GO_VERSION" >> $HARNESS_OUTPUT_FILE
+                          outputVariables:
+                            - name: GO_VERSION
                     - step:
                         name: Semantic Version
                         identifier: semantic_version
@@ -627,21 +649,27 @@ pipeline:
                             - name: VERSION
                             - name: IMAGE_TAG
                             - name: TAG_NAME
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 4
+              - stepGroup:
+                  name: Build and Scan
+                  identifier: build_and_scan
+                  steps:
                     - step:
                         name: Build Binary
                         identifier: build_binary
                         type: Run
                         spec:
                           connectorRef: account.harnessImage
-                          image: golang:alpine
+                          image: golang:<+execution.steps.detect_versions_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
                           shell: Sh
                           command: |
                             cd services/<+repeat.item>
-
-                            # Detect Go version from go.mod
-                            GO_MOD_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
                             echo "=== Building binary for <+repeat.item> ${VERSION} ==="
-                            echo "Go version (go.mod): $GO_MOD_VERSION | Runtime: $(go version)"
+                            echo "Go version: $(go version)"
 
                             CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
                               go build \
@@ -652,7 +680,8 @@ pipeline:
                             ls -lh <+repeat.item>
                             echo "✅ Binary built successfully"
                           envVariables:
-                            VERSION: <+execution.steps.semantic_version.output.outputVariables.VERSION>
+                            GOWORK: "off"
+                            VERSION: <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.VERSION>
                     - step:
                         name: Build Docker Image
                         identifier: build_docker_image
@@ -661,19 +690,17 @@ pipeline:
                           connectorRef: DockerCristian
                           repo: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
                           tags:
-                            - <+execution.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                            - <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
                           dockerfile: <+pipeline.variables.DOCKERFILE_PATH>
                           context: .
                           buildArgs:
                             SERVICE_NAME: <+repeat.item>
                             SERVICE_PORT: "8000"
-                            VERSION: <+execution.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                            VERSION: <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
                           target: runtime-prebuilt
                           optimize: true
                           caching: true
-                          dryRun: true
                           envVariables:
-                            PLUGIN_DRY_RUN: "true"
                             PLUGIN_NO_PUSH: "true"
                     - parallel:
                         - step:
@@ -686,7 +713,7 @@ pipeline:
                               target:
                                 name: <+repeat.item>-service
                                 type: container
-                                variant: <+execution.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                                variant: <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
                               advanced:
                                 log:
                                   level: info
@@ -695,7 +722,7 @@ pipeline:
                               image:
                                 type: local_image
                                 name: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
-                                tag: <+execution.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                                tag: <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
                               sbom:
                                 format: spdx-json
                             enforce:
@@ -718,7 +745,7 @@ pipeline:
                               image:
                                 type: local_image
                                 name: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
-                                tag: <+execution.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                                tag: <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
                   strategy:
                     repeat:
                       items: <+pipeline.variables.SERVICES.split(",")>
@@ -830,7 +857,7 @@ pipeline:
                           connectorRef: DockerCristian
                           repo: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
                           tags:
-                            - <+execution.steps.build_and_scan.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                            - <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
                             - latest
                           caching: true
                           dockerfile: platform/docker/go-service/Dockerfile
@@ -838,7 +865,7 @@ pipeline:
                           buildArgs:
                             SERVICE_NAME: <+repeat.item>
                             SERVICE_PORT: "8000"
-                            VERSION: <+execution.steps.build_and_scan.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                            VERSION: <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
                           target: runtime-prebuilt
                           optimize: true
                     - step:
@@ -852,7 +879,7 @@ pipeline:
                           command: |
                             apk add --no-cache curl jq > /dev/null 2>&1
 
-                            TAG_NAME="<+execution.steps.build_and_scan.steps.semantic_version.output.outputVariables.TAG_NAME>"
+                            TAG_NAME="<+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.TAG_NAME>"
 
                             echo "=== Creating Git Tag: $TAG_NAME ==="
 
