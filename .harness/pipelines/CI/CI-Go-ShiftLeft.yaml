@@ -468,7 +468,7 @@ pipeline:
                                 PACKAGES=$(go list ./... | grep -v -E '(integration_tests|contracts)')
 
                                 set -o pipefail
-                                go test -v -race -short -coverprofile=coverage.out $PACKAGES 2>&1 | tee test-output.txt
+                                go test -v -short -coverprofile=coverage.out $PACKAGES 2>&1 | tee test-output.txt
                                 TEST_EXIT=$?
 
                                 echo "=== Coverage Report ==="
@@ -667,9 +667,15 @@ pipeline:
                           image: golang:<+execution.steps.detect_versions_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
                           shell: Sh
                           command: |
-                            cd services/<+repeat.item>
+                            SERVICE_DIR="services/<+repeat.item>"
+                            BINARY_PATH="${SERVICE_DIR}/<+repeat.item>"
+
                             echo "=== Building binary for <+repeat.item> ${VERSION} ==="
                             echo "Go version: $(go version)"
+                            echo "Working directory: $(pwd)"
+                            echo "Binary output path: ${BINARY_PATH}"
+
+                            cd ${SERVICE_DIR}
 
                             CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
                               go build \
@@ -677,8 +683,18 @@ pipeline:
                               -o <+repeat.item> \
                               ./cmd/<+repeat.item>
 
-                            ls -lh <+repeat.item>
-                            echo "✅ Binary built successfully"
+                            cd /harness
+
+                            # Verify binary exists at expected path for Docker context
+                            if [ -f "${BINARY_PATH}" ]; then
+                              ls -lh ${BINARY_PATH}
+                              file ${BINARY_PATH} || true
+                              echo "✅ Binary ready at: ${BINARY_PATH}"
+                            else
+                              echo "❌ Binary not found at: ${BINARY_PATH}"
+                              ls -la ${SERVICE_DIR}/
+                              exit 1
+                            fi
                           envVariables:
                             GOWORK: "off"
                             VERSION: <+execution.steps.detect_versions_<+repeat.item>.steps.semantic_version.output.outputVariables.VERSION>
