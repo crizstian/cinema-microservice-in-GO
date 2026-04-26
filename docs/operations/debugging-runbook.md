@@ -126,6 +126,136 @@ docker stats cinema-booking --no-stream
    ss -tunap | grep :8082 | wc -l
    ```
 
+### Health Check falla con HTTP 000
+
+**Sintomas:**
+```bash
+task dev:health
+# Output:
+# cinema          :8003  /health/live         FAIL (HTTP 000)
+# seat            :8005  /health/live         FAIL (HTTP 000)
+```
+
+**Diagnostico:**
+```bash
+# 1. Ver estado de containers
+task dev:status
+
+# 2. Buscar containers con estado != "Up" o "healthy"
+#    - "Restarting (1)" → crash loop
+#    - "Exited (1)"     → falló al iniciar
+
+# 3. Ver logs del servicio fallido
+docker logs dev-cinema --tail 50
+docker logs dev-seat --tail 50
+
+# Patrones de error comunes:
+#   "connection refused"      → dependencia no disponible
+#   "no reachable servers"    → MongoDB no inicializado
+#   "ReplicaSetNoPrimary"     → MongoDB sin PRIMARY
+#   "context deadline"        → timeout conectando a DB
+```
+
+**Causas y Soluciones:**
+
+1. **MongoDB no tiene PRIMARY (más común)**
+   ```bash
+   docker exec dev-mongo1 mongosh --quiet --eval "rs.status().ok"
+   # Si retorna 1 → MongoDB OK
+   # Si falla o retorna 0 → reiniciar mongo-init
+   docker restart dev-mongo-init
+   sleep 15
+   docker restart dev-cinema dev-seat
+   ```
+
+2. **MONGO_SERVERS incorrecto en .env**
+   ```bash
+   # Verificar
+   grep MONGO_SERVERS platform/deploy/docker-compose/.env
+   # Para dev profile debe ser: MONGO_SERVERS=mongo1:27017
+   # Si falta, añadir y reiniciar
+   echo "MONGO_SERVERS=mongo1:27017" >> platform/deploy/docker-compose/.env
+   task dev:down && task dev:up
+   ```
+
+3. **Race condition al iniciar**
+   ```bash
+   # Los servicios iniciaron antes de que mongo-init completara
+   docker restart dev-cinema dev-seat
+   sleep 10
+   task dev:health
+   ```
+
+### Booking falla con PAYMENT_FAILED
+
+**Sintomas:**
+```json
+{
+  "code": "PAYMENT_FAILED",
+  "message": "Payment processing failed",
+  "details": { "error": "Post \"http://payment:8007/payment/makePurchase\": EOF" }
+}
+```
+
+**Diagnostico:**
+```bash
+# Ver logs de payment
+docker logs dev-payment --tail 30
+
+# Buscar panic o errores
+docker logs dev-payment 2>&1 | grep -E "panic|error|Error"
+```
+
+**Causas y Soluciones:**
+
+1. **Payment service crasheando (panic)**
+   ```bash
+   # Verificar si hay panic en logs
+   docker logs dev-payment 2>&1 | grep -A5 "panic"
+   
+   # Si hay panic, rebuild el servicio
+   cd services/payment && go build -o payment ./cmd/payment && cd ../..
+   docker build --no-cache -f platform/docker/go-service/Dockerfile \
+     --build-arg SERVICE_NAME=payment --build-arg SERVICE_PORT=8007 \
+     -t crizstian/payment-service:dev .
+   docker rm -f dev-payment
+   docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile dev up -d payment
+   ```
+
+2. **Request con formato incorrecto**
+   ```bash
+   # El booking request debe incluir:
+   # - user.creditCard (no booking.payment)
+   # - booking.totalAmount > 0
+   # - booking.seats array
+   # Ver formato correcto en docker-compose-deployment-guide.md sección 9.5
+   ```
+
+### Premieres endpoint retorna null
+
+**Sintomas:**
+```bash
+curl http://movie:8002/movies/premieres
+# {"movies":null,"msg":"list of movies"}
+```
+
+**Causa:** Los campos de fecha en seed data no coinciden con los que busca el API.
+
+**Diagnostico:**
+```bash
+# Ver campos en la DB
+docker exec dev-mongo1 mongosh movie --quiet --eval \
+  "db.movies.findOne({}, {title:1, releaseYear:1, releaseMonth:1, releaseDay:1})"
+
+# Si falta releaseYear/Month/Day, el seed data está incorrecto
+```
+
+**Solucion:**
+```bash
+# Re-ejecutar seed con datos correctos
+docker exec -i dev-mongo1 mongosh --quiet < platform/docker/mongodb/seed/04-seed-test-data.js
+```
+
 ---
 
 ## Problemas de MongoDB

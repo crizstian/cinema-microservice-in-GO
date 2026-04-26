@@ -107,6 +107,14 @@ services:
 ### Generated: platform/deploy/docker-compose/.env
 
 ```bash
+# Environment prefix (determines container naming: dev-*, test-*)
+ENV_PREFIX=dev
+
+# MongoDB connection (REQUIRED for dev profile)
+# - dev profile: mongo1:27017 (3-node replica set)
+# - test profile: mongo:27017 (single node)
+MONGO_SERVERS=mongo1:27017
+
 # Service Ports
 MOVIE_PORT=8002
 BOOKING_PORT=8001
@@ -127,6 +135,8 @@ MOVIE_IMAGE=crizstian/movie-service
 BOOKING_IMAGE=crizstian/booking-service
 # ...
 ```
+
+> **IMPORTANTE**: Si `MONGO_SERVERS` no está configurado, los servicios usarán el default `mongo:27017` que solo existe en el profile `test`. Para el profile `dev`, debe ser `mongo1:27017`.
 
 ### Docker Compose Usage
 

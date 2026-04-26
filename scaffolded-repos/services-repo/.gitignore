@@ -1,0 +1,2 @@
+# DevContainer secrets (never commit)
+.devcontainer/.env

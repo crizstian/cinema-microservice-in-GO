@@ -268,12 +268,13 @@ pipeline:
                       echo "PR Merged: $PR_MERGED"
                       echo ""
 
+                      # CI-Go-ShiftLeft expects: pr_open, pr_merge, full
                       if [ "$PR_STATE" = "open" ]; then
-                        RUN_MODE="validate"
+                        RUN_MODE="pr_open"
                       elif [ "$PR_ACTION" = "closed" ] && [ "$PR_MERGED" = "true" ]; then
-                        RUN_MODE="build"
+                        RUN_MODE="pr_merge"
                       else
-                        RUN_MODE="validate"
+                        RUN_MODE="pr_open"
                       fi
 
                       echo "=== Run Mode Decision ==="
@@ -294,22 +295,55 @@ pipeline:
                       - name: SOURCE_BRANCH
                         type: String
                         value: SOURCE_BRANCH
+              - step:
+                  type: Run
+                  name: Build Services Array
+                  identifier: build_services_array
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:3.19
+                    shell: Sh
+                    envVariables:
+                      GO_SERVICES: <+execution.steps.classify_language.output.outputVariables.GO_SERVICES>
+                    command: |
+                      echo "=== Building Services Array for CD Pipeline ==="
+                      echo "Input services: $GO_SERVICES"
+
+                      apk add --no-cache jq > /dev/null 2>&1
+
+                      # Convert comma-separated to JSON array of serviceRef objects
+                      # Input: "booking,movie,cinema"
+                      # Output: [{"serviceRef":"bookingservice"},{"serviceRef":"movieservice"},{"serviceRef":"cinemaservice"}]
+                      # Note: Harness service identifiers have "service" suffix
+
+                      if [ -z "$GO_SERVICES" ]; then
+                        SERVICES_ARRAY="[]"
+                      else
+                        SERVICES_ARRAY=$(echo "$GO_SERVICES" | tr ',' '\n' | jq -R '{serviceRef: (. + "service")}' | jq -s '.')
+                      fi
+
+                      echo "Services array: $SERVICES_ARRAY"
+                      echo "SERVICES_ARRAY=$SERVICES_ARRAY" >> $HARNESS_OUTPUT_FILE
+                    outputVariables:
+                      - name: SERVICES_ARRAY
+                        type: String
+                        value: SERVICES_ARRAY
           buildIntelligence:
             enabled: false
     - stage:
-        name: Trigger Go Services
-        identifier: trigger_go
-        description: Trigger Go child pipeline for detected Go services
+        name: Trigger Go CICD
+        identifier: trigger_go_cicd
+        description: Trigger unified CICD pipeline for Go services (CI + CD)
         type: Pipeline
         when:
           pipelineStatus: Success
           condition: <+pipeline.stages.detect_classify.spec.execution.steps.classify_language.output.outputVariables.HAS_GO> == "true"
         spec:
           org: sandbox
-          pipeline: CI_Golang_v2
+          pipeline: CICD_Go_ShiftLeft
           project: CristianRamirez
           inputs:
-            identifier: CI_Golang_v2
+            identifier: CICD_Go_ShiftLeft
             properties:
               ci:
                 codebase:
@@ -317,6 +351,15 @@ pipeline:
                     type: PR
                     spec:
                       number: <+pipeline.stages.detect_classify.spec.execution.steps.determine_run_mode.output.outputVariables.PR_NUMBER>
+            stages:
+              - stage:
+                  identifier: deploy_dev
+                  type: Deployment
+                  spec:
+                    services:
+                      values: <+pipeline.stages.detect_classify.spec.execution.steps.build_services_array.output.outputVariables.SERVICES_ARRAY>
+                      metadata:
+                        parallel: false
             variables:
               - name: RUN_MODE
                 type: String
@@ -324,18 +367,12 @@ pipeline:
               - name: SERVICES
                 type: String
                 value: <+pipeline.stages.detect_classify.spec.execution.steps.classify_language.output.outputVariables.GO_SERVICES>
-              - name: GO_VERSION
-                type: String
-                value: <+input>.default(1.24).selectOneFrom(1.24)
-              - name: VERSION_BUMP
-                type: String
-                value: <+input>.default(patch).allowedValues(patch,minor,major)
         failureStrategies:
           - onFailure:
               errors:
                 - AllErrors
               action:
-                type: MarkAsSuccess
+                type: MarkAsFailure
     - stage:
         name: Trigger Python Services
         identifier: trigger_python

@@ -7,6 +7,12 @@ print("Step 4: Seeding test data...");
 // =======================================================================
 db = db.getSiblingDB("movie");
 
+// Use current date for releaseYear/Month/Day so premieres endpoint works
+var now = new Date();
+var currentYear = now.getFullYear();
+var currentMonth = now.getMonth() + 1; // 1-indexed
+var currentDay = now.getDate();
+
 db.movies.insertMany([
   {
     _id: ObjectId("507f1f77bcf86cd799439011"),
@@ -18,9 +24,9 @@ db.movies.insertMany([
     rating: "R",
     synopsis: "Two imprisoned men bond over a number of years.",
     premiere_date: new Date("1994-09-23"),
-    year: 2024,
-    month: 4,
-    day: 1
+    releaseYear: currentYear,
+    releaseMonth: currentMonth,
+    releaseDay: currentDay
   },
   {
     _id: ObjectId("507f1f77bcf86cd799439012"),
@@ -32,9 +38,9 @@ db.movies.insertMany([
     rating: "PG-13",
     synopsis: "A thief who steals corporate secrets through dream-sharing.",
     premiere_date: new Date("2010-07-16"),
-    year: 2024,
-    month: 4,
-    day: 1
+    releaseYear: currentYear,
+    releaseMonth: currentMonth,
+    releaseDay: currentDay
   }
 ]);
 

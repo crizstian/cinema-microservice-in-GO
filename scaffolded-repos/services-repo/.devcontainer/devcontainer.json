@@ -1,30 +1,33 @@
 {
-  "name": "cinemas_microservice_go",
-  "dockerComposeFile": ["docker-compose.devcontainer.yml"],
-  "service": "cinemas_microservice_go",
+  "name": "services-dev",
+  "dockerComposeFile": ["docker-compose.yml"],
+  "service": "services-dev",
   "workspaceFolder": "/workspace",
   "customizations": {
     "vscode": {
       "extensions": [
         "anthropic.claude-code",
         "golang.go",
+        "vscjava.vscode-java-pack",
+        "ms-python.python",
         "redhat.vscode-yaml",
         "humao.rest-client",
         "ms-vscode-remote.remote-containers",
         "esbenp.prettier-vscode",
-        "ShiftLeft.shiftleft-core",
-        "shd101wyy.markdown-preview-enhanced",
         "mermaidchart.vscode-mermaid-chart",
         "bierner.markdown-mermaid"
       ],
       "settings": {
-        "terminal.integrated.defaultProfile.linux": "sh",
-        "shiftleft.analyzeOnSave": true,
-        "shiftleft.enableSecretsScan": true,
-        "shiftleft.enableSastScan": true,
-        "shiftleft.enableScaScan": true,
-        "shiftleft.severityFilter": "high",
-        "shiftleft.languages": ["go", "javascript", "typescript", "python"]
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "go.useLanguageServer": true,
+        "go.lintTool": "golangci-lint",
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "java.configuration.runtimes": [
+          {
+            "name": "JavaSE-21",
+            "path": "/usr/lib/jvm/java-21-openjdk"
+          }
+        ]
       },
       "mcp": {
         "servers": {
@@ -36,15 +39,13 @@
               "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
               "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
               "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
-              "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}",
-              "HARNESS_SKIP_ELICITATION": "false"
+              "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}"
             }
           },
           "github": {
             "command": "npx",
             "args": ["-y", "@modelcontextprotocol/server-github"],
             "env": {
-              "GH_TOKEN": "${containerEnv:GH_TOKEN}",
               "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}"
             }
           },
@@ -53,13 +54,6 @@
             "args": ["-y", "@perplexity-ai/mcp-server"],
             "env": {
               "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}"
-            }
-          },
-          "kubernetes": {
-            "command": "npx",
-            "args": ["-y", "mcp-server-kubernetes"],
-            "env": {
-              "KUBECONFIG": "${containerEnv:KUBECONFIG}"
             }
           }
         }
@@ -72,22 +66,15 @@
     "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
     "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
     "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}",
-    "CLAUDE_CODE_USE_VERTEX": "${containerEnv:CLAUDE_CODE_USE_VERTEX}",
-    "ANTHROPIC_VERTEX_PROJECT_ID": "${containerEnv:ANTHROPIC_VERTEX_PROJECT_ID}",
-    "GOOGLE_CLOUD_PROJECT": "${containerEnv:GOOGLE_CLOUD_PROJECT}",
-    "CLOUD_ML_REGION": "${containerEnv:CLOUD_ML_REGION}",
-    "GOOGLE_APPLICATION_CREDENTIALS": "${containerEnv:GOOGLE_APPLICATION_CREDENTIALS}",
-    "GIT_USER_NAME": "${containerEnv:GIT_USER_NAME}",
-    "GIT_USER_EMAIL": "${containerEnv:GIT_USER_EMAIL}",
     "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
     "GH_TOKEN": "${containerEnv:GH_TOKEN}",
-    "GITHUB_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
     "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}",
     "SHIFTLEFT_ACCESS_TOKEN": "${containerEnv:SHIFTLEFT_ACCESS_TOKEN}",
     "SHIFTLEFT_ORG_ID": "${containerEnv:SHIFTLEFT_ORG_ID}",
-    "KUBECONFIG": "${containerEnv:KUBECONFIG}"
+    "GIT_USER_NAME": "${containerEnv:GIT_USER_NAME}",
+    "GIT_USER_EMAIL": "${containerEnv:GIT_USER_EMAIL}"
   },
   "remoteUser": "devuser",
-  "postCreateCommand": "sh /workspace/platform/scripts/devcontainer/post-create.sh",
-  "postStartCommand": "sh /workspace/platform/scripts/devcontainer/post-start.sh"
+  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
+  "postStartCommand": "bash .devcontainer/scripts/post-start.sh"
 }

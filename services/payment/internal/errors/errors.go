@@ -3,6 +3,7 @@ package errs
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo"
 	log "github.com/sirupsen/logrus"
@@ -20,7 +21,8 @@ func Send(status string, msg string, err error) *echo.HTTPError {
 	m := msg
 	var c int
 
-	switch status {
+	// Case-insensitive comparison
+	switch strings.ToLower(status) {
 	case "user":
 		c = http.StatusBadRequest
 		m += ", verify your data."

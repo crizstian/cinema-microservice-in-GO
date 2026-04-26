@@ -1,6 +1,6 @@
 pipeline:
-  name: CI - Go Shift Left
-  identifier: CI_Unified_v3
+  name: CICD - Go Shift Left
+  identifier: CICD_Go_ShiftLeft
   orgIdentifier: sandbox
   projectIdentifier: CristianRamirez
   tags:
@@ -136,6 +136,19 @@ pipeline:
                             enforce:
                               policySets:
                                 - security_secrets
+                    - step:
+                        name: Store Gitleaks Results
+                        identifier: store_gitleaks
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          command: |
+                            mkdir -p /harness/security-results
+                            SECRETS=$(<+execution.steps.linting.steps.Gitleaks.output.outputVariables.TOTAL>)
+                            [ -z "$SECRETS" ] || [ "$SECRETS" = "null" ] && SECRETS=0
+                            echo "$SECRETS" >> /harness/security-results/gitleaks.txt
                   strategy:
                     repeat:
                       items: <+pipeline.variables.SERVICES.split(",")>
@@ -195,6 +208,25 @@ pipeline:
                             enforce:
                               policySets:
                                 - STO_Policy
+                    - step:
+                        name: Store SCA Results
+                        identifier: store_sca
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          command: |
+                            mkdir -p /harness/security-results
+                            H_C=$(<+execution.steps.sca_scans.steps.HarnessSCA.output.outputVariables.CRITICAL>)
+                            H_H=$(<+execution.steps.sca_scans.steps.HarnessSCA.output.outputVariables.HIGH>)
+                            S_C=$(<+execution.steps.sca_scans.steps.Snyk_SCA.output.outputVariables.CRITICAL>)
+                            S_H=$(<+execution.steps.sca_scans.steps.Snyk_SCA.output.outputVariables.HIGH>)
+                            [ -z "$H_C" ] || [ "$H_C" = "null" ] && H_C=0
+                            [ -z "$H_H" ] || [ "$H_H" = "null" ] && H_H=0
+                            [ -z "$S_C" ] || [ "$S_C" = "null" ] && S_C=0
+                            [ -z "$S_H" ] || [ "$S_H" = "null" ] && S_H=0
+                            echo "$H_C $H_H $S_C $S_H" >> /harness/security-results/sca.txt
                   strategy:
                     repeat:
                       items: <+pipeline.variables.SERVICES.split(",")>
@@ -253,6 +285,25 @@ pipeline:
                             enforce:
                               policySets:
                                 - STO_Policy
+                    - step:
+                        name: Store SAST Results
+                        identifier: store_sast
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          command: |
+                            mkdir -p /harness/security-results
+                            H_C=$(<+execution.steps.sast_scans.steps.HarnessSAST.output.outputVariables.CRITICAL>)
+                            H_H=$(<+execution.steps.sast_scans.steps.HarnessSAST.output.outputVariables.HIGH>)
+                            S_C=$(<+execution.steps.sast_scans.steps.Snyk_SAST.output.outputVariables.CRITICAL>)
+                            S_H=$(<+execution.steps.sast_scans.steps.Snyk_SAST.output.outputVariables.HIGH>)
+                            [ -z "$H_C" ] || [ "$H_C" = "null" ] && H_C=0
+                            [ -z "$H_H" ] || [ "$H_H" = "null" ] && H_H=0
+                            [ -z "$S_C" ] || [ "$S_C" = "null" ] && S_C=0
+                            [ -z "$S_H" ] || [ "$S_H" = "null" ] && S_H=0
+                            echo "$H_C $H_H $S_C $S_H" >> /harness/security-results/sast.txt
                   strategy:
                     repeat:
                       items: <+pipeline.variables.SERVICES.split(",")>
@@ -270,27 +321,43 @@ pipeline:
                       #!/bin/sh
                       set -e
 
-                      sanitize() {
-                        val="$1"
-                        [ -z "$val" ] || [ "$val" = "null" ] || [ "$val" = "<+null>" ] && echo "0" || echo "$val"
-                      }
-
                       # Thresholds from pipeline variables
                       MAX_CRITICAL=$GATE_CRITICAL
                       MAX_HIGH=$GATE_HIGH
                       MAX_SECRETS=$GATE_SECRETS
 
-                      # Sanitize scanner outputs
-                      H_SCA_C=$(sanitize "$HARNESS_SCA_CRITICAL"); H_SCA_H=$(sanitize "$HARNESS_SCA_HIGH")
-                      S_SCA_C=$(sanitize "$SNYK_SCA_CRITICAL"); S_SCA_H=$(sanitize "$SNYK_SCA_HIGH")
-                      H_SAST_C=$(sanitize "$HARNESS_SAST_CRITICAL"); H_SAST_H=$(sanitize "$HARNESS_SAST_HIGH")
-                      S_SAST_C=$(sanitize "$SNYK_SAST_CRITICAL"); S_SAST_H=$(sanitize "$SNYK_SAST_HIGH")
-                      GL_T=$(sanitize "$GITLEAKS_TOTAL")
+                      # Aggregate results from all service iterations
+                      RESULTS_DIR="/harness/security-results"
+
+                      # Aggregate Gitleaks (secrets)
+                      TOTAL_SECRETS=0
+                      if [ -f "$RESULTS_DIR/gitleaks.txt" ]; then
+                        while read -r line; do
+                          [ -n "$line" ] && TOTAL_SECRETS=$((TOTAL_SECRETS + line))
+                        done < "$RESULTS_DIR/gitleaks.txt"
+                      fi
+
+                      # Aggregate SCA results (format: H_C H_H S_C S_H per line)
+                      SCA_CRITICAL=0; SCA_HIGH=0
+                      if [ -f "$RESULTS_DIR/sca.txt" ]; then
+                        while read -r h_c h_h s_c s_h; do
+                          [ -n "$h_c" ] && SCA_CRITICAL=$((SCA_CRITICAL + h_c + s_c))
+                          [ -n "$h_h" ] && SCA_HIGH=$((SCA_HIGH + h_h + s_h))
+                        done < "$RESULTS_DIR/sca.txt"
+                      fi
+
+                      # Aggregate SAST results (format: H_C H_H S_C S_H per line)
+                      SAST_CRITICAL=0; SAST_HIGH=0
+                      if [ -f "$RESULTS_DIR/sast.txt" ]; then
+                        while read -r h_c h_h s_c s_h; do
+                          [ -n "$h_c" ] && SAST_CRITICAL=$((SAST_CRITICAL + h_c + s_c))
+                          [ -n "$h_h" ] && SAST_HIGH=$((SAST_HIGH + h_h + s_h))
+                        done < "$RESULTS_DIR/sast.txt"
+                      fi
 
                       # Calculate totals
-                      TOTAL_CRITICAL=$((H_SCA_C + S_SCA_C + H_SAST_C + S_SAST_C))
-                      TOTAL_HIGH=$((H_SCA_H + S_SCA_H + H_SAST_H + S_SAST_H))
-                      TOTAL_SECRETS=$GL_T
+                      TOTAL_CRITICAL=$((SCA_CRITICAL + SAST_CRITICAL))
+                      TOTAL_HIGH=$((SCA_HIGH + SAST_HIGH))
 
                       # Evaluate gate
                       GATE_PASSED=true
@@ -304,6 +371,7 @@ pipeline:
                       echo "╔══════════════════════════════════════════════════════════════╗"
                       echo "║              CODE SECURITY GATE - EVALUATION                 ║"
                       echo "╠══════════════════════════════════════════════════════════════╣"
+                      echo "║  Aggregated across all services:                             ║"
                       printf "║  Critical: %-3s (max: %-3s)                                   ║\n" "$TOTAL_CRITICAL" "$MAX_CRITICAL"
                       printf "║  High:     %-3s (max: %-3s)                                   ║\n" "$TOTAL_HIGH" "$MAX_HIGH"
                       printf "║  Secrets:  %-3s (max: %-3s)                                   ║\n" "$TOTAL_SECRETS" "$MAX_SECRETS"
@@ -330,15 +398,6 @@ pipeline:
                       GATE_CRITICAL: <+pipeline.variables.SECURITY_GATE_CRITICAL>
                       GATE_HIGH: <+pipeline.variables.SECURITY_GATE_HIGH>
                       GATE_SECRETS: <+pipeline.variables.SECURITY_GATE_SECRETS>
-                      HARNESS_SCA_CRITICAL: <+execution.steps.sca_scans.steps.HarnessSCA.output.outputVariables.CRITICAL>
-                      HARNESS_SCA_HIGH: <+execution.steps.sca_scans.steps.HarnessSCA.output.outputVariables.HIGH>
-                      SNYK_SCA_CRITICAL: <+execution.steps.sca_scans.steps.Snyk_SCA.output.outputVariables.CRITICAL>
-                      SNYK_SCA_HIGH: <+execution.steps.sca_scans.steps.Snyk_SCA.output.outputVariables.HIGH>
-                      HARNESS_SAST_CRITICAL: <+execution.steps.sast_scans.steps.HarnessSAST.output.outputVariables.CRITICAL>
-                      HARNESS_SAST_HIGH: <+execution.steps.sast_scans.steps.HarnessSAST.output.outputVariables.HIGH>
-                      SNYK_SAST_CRITICAL: <+execution.steps.sast_scans.steps.Snyk_SAST.output.outputVariables.CRITICAL>
-                      SNYK_SAST_HIGH: <+execution.steps.sast_scans.steps.Snyk_SAST.output.outputVariables.HIGH>
-                      GITLEAKS_TOTAL: <+execution.steps.Gitleaks.output.outputVariables.TOTAL>
                     outputVariables:
                       - name: TOTAL_CRITICAL
                       - name: TOTAL_HIGH
@@ -456,6 +515,7 @@ pipeline:
                               shell: Sh
                               envVariables:
                                 GOWORK: "off"
+                                COVERAGE_THRESHOLD: <+pipeline.variables.COVERAGE_THRESHOLD>
                               command: |
                                 cd services/<+repeat.item>
                                 echo "=== Running unit tests for <+repeat.item> ==="
@@ -474,7 +534,16 @@ pipeline:
                                 echo "=== Coverage Report ==="
                                 COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | sed 's/%//')
                                 echo "Coverage: ${COVERAGE}%"
-                                echo "Threshold: <+pipeline.variables.COVERAGE_THRESHOLD>%"
+                                echo "Threshold: ${COVERAGE_THRESHOLD}%"
+
+                                # Enforce coverage threshold
+                                COVERAGE_INT=${COVERAGE%.*}
+                                if [ "$COVERAGE_INT" -lt "$COVERAGE_THRESHOLD" ]; then
+                                  echo "❌ Coverage ${COVERAGE}% is below threshold ${COVERAGE_THRESHOLD}%"
+                                  TEST_EXIT=1
+                                else
+                                  echo "✅ Coverage ${COVERAGE}% meets threshold ${COVERAGE_THRESHOLD}%"
+                                fi
 
                                 go-junit-report -set-exit-code < test-output.txt > report.xml
                                 exit $TEST_EXIT
@@ -1011,4 +1080,102 @@ pipeline:
                       PIPELINE_SEQ: <+pipeline.sequenceId>
         policySetRef:
           - security_gate_container
+    - stage:
+        name: Deploy to DEV
+        identifier: deploy_dev
+        description: Multi-service Kubernetes deployment
+        type: Deployment
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.RUN_MODE> == "pr_merge" ||
+            <+pipeline.variables.RUN_MODE> == "full"
+        spec:
+          deploymentType: Kubernetes
+          services:
+            values: <+input>
+            metadata:
+              parallel: false
+          environments:
+            metadata:
+              parallel: false
+            values:
+              - environmentRef: sandbox
+                deployToAll: false
+                infrastructureDefinitions:
+                  - identifier: sesandboxkubernetes
+                    inputs:
+                      identifier: sesandboxkubernetes
+                      type: KubernetesDirect
+                      spec:
+                        namespace: cinema-dev
+          execution:
+            steps:
+              - step:
+                  name: Rolling Deployment
+                  identifier: rollingDeployment
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+              - step:
+                  name: HTTP Liveness Check
+                  identifier: httpLiveness
+                  type: Http
+                  timeout: 30s
+                  spec:
+                    url: http://<+service.name>.cinema-dev.svc.cluster.local:<+serviceVariables.port>/health/live
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+              - step:
+                  name: HTTP Readiness Check
+                  identifier: httpReadiness
+                  type: Http
+                  timeout: 30s
+                  spec:
+                    url: http://<+service.name>.cinema-dev.svc.cluster.local:<+serviceVariables.port>/health/ready
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+              - step:
+                  name: Smoke Test
+                  identifier: smokeTest
+                  type: ShellScript
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+                          echo "=== Smoke Test: <+service.name> ==="
+
+                          SERVICE_URL="http://<+service.name>.cinema-dev.svc.cluster.local:<+serviceVariables.port>"
+
+                          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL/api/health" || echo "000")
+
+                          if [ "$RESPONSE" = "200" ]; then
+                            echo "Smoke test passed"
+                          else
+                            echo "Warning: API returned $RESPONSE"
+                          fi
+            rollbackSteps:
+              - step:
+                  name: Rollback Deployment
+                  identifier: rollbackDeployment
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec:
+                    pruningEnabled: false
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
   allowStageExecutions: true

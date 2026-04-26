@@ -1,0 +1,299 @@
+# https://taskfile.dev
+version: "3"
+
+vars:
+  ENV: '{{.ENV | default "dev"}}'
+  COMPONENT: '{{.COMPONENT | default ""}}'
+  NAMESPACE: 'cinema-{{.ENV}}'
+
+tasks:
+  # ============================================================================
+  # DEFAULT
+  # ============================================================================
+  default:
+    desc: "Show available tasks"
+    cmds: ["task --list"]
+
+  # ============================================================================
+  # TERRAFORM
+  # ============================================================================
+  tf:init:
+    desc: "Initialize Terraform: task tf:init ENV=dev"
+    dir: terraform/environments/{{.ENV}}
+    cmds:
+      - terraform init
+
+  tf:validate:
+    desc: "Validate Terraform: task tf:validate ENV=dev"
+    dir: terraform/environments/{{.ENV}}
+    cmds:
+      - terraform validate
+
+  tf:plan:
+    desc: "Plan Terraform changes: task tf:plan ENV=dev"
+    dir: terraform/environments/{{.ENV}}
+    cmds:
+      - terraform plan -out=tfplan
+
+  tf:apply:
+    desc: "Apply Terraform changes: task tf:apply ENV=dev"
+    dir: terraform/environments/{{.ENV}}
+    cmds:
+      - terraform apply tfplan
+
+  tf:destroy:
+    desc: "Destroy Terraform resources: task tf:destroy ENV=dev"
+    dir: terraform/environments/{{.ENV}}
+    cmds:
+      - terraform destroy
+
+  tf:fmt:
+    desc: "Format Terraform files"
+    cmds:
+      - terraform fmt -recursive terraform/
+
+  tf:lint:
+    desc: "Lint Terraform with tflint"
+    cmds:
+      - |
+        for dir in terraform/environments/*/; do
+          echo "=== Linting: $dir ==="
+          cd "$dir" && tflint --init && tflint || true
+          cd - > /dev/null
+        done
+
+  tf:docs:
+    desc: "Generate Terraform docs"
+    cmds:
+      - |
+        for dir in terraform/modules/*/; do
+          echo "=== Documenting: $dir ==="
+          terraform-docs markdown table "$dir" > "$dir/README.md" || true
+        done
+
+  tf:security:
+    desc: "Security scan with tfsec or checkov"
+    cmds:
+      - |
+        if command -v tfsec &> /dev/null; then
+          tfsec terraform/
+        elif command -v checkov &> /dev/null; then
+          checkov -d terraform/
+        else
+          echo "No security scanner found (tfsec or checkov)"
+        fi
+
+  # ============================================================================
+  # KUBERNETES
+  # ============================================================================
+  k8s:context:
+    desc: "Show current kubectl context"
+    cmds:
+      - kubectl config current-context
+      - kubectl cluster-info
+
+  k8s:ns:
+    desc: "List namespaces"
+    cmds:
+      - kubectl get namespaces
+
+  k8s:pods:
+    desc: "List pods in namespace: task k8s:pods ENV=dev"
+    cmds:
+      - kubectl get pods -n {{.NAMESPACE}} -o wide
+
+  k8s:services:
+    desc: "List services in namespace: task k8s:services ENV=dev"
+    cmds:
+      - kubectl get svc -n {{.NAMESPACE}}
+
+  k8s:deployments:
+    desc: "List deployments in namespace: task k8s:deployments ENV=dev"
+    cmds:
+      - kubectl get deployments -n {{.NAMESPACE}}
+
+  k8s:logs:
+    desc: "Get logs for a deployment: task k8s:logs COMPONENT=booking ENV=dev"
+    cmds:
+      - kubectl logs -n {{.NAMESPACE}} -l app.kubernetes.io/name={{.COMPONENT}} --tail=100
+
+  k8s:exec:
+    desc: "Exec into a pod: task k8s:exec COMPONENT=booking ENV=dev"
+    cmds:
+      - |
+        POD=$(kubectl get pods -n {{.NAMESPACE}} -l app.kubernetes.io/name={{.COMPONENT}} -o jsonpath='{.items[0].metadata.name}')
+        kubectl exec -it -n {{.NAMESPACE}} "$POD" -- /bin/sh
+
+  k8s:describe:
+    desc: "Describe deployment: task k8s:describe COMPONENT=booking ENV=dev"
+    cmds:
+      - kubectl describe deployment {{.COMPONENT}} -n {{.NAMESPACE}}
+
+  k8s:rollout:status:
+    desc: "Check rollout status: task k8s:rollout:status COMPONENT=booking ENV=dev"
+    cmds:
+      - kubectl rollout status deployment/{{.COMPONENT}} -n {{.NAMESPACE}}
+
+  k8s:rollout:restart:
+    desc: "Restart deployment: task k8s:rollout:restart COMPONENT=booking ENV=dev"
+    cmds:
+      - kubectl rollout restart deployment/{{.COMPONENT}} -n {{.NAMESPACE}}
+
+  k8s:rollout:undo:
+    desc: "Rollback deployment: task k8s:rollout:undo COMPONENT=booking ENV=dev"
+    cmds:
+      - kubectl rollout undo deployment/{{.COMPONENT}} -n {{.NAMESPACE}}
+
+  # ============================================================================
+  # HELM
+  # ============================================================================
+  helm:repos:
+    desc: "Add common Helm repos"
+    cmds:
+      - helm repo add bitnami https://charts.bitnami.com/bitnami
+      - helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+      - helm repo add jetstack https://charts.jetstack.io
+      - helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+      - helm repo update
+
+  helm:list:
+    desc: "List Helm releases: task helm:list ENV=dev"
+    cmds:
+      - helm list -n {{.NAMESPACE}}
+
+  helm:template:
+    desc: "Template Helm chart: task helm:template COMPONENT=booking ENV=dev"
+    cmds:
+      - |
+        if [ -d "kubernetes/charts/{{.COMPONENT}}" ]; then
+          helm template {{.COMPONENT}} kubernetes/charts/{{.COMPONENT}} \
+            -f kubernetes/values/{{.ENV}}/{{.COMPONENT}}.yaml
+        else
+          echo "Chart not found: kubernetes/charts/{{.COMPONENT}}"
+        fi
+
+  helm:install:
+    desc: "Install Helm release: task helm:install COMPONENT=booking ENV=dev"
+    cmds:
+      - |
+        helm upgrade --install {{.COMPONENT}} kubernetes/charts/{{.COMPONENT}} \
+          -n {{.NAMESPACE}} \
+          -f kubernetes/values/{{.ENV}}/{{.COMPONENT}}.yaml
+
+  helm:uninstall:
+    desc: "Uninstall Helm release: task helm:uninstall COMPONENT=booking ENV=dev"
+    cmds:
+      - helm uninstall {{.COMPONENT}} -n {{.NAMESPACE}}
+
+  # ============================================================================
+  # KUSTOMIZE
+  # ============================================================================
+  kustomize:build:
+    desc: "Build kustomize manifests: task kustomize:build ENV=dev"
+    cmds:
+      - kustomize build kubernetes/overlays/{{.ENV}}
+
+  kustomize:apply:
+    desc: "Apply kustomize manifests: task kustomize:apply ENV=dev"
+    cmds:
+      - kustomize build kubernetes/overlays/{{.ENV}} | kubectl apply -f -
+
+  kustomize:diff:
+    desc: "Diff kustomize manifests: task kustomize:diff ENV=dev"
+    cmds:
+      - kustomize build kubernetes/overlays/{{.ENV}} | kubectl diff -f -
+
+  # ============================================================================
+  # OPA POLICIES
+  # ============================================================================
+  policy:test:
+    desc: "Test OPA policies"
+    cmds:
+      - |
+        if [ -d "policies" ]; then
+          opa test policies/ -v
+        else
+          echo "No policies directory found"
+        fi
+
+  policy:check:
+    desc: "Check manifest against policies: task policy:check MANIFEST=deployment.yaml"
+    vars:
+      MANIFEST: '{{.MANIFEST | default ""}}'
+    cmds:
+      - |
+        if [ -z "{{.MANIFEST}}" ]; then
+          echo "Usage: task policy:check MANIFEST=<manifest.yaml>"
+          exit 1
+        fi
+        conftest test "{{.MANIFEST}}" -p policies/
+
+  # ============================================================================
+  # GCLOUD
+  # ============================================================================
+  gcp:project:
+    desc: "Show current GCP project"
+    cmds:
+      - gcloud config get-value project
+      - gcloud config get-value account
+
+  gcp:clusters:
+    desc: "List GKE clusters"
+    cmds:
+      - gcloud container clusters list
+
+  gcp:credentials:
+    desc: "Get GKE credentials: task gcp:credentials CLUSTER=my-cluster ZONE=us-east5-a"
+    vars:
+      CLUSTER: '{{.CLUSTER | default ""}}'
+      ZONE: '{{.ZONE | default "us-east5-a"}}'
+    cmds:
+      - gcloud container clusters get-credentials {{.CLUSTER}} --zone {{.ZONE}}
+
+  # ============================================================================
+  # VALIDATE
+  # ============================================================================
+  validate:
+    desc: "Run all validations"
+    cmds:
+      - task: tf:validate
+      - task: tf:lint
+      - task: policy:test
+
+  validate:manifests:
+    desc: "Validate Kubernetes manifests"
+    cmds:
+      - |
+        for manifest in $(find kubernetes -name "*.yaml" -type f); do
+          echo "Validating: $manifest"
+          kubectl apply --dry-run=client -f "$manifest" 2>/dev/null || echo "  -> Invalid or needs cluster"
+        done
+
+  # ============================================================================
+  # CLEAN
+  # ============================================================================
+  clean:
+    desc: "Clean generated files"
+    cmds:
+      - find terraform -name ".terraform" -type d -exec rm -rf {} + 2>/dev/null || true
+      - find terraform -name "*.tfplan" -delete 2>/dev/null || true
+      - find terraform -name ".terraform.lock.hcl" -delete 2>/dev/null || true
+      - rm -rf .task/
+
+  # ============================================================================
+  # ENVIRONMENT VALIDATION
+  # ============================================================================
+  validate:env:
+    desc: "Validate devcontainer environment (tools, auth, MCP)"
+    cmds:
+      - bash .devcontainer/scripts/validate.sh
+
+  validate:env:json:
+    desc: "Validate environment (JSON output)"
+    cmds:
+      - bash .devcontainer/scripts/validate.sh --json
+
+  validate:env:quiet:
+    desc: "Validate environment (quiet mode)"
+    cmds:
+      - bash .devcontainer/scripts/validate.sh --quiet

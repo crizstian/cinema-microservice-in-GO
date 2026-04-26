@@ -1,0 +1,109 @@
+pipeline:
+  name: CD - DEV Multi-Service
+  identifier: CD_DEV_MultiService
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  tags:
+    version: "1.0"
+    environment: dev
+    type: deployment
+  description: Multi-service deployment to DEV environment with rolling deployment strategy
+  stages:
+    - stage:
+        name: Deploy to DEV
+        identifier: deploy_dev
+        description: Multi-service Kubernetes deployment with health checks
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          services:
+            values: <+input>
+            metadata:
+              parallel: false
+          environments:
+            metadata:
+              parallel: false
+            values:
+              - environmentRef: sandbox
+                deployToAll: false
+                infrastructureDefinitions:
+                  - identifier: sesandboxkubernetes
+                    inputs:
+                      identifier: sesandboxkubernetes
+                      type: KubernetesDirect
+                      spec:
+                        namespace: cinema-dev
+          execution:
+            steps:
+              - step:
+                  name: Rolling Deployment
+                  identifier: rollingDeployment
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+              - step:
+                  name: HTTP Liveness Check
+                  identifier: httpLiveness
+                  type: Http
+                  timeout: 30s
+                  spec:
+                    url: http://<+service.name>.cinema-dev.svc.cluster.local:<+serviceVariables.port>/health/live
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+              - step:
+                  name: HTTP Readiness Check
+                  identifier: httpReadiness
+                  type: Http
+                  timeout: 30s
+                  spec:
+                    url: http://<+service.name>.cinema-dev.svc.cluster.local:<+serviceVariables.port>/health/ready
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+              - step:
+                  name: Smoke Test
+                  identifier: smokeTest
+                  type: ShellScript
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+                          echo "=== Smoke Test: <+service.name> ==="
+
+                          SERVICE_URL="http://<+service.name>.cinema-dev.svc.cluster.local:<+serviceVariables.port>"
+
+                          echo "Testing API endpoint..."
+                          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL/api/health" || echo "000")
+
+                          if [ "$RESPONSE" = "200" ] || [ "$RESPONSE" = "404" ]; then
+                            echo "API endpoint responded: $RESPONSE"
+                          else
+                            echo "Warning: API returned $RESPONSE"
+                          fi
+
+                          echo "=== Smoke Test Complete: <+service.name> ==="
+            rollbackSteps:
+              - step:
+                  name: Rollback Deployment
+                  identifier: rollbackDeployment
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec:
+                    pruningEnabled: false
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+  allowStageExecutions: true

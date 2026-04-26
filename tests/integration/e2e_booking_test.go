@@ -235,6 +235,50 @@ func (s *E2ETestSuite) Test02_BrowseMovies() {
 }
 
 // ============================================================
+// Step 2b: Browse Premieres (validates seed data fields)
+// ============================================================
+
+func (s *E2ETestSuite) Test02b_BrowsePremieres() {
+	s.T().Log("Step 2b: Browse Movie Premieres")
+
+	resp, err := s.get(MovieServiceURL+"/movies/premieres", s.accessToken)
+	require.NoError(s.T(), err)
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	s.T().Logf("  Premieres response: %d - %s", resp.StatusCode, truncate(string(body), 400))
+
+	require.Equal(s.T(), http.StatusOK, resp.StatusCode, "Premieres endpoint must return 200")
+
+	var result map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	require.NoError(s.T(), err, "Premieres response must be valid JSON")
+
+	// Verify we have movies data (not null)
+	movies, ok := result["movies"].([]interface{})
+	require.True(s.T(), ok, "Response must contain 'movies' array, got: %v", result)
+	require.NotNil(s.T(), movies, "Movies array must not be null - check seed data has releaseYear/Month/Day fields")
+	require.Greater(s.T(), len(movies), 0, "Premieres must return at least one movie - verify seed data dates are current")
+
+	// Verify first movie has required fields
+	if len(movies) > 0 {
+		movie, ok := movies[0].(map[string]interface{})
+		require.True(s.T(), ok, "Movie must be an object")
+
+		// These fields must exist for premieres to work
+		title, hasTitle := movie["title"].(string)
+		require.True(s.T(), hasTitle, "Movie must have 'title' field")
+		s.T().Logf("  First premiere: %s", title)
+
+		// If movie has ID, we can use it
+		if id, hasID := movie["id"].(string); hasID && s.movieID == "" {
+			s.movieID = id
+			s.T().Logf("  Using premiere movie ID: %s", s.movieID)
+		}
+	}
+}
+
+// ============================================================
 // Step 3: Select Showtime
 // ============================================================
 

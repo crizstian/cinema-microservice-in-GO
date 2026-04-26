@@ -234,6 +234,13 @@ services:
     healthcheck:
       <<: *service-healthcheck
       test: ["CMD-SHELL", "wget -qO- http://localhost:${MOVIE_PORT:-8002}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
     networks:
       - cinema-network
 
@@ -258,6 +265,13 @@ services:
     healthcheck:
       <<: *service-healthcheck
       test: ["CMD-SHELL", "wget -qO- http://localhost:${CINEMA_PORT:-8003}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
     networks:
       - cinema-network
 
@@ -284,6 +298,19 @@ services:
     healthcheck:
       <<: *service-healthcheck
       test: ["CMD-SHELL", "wget -qO- http://localhost:${USER_PORT:-8004}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
+      redis-dev:
+        condition: service_healthy
+        required: false
+      redis-test:
+        condition: service_healthy
+        required: false
     networks:
       - cinema-network
 
@@ -309,6 +336,13 @@ services:
     healthcheck:
       <<: *service-healthcheck
       test: ["CMD-SHELL", "wget -qO- http://localhost:${SHOWTIME_PORT:-8006}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
     networks:
       - cinema-network
 
@@ -336,6 +370,19 @@ services:
     healthcheck:
       <<: *service-healthcheck
       test: ["CMD-SHELL", "wget -qO- http://localhost:${SEAT_PORT:-8005}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
+      redis-dev:
+        condition: service_healthy
+        required: false
+      redis-test:
+        condition: service_healthy
+        required: false
     networks:
       - cinema-network
 
@@ -363,6 +410,13 @@ services:
     healthcheck:
       <<: *service-healthcheck
       test: ["CMD-SHELL", "wget -qO- http://localhost:${PAYMENT_PORT:-8007}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
     networks:
       - cinema-network
 
@@ -415,6 +469,13 @@ services:
     healthcheck:
       <<: *service-healthcheck
       test: ["CMD-SHELL", "wget -qO- http://localhost:${BOOKING_PORT:-8001}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
     networks:
       - cinema-network
 

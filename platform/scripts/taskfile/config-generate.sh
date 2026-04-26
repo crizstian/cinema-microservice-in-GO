@@ -25,6 +25,14 @@ cat > "$ENV_FILE" << 'HEADER'
 #
 # Docker Compose auto-detects this file in its directory
 
+# Environment Configuration
+ENV_PREFIX=dev
+
+# MongoDB Connection
+# - dev profile uses mongo1:27017 (3-node replica set)
+# - test profile uses mongo:27017 (single node)
+MONGO_SERVERS=mongo1:27017
+
 HEADER
 
 echo "# Service Ports" >> "$ENV_FILE"

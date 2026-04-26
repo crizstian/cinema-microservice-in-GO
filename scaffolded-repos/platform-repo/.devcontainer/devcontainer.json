@@ -1,0 +1,67 @@
+{
+  "name": "platform-dev",
+  "dockerComposeFile": ["docker-compose.yml"],
+  "service": "platform-dev",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "redhat.vscode-yaml",
+        "ms-azuretools.vscode-docker",
+        "timonwong.shellcheck",
+        "foxundermoon.shell-format",
+        "humao.rest-client",
+        "ms-vscode-remote.remote-containers",
+        "mermaidchart.vscode-mermaid-chart",
+        "bierner.markdown-mermaid",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "yaml.schemas": {
+          "https://json.schemastore.org/github-workflow.json": ".github/workflows/*.yaml",
+          "https://raw.githubusercontent.com/harness/harness-schema/main/v0/pipeline.json": ".harness/**/*.yaml"
+        },
+        "shellcheck.enable": true,
+        "shellcheck.executablePath": "/usr/bin/shellcheck"
+      },
+      "mcp": {
+        "servers": {
+          "harness": {
+            "command": "npx",
+            "args": ["-y", "harness-mcp-v2"],
+            "env": {
+              "HARNESS_API_KEY": "${containerEnv:HARNESS_API_KEY}",
+              "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
+              "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
+              "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
+              "HARNESS_TOOLSETS": "pipelines,templates,policies,triggers,connectors"
+            }
+          },
+          "github": {
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+            "env": {
+              "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}"
+            }
+          }
+        }
+      }
+    }
+  },
+  "remoteEnv": {
+    "HARNESS_API_KEY": "${containerEnv:HARNESS_API_KEY}",
+    "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
+    "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
+    "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
+    "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}",
+    "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
+    "GH_TOKEN": "${containerEnv:GH_TOKEN}",
+    "GIT_USER_NAME": "${containerEnv:GIT_USER_NAME}",
+    "GIT_USER_EMAIL": "${containerEnv:GIT_USER_EMAIL}"
+  },
+  "remoteUser": "devuser",
+  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
+  "postStartCommand": "bash .devcontainer/scripts/post-start.sh"
+}

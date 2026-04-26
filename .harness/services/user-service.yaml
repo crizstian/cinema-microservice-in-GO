@@ -1,0 +1,49 @@
+service:
+  name: user-service
+  identifier: userservice
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  description: User authentication and profile microservice
+  tags:
+    language: go
+    type: microservice
+  serviceDefinition:
+    type: Kubernetes
+    spec:
+      manifests:
+        - manifest:
+            identifier: templates
+            type: K8sManifest
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: CristianConnector
+                  gitFetchType: Branch
+                  paths:
+                    - platform/deploy/kubernetes/templates/services/deployment.yaml
+                    - platform/deploy/kubernetes/templates/services/service.yaml
+                    - platform/deploy/kubernetes/templates/services/configmap.yaml
+                  repoName: cinema-microservice-in-GO
+                  branch: main
+              valuesPaths:
+                - platform/deploy/kubernetes/values/base.yaml
+                - platform/deploy/kubernetes/values/environments/dev.yaml
+                - platform/deploy/kubernetes/values/services/user.yaml
+              skipResourceVersioning: true
+              enableDeclarativeRollback: false
+      artifacts:
+        primary:
+          primaryArtifactRef: artifact
+          sources:
+            - identifier: artifact
+              type: DockerRegistry
+              spec:
+                connectorRef: DockerCristian
+                imagePath: crizstian/user-service
+                tag: <+input>
+      variables:
+        - name: port
+          type: String
+          value: "8004"
+  gitOpsEnabled: false

@@ -2,7 +2,7 @@
 
 > **AI Agent Context**: This document covers CI/CD pipelines, deployment strategies, and infrastructure management. The project uses **Harness CI** for pipelines with Test Intelligence support.
 
-**Last Updated**: 2026-04-08  
+**Last Updated**: 2026-04-26  
 **CI/CD Platform**: Harness  
 **Container Registry**: ghcr.io
 
@@ -690,6 +690,53 @@ kubectl rollout undo deployment/booking --to-revision=2
 
 ---
 
+## Testing Strategy
+
+### Source of Truth: Gherkin Features
+
+Los flujos de negocio están definidos en archivos `.feature` (Gherkin) que sirven como:
+- **Documentación ejecutable** de requisitos de negocio
+- **Tests E2E** automatizados con godog
+- **Fuente de verdad** para validar datos de prueba
+
+```
+tests/bdd/features/
+├── booking.feature   # Flujo completo de reserva
+├── movies.feature    # Catálogo y estrenos  
+└── seats.feature     # Gestión de asientos
+```
+
+### Test Commands
+
+```bash
+# Run all BDD tests
+task test:bdd
+
+# Run by tags
+task test:bdd TAGS="@smoke"
+task test:bdd TAGS="@booking"
+task test:bdd TAGS="@premieres"
+
+# Run E2E tests (Go)
+task test:e2e
+
+# Run unit tests
+task test SERVICE=booking
+```
+
+### Test Pyramid
+
+| Level | Location | Runner | Purpose |
+|-------|----------|--------|---------|
+| Unit | `services/*/internal/*_test.go` | `go test` | Lógica de negocio aislada |
+| Contract | `services/*/contracts/` | Pact | Contratos entre servicios |
+| Integration | `tests/integration/` | `go test -tags=e2e` | Flujo E2E con servicios reales |
+| BDD | `tests/bdd/features/` | godog | Validación de flujos de negocio |
+
+**ADR**: [ADR-008 - Gherkin como Fuente de Verdad](../architecture/adr/ADR-008-gherkin-source-of-truth.md)
+
+---
+
 ## Related Documentation
 
 - [Architecture Overview](../architecture/README.md)
@@ -703,6 +750,12 @@ kubectl rollout undo deployment/booking --to-revision=2
 - [Docker Compose Deployment Guide](./docker-compose-deployment-guide.md) - Local development setup
 - [Kubernetes Deployment Guide](./kubernetes-deployment-guide.md) - K8s deployment with Harness
 - [Debugging Runbook](./debugging-runbook.md) - Troubleshooting guide
+
+### CI/CD Guides
+
+- [CI/CD Strategy](./ci-cd-strategy.md) - Pipeline architecture and shift-left security
+- [CI Runbook](./ci-runbook.md) - Pipeline operational procedures
+- [CI FAQ](./ci-faq.md) - Frequently asked questions about pipelines
 
 ---
 

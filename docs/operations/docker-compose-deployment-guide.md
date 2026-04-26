@@ -400,7 +400,7 @@ Este documento cubre el despliegue local completo del sistema Cinema Microservic
    │              │ │ SAGA Step 3: Process Payment                     │ │
    │              │ └──────────────────────────────────────────────────┘ │
    │              │              │             │             │            │
-   │              │ POST /payments/makePurchase              │            │
+   │              │ POST /payment/makePurchase              │            │
    │              │──────────────────────────────────────────>│            │
    │              │              │             │             │            │
    │              │              │   201 Created {charge_id} │            │
@@ -461,7 +461,7 @@ Este documento cubre el despliegue local completo del sistema Cinema Microservic
    │              │              │  200 OK     │             │
    │              │<────────────────────────────│             │
    │              │              │             │             │
-   │              │ Step 3: POST /payments/makePurchase      │
+   │              │ Step 3: POST /payment/makePurchase      │
    │              │──────────────────────────────────────────>│
    │              │              │             │             │
    │              │              │             │  ╔═══════════════════╗
@@ -959,7 +959,7 @@ networks:
 
 ## 6. Configuración y Despliegue
 
-### 6.1 Prerequisitos
+### 7.1 Prerequisitos
 
 ```bash
 # Verificar versiones
@@ -968,7 +968,7 @@ docker compose version    # ≥ v2.x
 task --version            # ≥ 3.x (opcional pero recomendado)
 ```
 
-### 6.2 Generar Configuración
+### 7.2 Generar Configuración
 
 ```bash
 # Source of truth: platform/config/services.yaml
@@ -979,7 +979,7 @@ task config:generate
 task config:show
 ```
 
-### 6.3 Levantar Entorno
+### 7.3 Levantar Entorno
 
 ```bash
 # Opción 1: Con Task (recomendado)
@@ -992,7 +992,7 @@ docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile de
 **Primera vez:** 3-5 minutos (build de imágenes + init MongoDB)
 **Subsecuentes:** 30-60 segundos
 
-### 6.4 Perfiles Disponibles
+### 7.4 Perfiles Disponibles
 
 | Perfil | MongoDB | Storage | Caso de uso |
 |--------|---------|---------|-------------|
@@ -1008,16 +1008,18 @@ docker compose --profile test up -d
 docker compose --profile debug up -d
 ```
 
-### 6.5 Variables de Entorno Clave
+### 7.5 Variables de Entorno Clave
 
 ```bash
-# .env generado
-ENV_PREFIX=dev                    # Prefijo de containers
-MONGO_SERVERS=mongo1:27017        # Connection string
+# .env generado por task config:generate
+ENV_PREFIX=dev                    # Prefijo de containers (dev-*, test-*)
+MONGO_SERVERS=mongo1:27017        # Connection string para dev profile
 VERSION=dev                       # Tag de imágenes
 HOLD_TTL_SECONDS=300              # TTL de seat holds (5 min)
 JWT_SECRET=dev-secret-change-in-production
 ```
+
+> **IMPORTANTE**: Si `MONGO_SERVERS` no está configurado, los servicios usarán el default `mongo:27017` que solo existe en el profile `test`. Para el profile `dev`, debe ser `mongo1:27017`. Si tienes problemas de conexión a MongoDB, verifica que estas variables estén en el archivo `.env`.
 
 ---
 
@@ -1116,14 +1118,26 @@ docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile de
 ### 8.2 Health Checks Sistemáticos
 
 ```bash
-# Script de validación completa
-services=("booking:8001" "movie:8002" "cinema:8003" "user:8004" "seat:8005" "showtime:8006" "payment:8007" "notification:8008")
+# Liveness check (servicios responden)
+task dev:health
 
-for svc in "${services[@]}"; do
-  name="${svc%%:*}"; port="${svc##*:}"
-  status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://$name:$port/health/live)
-  printf "%-15s %s\n" "$name:" "$([[ $status == 200 ]] && echo '✓ healthy' || echo '✗ unhealthy')"
-done
+# Readiness check (servicios listos para tráfico)
+task dev:health:ready
+
+# Check completo (servicios + infraestructura)
+task dev:health:all
+```
+
+**Output esperado:**
+```
+booking:        ✓ healthy
+movie:          ✓ healthy
+cinema:         ✓ healthy
+user:           ✓ healthy
+seat:           ✓ healthy
+showtime:       ✓ healthy
+payment:        ✓ healthy
+notification:   ✓ healthy
 ```
 
 ### 8.3 Validación de Infraestructura
@@ -1290,16 +1304,25 @@ echo -e "\n=== Step 5: Create booking ==="
 BOOKING=$(curl -s -X POST http://booking:8001/booking \
   -H "Content-Type: application/json" \
   -d "{
+    \"user\": {
+      \"name\": \"John\",
+      \"lastName\": \"Doe\",
+      \"email\": \"john@test.com\",
+      \"phoneNumber\": \"1234567890\",
+      \"creditCard\": {
+        \"number\": \"4242424242424242\",
+        \"cvc\": \"123\",
+        \"exp_month\": \"12\",
+        \"exp_year\": \"2027\"
+      },
+      \"membership\": \"standard\"
+    },
     \"booking\": {
       \"showtime_id\": \"$SHOWTIME_ID\",
       \"hold_id\": \"$HOLD_ID\",
       \"session_id\": \"$SESSION_ID\",
-      \"payment\": {
-        \"card_number\": \"4242424242424242\",
-        \"exp_month\": 12,
-        \"exp_year\": 2027,
-        \"cvv\": \"123\"
-      }
+      \"seats\": [\"A1\", \"A2\"],
+      \"totalAmount\": 2400
     }
   }")
 echo "$BOOKING" | jq '{msg, payment, ticket: .ticket.order_id}'
@@ -1314,7 +1337,69 @@ docker exec dev-mongo1 mongosh seat --quiet --eval "
 
 ## 10. Troubleshooting Avanzado
 
-### 10.1 Container en "Restarting" Loop
+### 10.1 Health Check Falla con HTTP 000
+
+**Síntoma:** `task dev:health` muestra `FAIL (HTTP 000)` en algunos servicios
+
+```
+cinema          :8003  /health/live         FAIL (HTTP 000)
+seat            :8005  /health/live         FAIL (HTTP 000)
+```
+
+**Causa:** HTTP 000 indica que el servicio no responde (container caído, crasheando, o no iniciado).
+
+**Diagnóstico:**
+
+```bash
+# 1. Ver estado de containers
+task dev:status
+
+# Buscar containers con estado != "Up" o "healthy"
+# Ejemplos problemáticos:
+#   - "Restarting (1)" → crash loop
+#   - "Exited (1)"     → falló al iniciar
+#   - Sin el servicio  → no se creó
+
+# 2. Ver logs del servicio fallido
+docker logs dev-cinema --tail 50
+docker logs dev-seat --tail 50
+
+# 3. Patrones de error comunes en logs:
+#   "connection refused"      → dependencia no disponible
+#   "no reachable servers"    → MongoDB no inicializado
+#   "context deadline"        → timeout conectando a DB
+#   "panic:"                  → crash en código Go
+```
+
+**Soluciones por causa:**
+
+```bash
+# Causa A: MongoDB no está listo (más común)
+docker exec dev-mongo1 mongosh --quiet --eval "rs.status().ok"
+# Si retorna 1 → MongoDB OK, el problema es otro
+# Si falla → ver sección 10.3 "Replica Set No Inicializado"
+
+# Causa B: Container en crash loop
+docker restart dev-cinema dev-seat
+sleep 5
+task dev:health
+
+# Causa C: Container no existe
+task dev:down && task dev:up
+
+# Causa D: Redis no disponible (afecta seat-service)
+docker exec dev-redis redis-cli ping
+# Si falla → docker restart dev-redis
+```
+
+**Verificar recuperación:**
+
+```bash
+# Esperar 10s y re-verificar
+sleep 10 && task dev:health
+```
+
+### 10.2 Container en "Restarting" Loop
 
 **Síntoma:** `docker ps` muestra estado `Restarting (1)`
 
@@ -1344,7 +1429,7 @@ docker restart cinema-seat cinema-cinema
 docker logs cinema-seat --tail 20 --follow
 ```
 
-### 10.2 Replica Set No Inicializado
+### 10.3 Replica Set No Inicializado
 
 **Síntoma:** Servicios fallan con "no reachable servers"
 
@@ -1384,7 +1469,7 @@ sleep 15
 docker exec dev-mongo1 mongosh --quiet --eval "rs.status().members.find(m => m.stateStr === 'PRIMARY').name"
 ```
 
-### 10.3 Datos de Seed No Cargados
+### 10.4 Datos de Seed No Cargados
 
 **Síntoma:** APIs retornan arrays vacíos
 
@@ -1407,7 +1492,7 @@ docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile de
 task dev:up
 ```
 
-### 10.4 Seat Hold Expirado Durante Booking
+### 10.5 Seat Hold Expirado Durante Booking
 
 **Síntoma:** Booking falla con `HOLD_EXPIRED`
 
@@ -1431,7 +1516,7 @@ echo $HOLD_TTL_SECONDS  # Default: 300 (5 min)
 HOLD_TTL_SECONDS=30 docker compose --profile test up -d
 ```
 
-### 10.5 Conflicto de Puertos
+### 10.6 Conflicto de Puertos
 
 **Síntoma:** `bind: address already in use`
 
@@ -1455,7 +1540,7 @@ docker compose -f platform/deploy/docker-compose/docker-compose.yml --profile de
 kill -9 $(lsof -t -i :8002)
 ```
 
-### 10.6 Debugging con Logs Estructurados
+### 10.7 Debugging con Logs Estructurados
 
 **Habilitar debug logging:**
 
@@ -1475,7 +1560,7 @@ docker logs cinema-booking --follow | jq -R '. as $line | try (fromjson) catch $
 docker logs cinema-booking 2>&1 | grep "make-booking-handler-saga"
 ```
 
-### 10.7 MongoDB Query Debugging
+### 10.8 MongoDB Query Debugging
 
 ```bash
 # Habilitar profiling (nivel 2 = todas las queries)
@@ -1492,7 +1577,7 @@ docker exec dev-mongo1 mongosh movie --eval "
 docker exec dev-mongo1 mongosh movie --eval "db.setProfilingLevel(0)"
 ```
 
-### 10.8 Redis Lock Debugging
+### 10.9 Redis Lock Debugging
 
 ```bash
 # Ver todos los holds activos
@@ -1508,7 +1593,7 @@ docker exec dev-redis redis-cli KEYS "seat_hold:sht_001:*"
 docker exec dev-redis redis-cli KEYS "seat_hold:*" | xargs -r docker exec -i dev-redis redis-cli DEL
 ```
 
-### 10.9 Network Debugging
+### 10.10 Network Debugging
 
 ```bash
 # Verificar DNS resolution desde un servicio
@@ -1521,7 +1606,7 @@ docker exec cinema-booking wget -qO- http://seat:8005/health/live
 docker network inspect cinema-dev-network
 ```
 
-### 10.10 Container Resource Issues
+### 10.11 Container Resource Issues
 
 ```bash
 # Ver uso de recursos
@@ -1549,6 +1634,9 @@ docker inspect cinema-seat | jq '.[0].State.OOMKilled'
 | `task dev:down` | Detener entorno |
 | `task dev:status` | Ver estado de containers |
 | `task dev:logs` | Ver logs agregados |
+| `task dev:health` | Health check (liveness) |
+| `task dev:health:ready` | Health check (readiness) |
+| `task dev:health:all` | Health check completo (servicios + infra) |
 | `task config:generate` | Generar .env desde services.yaml |
 | `task config:show` | Mostrar configuración actual |
 | `task test:e2e` | Ejecutar tests E2E |
@@ -1563,7 +1651,7 @@ docker inspect cinema-seat | jq '.[0].State.OOMKilled'
 | **seat** | `GET /seats/availability?showtime_id=X`, `POST /seats/hold`, `GET /seats/hold/:hold_id`, `DELETE /seats/hold/:hold_id`, `POST /seats/reserve`, `POST /seats/layout`, `GET /seats/layout/:room_id` |
 | **booking** | `POST /booking`, `GET /booking/:orderId` |
 | **cinema** | `GET /cinemas`, `GET /cinemas/:id`, `POST /cinemas`, `GET /cinemas/:id/rooms`, `POST /cinemas/:id/rooms` |
-| **payment** | `POST /payments/makePurchase`, `GET /payments/:id`, `POST /payments/:id/refund` |
+| **payment** | `POST /payment/makePurchase`, `GET /payments/:id`, `POST /payments/:id/refund` |
 | **notification** | `POST /notification/sendEmail`, `POST /notification/sendSMS` |
 | **all** | `GET /health/live`, `GET /health/ready`, `GET /ping` |
 
@@ -1601,22 +1689,20 @@ services/
 ### 11.4 Quick Diagnostic Commands
 
 ```bash
-# Estado general
-task dev:status && echo "---" && docker exec dev-redis redis-cli ping
+# Estado de containers
+task dev:status
 
-# Verificar todo el stack
-for svc in movie:8002 user:8004 booking:8001 seat:8005 showtime:8006; do
-  curl -s -o /dev/null -w "${svc%%:*}: %{http_code}\n" http://${svc}/health/live
-done
+# Health check completo (servicios + infra)
+task dev:health:all
 
-# MongoDB status
+# MongoDB replica set status
 docker exec dev-mongo1 mongosh --quiet --eval "rs.status().members.map(m => m.name + ':' + m.stateStr)"
 
-# Redis keys count
-docker exec dev-redis redis-cli DBSIZE
+# Redis status
+docker exec dev-redis redis-cli ping && docker exec dev-redis redis-cli DBSIZE
 
 # Logs recientes con errores
-docker compose -f platform/deploy/docker-compose/docker-compose.yml logs --tail 50 2>&1 | grep -i error
+task dev:logs -- --tail 50 2>&1 | grep -i error
 ```
 
 ### 11.5 Códigos de Error Comunes
@@ -1637,6 +1723,18 @@ docker compose -f platform/deploy/docker-compose/docker-compose.yml logs --tail 
 
 ## Documentación Relacionada
 
+### Desarrollo
 - [Development Guide](../development/README.md) — Setup de desarrollo local
 - [API Reference](../api/) — OpenAPI specs por servicio
 - [Contract Tests](../api/contracts.md) — Consumer-driven contracts
+
+### CI/CD y Operaciones
+- [CI/CD Strategy](./ci-cd-strategy.md) — Estrategia de integración continua y shift-left security
+- [CI Runbook](./ci-runbook.md) — Procedimientos operacionales para pipelines
+- [CI FAQ](./ci-faq.md) — Preguntas frecuentes sobre el pipeline
+
+### Configuración de Pipelines
+- [Pipeline YAML](../../.harness/pipelines/CI/CI-Go-ShiftLeft.yaml) — Definición del pipeline principal
+- [Pipeline Triggers](../../.harness/triggers/) — Configuración de triggers (PR open/merge)
+- [Pipeline Templates](../../.harness/templates/) — Templates reutilizables (steps, stages)
+- [OPA Policies](../../.harness/policies/) — Políticas de seguridad y gobernanza

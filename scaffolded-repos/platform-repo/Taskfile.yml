@@ -1,0 +1,221 @@
+# https://taskfile.dev
+version: "3"
+
+vars:
+  PIPELINE: '{{.PIPELINE | default ""}}'
+  TEMPLATE: '{{.TEMPLATE | default ""}}'
+
+tasks:
+  # ============================================================================
+  # DEFAULT
+  # ============================================================================
+  default:
+    desc: "Show available tasks"
+    cmds: ["task --list"]
+
+  # ============================================================================
+  # YAML VALIDATION
+  # ============================================================================
+  lint:yaml:
+    desc: "Lint all YAML files"
+    cmds:
+      - yamllint -d relaxed .harness/ || true
+      - yamllint -d relaxed .github/ 2>/dev/null || true
+
+  lint:harness:
+    desc: "Validate Harness pipeline YAML"
+    cmds:
+      - |
+        for f in .harness/pipelines/**/*.yaml; do
+          echo "Validating: $f"
+          yq eval '.' "$f" > /dev/null || echo "Invalid YAML: $f"
+        done
+
+  lint:templates:
+    desc: "Validate Harness template YAML"
+    cmds:
+      - |
+        for f in .harness/templates/**/*.yaml; do
+          echo "Validating: $f"
+          yq eval '.' "$f" > /dev/null || echo "Invalid YAML: $f"
+        done
+
+  lint:all:
+    desc: "Run all linting"
+    cmds:
+      - task: lint:yaml
+      - task: lint:harness
+      - task: lint:templates
+      - task: lint:shell
+
+  # ============================================================================
+  # SHELL SCRIPTS
+  # ============================================================================
+  lint:shell:
+    desc: "Lint shell scripts with shellcheck"
+    cmds:
+      - |
+        find . -name "*.sh" -type f | while read script; do
+          echo "Checking: $script"
+          shellcheck "$script" || true
+        done
+
+  # ============================================================================
+  # OPA POLICIES
+  # ============================================================================
+  policy:test:
+    desc: "Test OPA policies"
+    cmds:
+      - |
+        if [ -d ".harness/policies" ]; then
+          for policy in .harness/policies/*.rego; do
+            echo "Testing: $policy"
+            opa test "$policy" || true
+          done
+        else
+          echo "No policies directory found"
+        fi
+
+  policy:eval:
+    desc: "Evaluate OPA policy against input: task policy:eval POLICY=security INPUT=pipeline.json"
+    vars:
+      POLICY: '{{.POLICY | default ""}}'
+      INPUT: '{{.INPUT | default ""}}'
+    cmds:
+      - |
+        if [ -z "{{.POLICY}}" ] || [ -z "{{.INPUT}}" ]; then
+          echo "Usage: task policy:eval POLICY=<policy.rego> INPUT=<input.json>"
+          exit 1
+        fi
+        opa eval -i "{{.INPUT}}" -d "{{.POLICY}}" "data"
+
+  # ============================================================================
+  # SPECTRAL (OpenAPI)
+  # ============================================================================
+  spectral:lint:
+    desc: "Lint OpenAPI specs with Spectral"
+    cmds:
+      - |
+        for spec in $(find . -name "openapi.yaml" -o -name "openapi.yml"); do
+          echo "Linting: $spec"
+          spectral lint "$spec" || true
+        done
+
+  # ============================================================================
+  # DOCKER
+  # ============================================================================
+  docker:lint:
+    desc: "Lint Dockerfiles"
+    cmds:
+      - |
+        for df in $(find . -name "Dockerfile*" -type f); do
+          echo "Checking: $df"
+          # Use hadolint if available
+          if command -v hadolint &> /dev/null; then
+            hadolint "$df" || true
+          else
+            echo "hadolint not installed, skipping"
+          fi
+        done
+
+  docker:build:base:
+    desc: "Build base devcontainer image"
+    cmds:
+      - |
+        if [ -f "tooling/devcontainer/Dockerfile.base" ]; then
+          docker build -t platform/devcontainer-base:latest -f tooling/devcontainer/Dockerfile.base tooling/devcontainer/
+        else
+          echo "No base Dockerfile found"
+        fi
+
+  # ============================================================================
+  # HARNESS PIPELINES
+  # ============================================================================
+  pipeline:list:
+    desc: "List all pipelines"
+    cmds:
+      - |
+        echo "=== Pipelines ==="
+        find .harness/pipelines -name "*.yaml" -type f | while read f; do
+          name=$(yq '.pipeline.name // .name // "unknown"' "$f" 2>/dev/null)
+          echo "  - $f: $name"
+        done
+
+  pipeline:validate:
+    desc: "Validate pipeline structure: task pipeline:validate PIPELINE=CI-Unified"
+    cmds:
+      - |
+        PIPELINE_FILE=$(find .harness/pipelines -name "*{{.PIPELINE}}*.yaml" | head -1)
+        if [ -z "$PIPELINE_FILE" ]; then
+          echo "Pipeline not found: {{.PIPELINE}}"
+          exit 1
+        fi
+        echo "Validating: $PIPELINE_FILE"
+        yq eval '.' "$PIPELINE_FILE" > /dev/null
+        echo "Pipeline is valid YAML"
+
+  template:list:
+    desc: "List all templates"
+    cmds:
+      - |
+        echo "=== Templates ==="
+        find .harness/templates -name "*.yaml" -type f 2>/dev/null | while read f; do
+          name=$(yq '.template.name // .name // "unknown"' "$f" 2>/dev/null)
+          type=$(yq '.template.type // "unknown"' "$f" 2>/dev/null)
+          echo "  - $f: $name ($type)"
+        done
+
+  # ============================================================================
+  # DOCUMENTATION
+  # ============================================================================
+  docs:serve:
+    desc: "Serve documentation locally (requires mkdocs)"
+    cmds:
+      - |
+        if command -v mkdocs &> /dev/null; then
+          mkdocs serve
+        else
+          echo "mkdocs not installed. Install with: pip install mkdocs"
+        fi
+
+  # ============================================================================
+  # CI SIMULATION
+  # ============================================================================
+  ci:validate:
+    desc: "Simulate CI validation stage"
+    cmds:
+      - task: lint:all
+      - task: policy:test
+
+  ci:full:
+    desc: "Simulate full CI pipeline"
+    cmds:
+      - task: ci:validate
+      - task: docker:lint
+
+  # ============================================================================
+  # CLEAN
+  # ============================================================================
+  clean:
+    desc: "Clean generated files"
+    cmds:
+      - rm -rf dist/ build/ .task/
+      - find . -name "*.bak" -delete
+
+  # ============================================================================
+  # ENVIRONMENT VALIDATION
+  # ============================================================================
+  validate:env:
+    desc: "Validate devcontainer environment (tools, auth, MCP)"
+    cmds:
+      - bash .devcontainer/scripts/validate.sh
+
+  validate:env:json:
+    desc: "Validate environment (JSON output)"
+    cmds:
+      - bash .devcontainer/scripts/validate.sh --json
+
+  validate:env:quiet:
+    desc: "Validate environment (quiet mode)"
+    cmds:
+      - bash .devcontainer/scripts/validate.sh --quiet

@@ -1,0 +1,49 @@
+service:
+  name: movie-service
+  identifier: movieservice
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  description: Movie catalog and information microservice
+  tags:
+    language: go
+    type: microservice
+  serviceDefinition:
+    type: Kubernetes
+    spec:
+      manifests:
+        - manifest:
+            identifier: templates
+            type: K8sManifest
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: CristianConnector
+                  gitFetchType: Branch
+                  paths:
+                    - platform/deploy/kubernetes/templates/services/deployment.yaml
+                    - platform/deploy/kubernetes/templates/services/service.yaml
+                    - platform/deploy/kubernetes/templates/services/configmap.yaml
+                  repoName: cinema-microservice-in-GO
+                  branch: main
+              valuesPaths:
+                - platform/deploy/kubernetes/values/base.yaml
+                - platform/deploy/kubernetes/values/environments/dev.yaml
+                - platform/deploy/kubernetes/values/services/movie.yaml
+              skipResourceVersioning: true
+              enableDeclarativeRollback: false
+      artifacts:
+        primary:
+          primaryArtifactRef: artifact
+          sources:
+            - identifier: artifact
+              type: DockerRegistry
+              spec:
+                connectorRef: DockerCristian
+                imagePath: crizstian/movie-service
+                tag: <+input>
+      variables:
+        - name: port
+          type: String
+          value: "8002"
+  gitOpsEnabled: false

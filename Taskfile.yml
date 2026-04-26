@@ -66,6 +66,17 @@ tasks:
     desc: "Run E2E tests"
     cmds: ["{{.SCRIPTS}}/test-e2e.sh"]
 
+  test:bdd:
+    desc: "Run BDD tests with Gherkin (godog)"
+    dir: tests/bdd
+    vars:
+      TAGS: '{{.TAGS | default ""}}'
+      FORMAT: '{{.FORMAT | default "pretty"}}'
+    cmds:
+      - |
+        echo "Running BDD tests..."
+        GODOG_TAGS="{{.TAGS}}" GODOG_FORMAT="{{.FORMAT}}" go test -v ./...
+
   test:coverage:
     desc: "Check coverage: task test:coverage THRESHOLD=80"
     cmds: ["{{.SCRIPTS}}/test-coverage.sh {{.THRESHOLD | default \"80\"}}"]
@@ -386,6 +397,39 @@ tasks:
       - |
         echo "=== Service Configuration ==="
         yq '.services | to_entries | .[] | .key + ": port=" + (.value.port | tostring)' platform/config/services.yaml
+
+  # ============================================================================
+  # SCAFFOLD (Multi-repo migration tooling)
+  # ============================================================================
+  scaffold:devcontainer:
+    desc: "Generate devcontainer for a repo: task scaffold:devcontainer TYPE=services DIR=./output"
+    vars:
+      TYPE: '{{.TYPE | default "services"}}'
+      DIR: '{{.DIR | default "./output"}}'
+    cmds:
+      - platform/scripts/scaffold-devcontainer.sh {{.TYPE}} {{.DIR}}
+
+  scaffold:devcontainer:all:
+    desc: "Generate devcontainers for all 3 repos: task scaffold:devcontainer:all DIR=./repos"
+    vars:
+      DIR: '{{.DIR | default "./repos"}}'
+    cmds:
+      - platform/scripts/scaffold-devcontainer.sh all {{.DIR}}
+
+  scaffold:devcontainer:services:
+    desc: "Generate services-repo devcontainer"
+    cmds:
+      - platform/scripts/scaffold-devcontainer.sh services {{.DIR | default "./services-repo"}}
+
+  scaffold:devcontainer:platform:
+    desc: "Generate platform-repo devcontainer"
+    cmds:
+      - platform/scripts/scaffold-devcontainer.sh platform {{.DIR | default "./platform-repo"}}
+
+  scaffold:devcontainer:infra:
+    desc: "Generate infra-repo devcontainer"
+    cmds:
+      - platform/scripts/scaffold-devcontainer.sh infra {{.DIR | default "./infra-repo"}}
 
   # ============================================================================
   # HELP
