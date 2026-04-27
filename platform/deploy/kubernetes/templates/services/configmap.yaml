@@ -9,13 +9,26 @@ metadata:
     app.kubernetes.io/component: config
     app.kubernetes.io/environment: {{ .Values.environment }}
 data:
+  # Base configuration
   SERVICE_PORT: {{ quote (default "8080" .Values.port) }}
+  LOG_LEVEL: {{ quote .Values.observability.logLevel }}
+
+  # Database configuration (standard pattern)
+  {{- if .Values.database }}
   DB_NAME: {{ quote (default .Values.serviceName .Values.dbName) }}
   DB_SERVERS: {{ quote .Values.database.servers }}
   DB_REPLICA: {{ quote (default "" .Values.database.replica) }}
-  DB_USER: {{ quote (default "" .Values.database.user) }}
-  DB_PASS: {{ quote (default "" .Values.database.password) }}
-  LOG_LEVEL: {{ quote .Values.observability.logLevel }}
+  {{- end }}
+
+  # Legacy MongoDB configuration (cinema, showtime)
+  {{- if .Values.mongodb }}
+  MONGO_URI: {{ quote .Values.mongodb.uri }}
+  MONGO_DB: {{ quote .Values.mongodb.database }}
+  PORT: {{ quote .Values.port }}
+  {{- end }}
+
+  # Service discovery URLs
+  {{- if .Values.services }}
   BOOKING_URL: {{ quote .Values.services.booking }}
   MOVIE_URL: {{ quote .Values.services.movie }}
   CINEMA_URL: {{ quote .Values.services.cinema }}
@@ -24,3 +37,9 @@ data:
   SHOWTIME_URL: {{ quote .Values.services.showtime }}
   PAYMENT_URL: {{ quote .Values.services.payment }}
   NOTIFICATION_URL: {{ quote .Values.services.notification }}
+  {{- end }}
+
+  # Service-specific extra config
+  {{- range $key, $value := .Values.extraConfig }}
+  {{ $key }}: {{ quote $value }}
+  {{- end }}
