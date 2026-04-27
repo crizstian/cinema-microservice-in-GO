@@ -1,25 +1,17 @@
 # Booking Service Values
-# Template with Harness expressions - values resolved at deploy time
+# Static configuration - no Harness expressions except service.name and artifact.tag
 
 serviceName: <+service.name>
 version: <+artifact.tag>
 
-port: <+serviceVariables.port>
-dbName: <+serviceVariables.dbName>
+port: 8001
+dbName: booking
 
 dependencies:
   - seat-service
   - payment-service
   - showtime-service
   - notification-service
-
-resources:
-  requests:
-    cpu: <+serviceVariables.cpu_request>
-    memory: <+serviceVariables.mem_request>
-  limits:
-    cpu: <+serviceVariables.cpu_limit>
-    memory: <+serviceVariables.mem_limit>
 
 autoscaling:
   minReplicas: 2
