@@ -39,6 +39,9 @@ patches:
         path: /data/MONGO_DB
         value: showtime
       - op: add
+        path: /data/PORT
+        value: "8006"
+      - op: add
         path: /data/NATS_URL
         value: nats://nats.cinema-infra.svc.cluster.local:4222
       - op: add
