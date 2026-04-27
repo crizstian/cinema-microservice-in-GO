@@ -34,6 +34,30 @@ patches:
         value: mongodb.cinema-infra.svc.cluster.local:27017
       - op: add
         path: /data/NATS_URL
+      - op: add
+        path: /data/PAYMENT_URL
+        value: http://payment-service.cinema-dev.svc.cluster.local:8007
+      - op: add
+        path: /data/NOTIFICATION_URL
+        value: http://notification-service.cinema-dev.svc.cluster.local:8008
+      - op: add
+        path: /data/SEAT_SERVICE_URL
+        value: http://seat-service.cinema-dev.svc.cluster.local:8005
+      - op: add
+        path: /data/SHOWTIME_SERVICE_URL
+        value: http://showtime-service.cinema-dev.svc.cluster.local:8006
+      - op: add
+        path: /data/MOVIE_SERVICE_URL
+        value: http://movie-service.cinema-dev.svc.cluster.local:8002
+      - op: add
+        path: /data/CINEMA_SERVICE_URL
+        value: http://cinema-service.cinema-dev.svc.cluster.local:8003
+      - op: add
+        path: /data/USER_SERVICE_URL
+        value: http://user-service.cinema-dev.svc.cluster.local:8004
+      - op: add
+        path: /data/BOOKING_SERVICE_URL
+        value: http://booking-service.cinema-dev.svc.cluster.local:8001
         value: nats://nats.cinema-infra.svc.cluster.local:4222
   - target:
       kind: HorizontalPodAutoscaler
