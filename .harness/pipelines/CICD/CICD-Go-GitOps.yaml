@@ -1008,44 +1008,31 @@ pipeline:
             <+pipeline.variables.RUN_MODE> == "full") &&
             "<+pipeline.stages.build_and_release.spec.execution.steps.aggregate_tags.output.outputVariables.SERVICE_TAGS>"
             != ""
+        variables:
+          - name: ARTIFACT_TAG
+            type: String
+            description: Docker image tag to deploy (auto-resolved from CI)
+            required: true
+            value: <+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
         spec:
           deploymentType: Kubernetes
           gitOpsEnabled: true
           service:
-            useFromStage: {}
             serviceRef: <+repeat.item>servicegitops
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: serviceimage
+                      sources:
+                        - identifier: serviceimage
+                          type: DockerRegistry
+                          spec:
+                            tag: <+stage.variables.ARTIFACT_TAG>
           execution:
             steps:
-              - step:
-                  type: ShellScript
-                  name: Extract Service Tag
-                  identifier: extract_tag
-                  timeout: 1m
-                  spec:
-                    shell: Bash
-                    onDelegate: true
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          #!/bin/bash
-                          SERVICE_NAME="<+repeat.item>"
-                          SERVICE_TAGS="<+pipeline.stages.build_and_release.spec.execution.steps.aggregate_tags.output.outputVariables.SERVICE_TAGS>"
-
-                          # Extract tag for current service from "service1:tag1,service2:tag2" format
-                          IMAGE_TAG=$(echo "$SERVICE_TAGS" | tr ',' '\n' | grep "^${SERVICE_NAME}:" | cut -d':' -f2)
-
-                          if [ -z "$IMAGE_TAG" ]; then
-                            echo "ERROR: Could not find tag for service $SERVICE_NAME in SERVICE_TAGS: $SERVICE_TAGS"
-                            exit 1
-                          fi
-
-                          echo "Service: $SERVICE_NAME"
-                          echo "Tag: $IMAGE_TAG"
-                    outputVariables:
-                      - name: IMAGE_TAG
-                        type: String
-                        value: IMAGE_TAG
               - step:
                   type: GitOpsUpdateReleaseRepo
                   name: Update Release Repo
@@ -1055,7 +1042,7 @@ pipeline:
                     variables:
                       - name: image_tag
                         type: String
-                        value: <+execution.steps.extract_tag.output.outputVariables.IMAGE_TAG>
+                        value: <+stage.variables.ARTIFACT_TAG>
                       - name: service_name
                         type: String
                         value: <+repeat.item>
@@ -1073,7 +1060,7 @@ pipeline:
                     approvalMessage: |
                       Review GitOps PR for <+repeat.item>
                       Environment: Dev
-                      Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+execution.steps.extract_tag.output.outputVariables.IMAGE_TAG>
+                      Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+stage.variables.ARTIFACT_TAG>
                     includePipelineExecutionHistory: true
                     isAutoRejectEnabled: false
                     approvers:
