@@ -69,3 +69,12 @@ patches:
       - op: replace
         path: /spec/maxReplicas
         value: 2
+      - op: add
+        path: /data/STRIPE_MOCK
+        value: "true"
+      - op: add
+        path: /data/STRIPE_SECRET
+        value: sk_test_mock
+      - op: add
+        path: /data/STRIPE_PUBLIC
+        value: pk_test_mock

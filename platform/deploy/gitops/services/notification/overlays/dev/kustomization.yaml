@@ -69,3 +69,9 @@ patches:
       - op: replace
         path: /spec/maxReplicas
         value: 2
+      - op: add
+        path: /data/EMAIL
+        value: notifications@cinema.dev
+      - op: add
+        path: /data/EMAIL_PASS
+        value: mock_password_dev

@@ -31,6 +31,12 @@ patches:
         value: debug
       - op: add
         path: /data/DB_SERVERS
+      - op: add
+        path: /data/MONGO_URI
+        value: mongodb://mongodb.cinema-infra.svc.cluster.local:27017
+      - op: add
+        path: /data/MONGO_DB
+        value: cinema_seats
         value: mongodb.cinema-infra.svc.cluster.local:27017
       - op: add
         path: /data/NATS_URL
