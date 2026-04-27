@@ -1,0 +1,42 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cinema-infrastructure
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: cinema-microservices
+    app.kubernetes.io/component: infrastructure
+spec:
+  goTemplate: true
+  generators:
+    - list:
+        elements:
+          - component: mongodb
+            port: "27017"
+          - component: nats
+            port: "4222"
+  template:
+    metadata:
+      name: "infra-{{.component}}"
+      labels:
+        app.kubernetes.io/name: "{{.component}}"
+        app.kubernetes.io/component: infrastructure
+        app.kubernetes.io/part-of: cinema-microservices
+        harness.io/serviceRef: "cinema-infrastructure"
+        harness.io/envRef: "shared"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/crizstian/cinema-microservice-in-GO.git
+        targetRevision: monorepo
+        path: "platform/deploy/gitops/infrastructure/{{.component}}/base"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: cinema-infra
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true

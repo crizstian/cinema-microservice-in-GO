@@ -1,5 +1,5 @@
 {
-  "cluster_name": "dev",
+  "cluster_name": "incluster",
   "environment": "dev",
   "namespace": "cinema-dev",
   "server_address": "https://kubernetes.default.svc",
@@ -15,15 +15,12 @@
     "memory_limit": "256Mi"
   },
   "database": {
-    "servers": "mongodb.cinema-dev.svc.cluster.local:27017"
+    "servers": "mongodb.cinema-infra.svc.cluster.local:27017"
   },
   "nats": {
-    "url": "nats://nats.cinema-dev.svc.cluster.local:4222"
+    "url": "nats://nats.cinema-infra.svc.cluster.local:4222"
   },
   "ingress": {
     "host": "cinema.dev.local"
-  },
-  "node_selector": {
-    "owner": "cristian-ramirez"
   }
 }

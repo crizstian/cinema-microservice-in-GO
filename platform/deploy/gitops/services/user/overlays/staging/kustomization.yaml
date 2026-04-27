@@ -31,10 +31,10 @@ patches:
         value: info
       - op: add
         path: /data/DB_SERVERS
-        value: mongodb.cinema-staging.svc.cluster.local:27017
+        value: mongodb.cinema-infra.svc.cluster.local:27017
       - op: add
         path: /data/NATS_URL
-        value: nats://nats.cinema-staging.svc.cluster.local:4222
+        value: nats://nats.cinema-infra.svc.cluster.local:4222
   - target:
       kind: HorizontalPodAutoscaler
       name: user-service

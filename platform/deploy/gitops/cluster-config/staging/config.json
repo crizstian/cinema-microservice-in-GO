@@ -1,5 +1,5 @@
 {
-  "cluster_name": "staging",
+  "cluster_name": "incluster",
   "environment": "staging",
   "namespace": "cinema-staging",
   "server_address": "https://kubernetes.default.svc",
@@ -15,15 +15,12 @@
     "memory_limit": "512Mi"
   },
   "database": {
-    "servers": "mongodb.cinema-staging.svc.cluster.local:27017"
+    "servers": "mongodb.cinema-infra.svc.cluster.local:27017"
   },
   "nats": {
-    "url": "nats://nats.cinema-staging.svc.cluster.local:4222"
+    "url": "nats://nats.cinema-infra.svc.cluster.local:4222"
   },
   "ingress": {
     "host": "cinema.staging.local"
-  },
-  "node_selector": {
-    "owner": "cristian-ramirez"
   }
 }
