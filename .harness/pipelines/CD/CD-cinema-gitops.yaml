@@ -4,43 +4,58 @@ pipeline:
   projectIdentifier: CristianRamirez
   orgIdentifier: sandbox
   tags:
+    version: "2.0"
     type: gitops
     app: cinema-microservices
+  description: |
+    Multi-service GitOps deployment pipeline for Cinema microservices.
+    Supports deploying multiple services in a single pipeline run.
+    Uses Harness GitOps with ArgoCD for declarative deployments.
   properties:
     ci:
       codebase:
         connectorRef: CristianConnector
         repoName: cinema-microservice-in-GO
         build: <+input>
+        prCloneStrategy: SourceBranch
   variables:
-    - name: SERVICE_NAME
+    - name: SERVICES
       type: String
-      description: "Service to deploy (booking, cinema, movie, etc.)"
+      description: Comma-separated list of services to deploy (e.g., booking,movie,cinema)
       required: true
       value: <+input>
+    - name: IMAGE_TAG
+      type: String
+      description: Docker image tag to deploy (e.g., 1.0.0, latest)
+      required: true
+      value: <+input>
+    - name: DOCKER_REGISTRY
+      type: String
+      description: Docker registry prefix
+      value: crizstian
   stages:
     - stage:
         name: Dev
         identifier: Dev
-        description: "Deploy to development environment"
+        description: Deploy all services to development environment
         type: Deployment
         spec:
           deploymentType: Kubernetes
           gitOpsEnabled: true
           service:
-            serviceRef: cinemaservicesgitops
+            serviceRef: <+repeat.item>servicegitops
             serviceInputs:
               serviceDefinition:
                 type: Kubernetes
                 spec:
                   artifacts:
                     primary:
-                      primaryArtifactRef: service-image
+                      primaryArtifactRef: serviceimage
                       sources:
-                        - identifier: service-image
+                        - identifier: serviceimage
                           type: DockerRegistry
                           spec:
-                            tag: <+input>
+                            tag: <+pipeline.variables.IMAGE_TAG>
           execution:
             steps:
               - step:
@@ -52,7 +67,10 @@ pipeline:
                     variables:
                       - name: image_tag
                         type: String
-                        value: <+artifact.tag>
+                        value: <+pipeline.variables.IMAGE_TAG>
+                      - name: service_name
+                        type: String
+                        value: <+repeat.item>
                       - name: replicas
                         type: String
                         value: "1"
@@ -65,9 +83,9 @@ pipeline:
                   identifier: PR_Review
                   spec:
                     approvalMessage: |
-                      Review the GitOps PR for <+pipeline.variables.SERVICE_NAME>
+                      Review GitOps PR for <+repeat.item>
                       Environment: Dev
-                      Image Tag: <+artifact.tag>
+                      Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.variables.IMAGE_TAG>
                     includePipelineExecutionHistory: true
                     isAutoRejectEnabled: false
                     approvers:
@@ -98,7 +116,7 @@ pipeline:
                     dryRun: false
                     applyOnly: false
                     forceApply: true
-                    applicationRegex: <+pipeline.variables.SERVICE_NAME>-dev
+                    applicationRegex: <+repeat.item>-dev
                     showResourceProgress: true
                     syncOptions:
                       skipSchemaValidation: false
@@ -109,14 +127,112 @@ pipeline:
                       prunePropagationPolicy: foreground
                       serverSideApply: true
                   timeout: 10m
+              - step:
+                  type: Http
+                  name: Liveness Check
+                  identifier: livenessCheck
+                  timeout: 30s
+                  spec:
+                    url: http://<+repeat.item>-service.cinema-dev.svc.cluster.local:8000/health/live
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 3
+                            retryIntervals:
+                              - 10s
+                            onRetryFailure:
+                              action:
+                                type: MarkAsFailure
+              - step:
+                  type: Http
+                  name: Readiness Check
+                  identifier: readinessCheck
+                  timeout: 30s
+                  spec:
+                    url: http://<+repeat.item>-service.cinema-dev.svc.cluster.local:8000/health/ready
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 3
+                            retryIntervals:
+                              - 10s
+                            onRetryFailure:
+                              action:
+                                type: MarkAsFailure
+              - step:
+                  type: ShellScript
+                  name: Smoke Test
+                  identifier: smokeTest
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+
+                          SERVICE="<+repeat.item>"
+                          NAMESPACE="cinema-dev"
+                          SERVICE_URL="http://${SERVICE}-service.${NAMESPACE}.svc.cluster.local:8000"
+
+                          echo "╔══════════════════════════════════════════════════════════════╗"
+                          echo "║  Smoke Test: ${SERVICE}-service                              "
+                          echo "║  Environment: dev                                            "
+                          echo "╚══════════════════════════════════════════════════════════════╝"
+
+                          # Test health endpoint
+                          echo "=== Testing /api/health ==="
+                          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL/api/health" || echo "000")
+                          if [ "$RESPONSE" = "200" ]; then
+                            echo "✅ Health check passed"
+                          else
+                            echo "⚠️  Health check returned: $RESPONSE"
+                          fi
+
+                          # Test service-specific endpoint
+                          echo "=== Testing service endpoint ==="
+                          case "$SERVICE" in
+                            movie)
+                              curl -s "$SERVICE_URL/api/movies" | head -c 200 || true
+                              ;;
+                            cinema)
+                              curl -s "$SERVICE_URL/api/cinemas" | head -c 200 || true
+                              ;;
+                            booking)
+                              curl -s "$SERVICE_URL/api/bookings/health" | head -c 200 || true
+                              ;;
+                            *)
+                              echo "ℹ️  No specific endpoint test for $SERVICE"
+                              ;;
+                          esac
+
+                          echo ""
+                          echo "✅ Smoke test completed for ${SERVICE}"
             rollbackSteps:
               - step:
                   type: RevertPR
                   name: Revert PR
                   identifier: RevertPR
                   spec:
-                    commitId: <+pipeline.stages.Dev.spec.execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
-                    prTitle: "Rollback: <+pipeline.variables.SERVICE_NAME> dev"
+                    commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: "Rollback: <+repeat.item> dev"
                   timeout: 10m
               - step:
                   type: MergePR
@@ -137,7 +253,18 @@ pipeline:
                   identifier: SyncRollback
                   spec:
                     prune: false
-                    applicationRegex: <+pipeline.variables.SERVICE_NAME>-dev
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    applicationRegex: <+repeat.item>-dev
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      serverSideApply: true
                   timeout: 10m
           environment:
             environmentRef: dev
@@ -152,11 +279,16 @@ pipeline:
                 - AllErrors
               action:
                 type: StageRollback
+        strategy:
+          repeat:
+            items: <+pipeline.variables.SERVICES.split(",")>
+            nodeName: <+repeat.item>
+            maxConcurrency: 1
 
     - stage:
         name: Staging Gate
         identifier: Staging_Gate
-        description: "Approval for staging deployment"
+        description: Approval for staging deployment
         type: Approval
         spec:
           execution:
@@ -169,8 +301,8 @@ pipeline:
                   spec:
                     approvalMessage: |
                       Approve deployment to Staging?
-                      Service: <+pipeline.variables.SERVICE_NAME>
-                      Image: <+artifact.tag>
+                      Services: <+pipeline.variables.SERVICES>
+                      Image Tag: <+pipeline.variables.IMAGE_TAG>
                     includePipelineExecutionHistory: true
                     approvers:
                       minimumCount: 1
@@ -183,14 +315,25 @@ pipeline:
     - stage:
         name: Staging
         identifier: Staging
-        description: "Deploy to staging environment"
+        description: Deploy all services to staging environment
         type: Deployment
         spec:
           deploymentType: Kubernetes
           gitOpsEnabled: true
           service:
-            useFromStage:
-              stage: Dev
+            serviceRef: <+repeat.item>servicegitops
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: serviceimage
+                      sources:
+                        - identifier: serviceimage
+                          type: DockerRegistry
+                          spec:
+                            tag: <+pipeline.variables.IMAGE_TAG>
           execution:
             steps:
               - step:
@@ -200,6 +343,12 @@ pipeline:
                   timeout: 10m
                   spec:
                     variables:
+                      - name: image_tag
+                        type: String
+                        value: <+pipeline.variables.IMAGE_TAG>
+                      - name: service_name
+                        type: String
+                        value: <+repeat.item>
                       - name: replicas
                         type: String
                         value: "2"
@@ -225,21 +374,126 @@ pipeline:
                   identifier: GitOpsSync
                   spec:
                     prune: true
+                    dryRun: false
+                    applyOnly: false
                     forceApply: true
-                    applicationRegex: <+pipeline.variables.SERVICE_NAME>-staging
+                    applicationRegex: <+repeat.item>-staging
                     showResourceProgress: true
                     syncOptions:
+                      skipSchemaValidation: false
                       autoCreateNamespace: true
                       serverSideApply: true
+                      pruneResourcesAtLast: true
+                      applyOutOfSyncOnly: true
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
                   timeout: 10m
+              - step:
+                  type: Http
+                  name: Liveness Check
+                  identifier: livenessCheck
+                  timeout: 30s
+                  spec:
+                    url: http://<+repeat.item>-service.cinema-staging.svc.cluster.local:8000/health/live
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 3
+                            retryIntervals:
+                              - 10s
+                            onRetryFailure:
+                              action:
+                                type: MarkAsFailure
+              - step:
+                  type: Http
+                  name: Readiness Check
+                  identifier: readinessCheck
+                  timeout: 30s
+                  spec:
+                    url: http://<+repeat.item>-service.cinema-staging.svc.cluster.local:8000/health/ready
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 3
+                            retryIntervals:
+                              - 10s
+                            onRetryFailure:
+                              action:
+                                type: MarkAsFailure
+              - step:
+                  type: ShellScript
+                  name: Smoke Test
+                  identifier: smokeTest
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+
+                          SERVICE="<+repeat.item>"
+                          NAMESPACE="cinema-staging"
+                          SERVICE_URL="http://${SERVICE}-service.${NAMESPACE}.svc.cluster.local:8000"
+
+                          echo "╔══════════════════════════════════════════════════════════════╗"
+                          echo "║  Smoke Test: ${SERVICE}-service                              "
+                          echo "║  Environment: staging                                        "
+                          echo "╚══════════════════════════════════════════════════════════════╝"
+
+                          # Test health endpoint
+                          echo "=== Testing /api/health ==="
+                          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL/api/health" || echo "000")
+                          if [ "$RESPONSE" = "200" ]; then
+                            echo "✅ Health check passed"
+                          else
+                            echo "⚠️  Health check returned: $RESPONSE"
+                          fi
+
+                          # Test service-specific endpoint
+                          echo "=== Testing service endpoint ==="
+                          case "$SERVICE" in
+                            movie)
+                              curl -s "$SERVICE_URL/api/movies" | head -c 200 || true
+                              ;;
+                            cinema)
+                              curl -s "$SERVICE_URL/api/cinemas" | head -c 200 || true
+                              ;;
+                            booking)
+                              curl -s "$SERVICE_URL/api/bookings/health" | head -c 200 || true
+                              ;;
+                            *)
+                              echo "ℹ️  No specific endpoint test for $SERVICE"
+                              ;;
+                          esac
+
+                          echo ""
+                          echo "✅ Smoke test completed for ${SERVICE}"
             rollbackSteps:
               - step:
                   type: RevertPR
                   name: Revert PR
                   identifier: RevertPR
                   spec:
-                    commitId: <+pipeline.stages.Staging.spec.execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
-                    prTitle: "Rollback: <+pipeline.variables.SERVICE_NAME> staging"
+                    commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: "Rollback: <+repeat.item> staging"
                   timeout: 10m
               - step:
                   type: MergePR
@@ -260,7 +514,18 @@ pipeline:
                   identifier: SyncRollback
                   spec:
                     prune: false
-                    applicationRegex: <+pipeline.variables.SERVICE_NAME>-staging
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    applicationRegex: <+repeat.item>-staging
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      serverSideApply: true
                   timeout: 10m
           environment:
             environmentRef: staging
@@ -275,11 +540,16 @@ pipeline:
                 - AllErrors
               action:
                 type: StageRollback
+        strategy:
+          repeat:
+            items: <+pipeline.variables.SERVICES.split(",")>
+            nodeName: <+repeat.item>
+            maxConcurrency: 1
 
     - stage:
         name: Prod Gate
         identifier: Prod_Gate
-        description: "Approval for production deployment"
+        description: Approval for production deployment
         type: Approval
         spec:
           execution:
@@ -292,8 +562,8 @@ pipeline:
                   spec:
                     approvalMessage: |
                       ⚠️ PRODUCTION DEPLOYMENT ⚠️
-                      Service: <+pipeline.variables.SERVICE_NAME>
-                      Image: <+artifact.tag>
+                      Services: <+pipeline.variables.SERVICES>
+                      Image Tag: <+pipeline.variables.IMAGE_TAG>
 
                       Please verify staging deployment before approving.
                     includePipelineExecutionHistory: true
@@ -308,14 +578,25 @@ pipeline:
     - stage:
         name: Prod
         identifier: Prod
-        description: "Deploy to production environment"
+        description: Deploy all services to production environment
         type: Deployment
         spec:
           deploymentType: Kubernetes
           gitOpsEnabled: true
           service:
-            useFromStage:
-              stage: Dev
+            serviceRef: <+repeat.item>servicegitops
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: serviceimage
+                      sources:
+                        - identifier: serviceimage
+                          type: DockerRegistry
+                          spec:
+                            tag: <+pipeline.variables.IMAGE_TAG>
           execution:
             steps:
               - step:
@@ -325,6 +606,12 @@ pipeline:
                   timeout: 10m
                   spec:
                     variables:
+                      - name: image_tag
+                        type: String
+                        value: <+pipeline.variables.IMAGE_TAG>
+                      - name: service_name
+                        type: String
+                        value: <+repeat.item>
                       - name: replicas
                         type: String
                         value: "3"
@@ -336,11 +623,17 @@ pipeline:
                   name: Final PR Review
                   identifier: FinalPRReview
                   spec:
-                    approvalMessage: "Review production PR before merge"
+                    approvalMessage: |
+                      Review production PR before merge
+                      Service: <+repeat.item>
+                      Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.variables.IMAGE_TAG>
+                    includePipelineExecutionHistory: true
+                    isAutoRejectEnabled: false
                     approvers:
                       userGroups:
                         - account.SalesEngineers
                       minimumCount: 1
+                      disallowPipelineExecutor: false
                   timeout: 4h
               - step:
                   type: MergePR
@@ -361,22 +654,126 @@ pipeline:
                   identifier: GitOpsSync
                   spec:
                     prune: true
+                    dryRun: false
+                    applyOnly: false
                     forceApply: true
-                    applicationRegex: <+pipeline.variables.SERVICE_NAME>-prod
+                    applicationRegex: <+repeat.item>-prod
                     showResourceProgress: true
                     syncOptions:
+                      skipSchemaValidation: false
                       autoCreateNamespace: true
                       serverSideApply: true
                       pruneResourcesAtLast: true
+                      applyOutOfSyncOnly: true
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
                   timeout: 15m
+              - step:
+                  type: Http
+                  name: Liveness Check
+                  identifier: livenessCheck
+                  timeout: 30s
+                  spec:
+                    url: http://<+repeat.item>-service.cinema-prod.svc.cluster.local:8000/health/live
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 3
+                            retryIntervals:
+                              - 10s
+                            onRetryFailure:
+                              action:
+                                type: MarkAsFailure
+              - step:
+                  type: Http
+                  name: Readiness Check
+                  identifier: readinessCheck
+                  timeout: 30s
+                  spec:
+                    url: http://<+repeat.item>-service.cinema-prod.svc.cluster.local:8000/health/ready
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 3
+                            retryIntervals:
+                              - 10s
+                            onRetryFailure:
+                              action:
+                                type: MarkAsFailure
+              - step:
+                  type: ShellScript
+                  name: Smoke Test
+                  identifier: smokeTest
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+
+                          SERVICE="<+repeat.item>"
+                          NAMESPACE="cinema-prod"
+                          SERVICE_URL="http://${SERVICE}-service.${NAMESPACE}.svc.cluster.local:8000"
+
+                          echo "╔══════════════════════════════════════════════════════════════╗"
+                          echo "║  Smoke Test: ${SERVICE}-service                              "
+                          echo "║  Environment: prod                                           "
+                          echo "╚══════════════════════════════════════════════════════════════╝"
+
+                          # Test health endpoint
+                          echo "=== Testing /api/health ==="
+                          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL/api/health" || echo "000")
+                          if [ "$RESPONSE" = "200" ]; then
+                            echo "✅ Health check passed"
+                          else
+                            echo "⚠️  Health check returned: $RESPONSE"
+                          fi
+
+                          # Test service-specific endpoint
+                          echo "=== Testing service endpoint ==="
+                          case "$SERVICE" in
+                            movie)
+                              curl -s "$SERVICE_URL/api/movies" | head -c 200 || true
+                              ;;
+                            cinema)
+                              curl -s "$SERVICE_URL/api/cinemas" | head -c 200 || true
+                              ;;
+                            booking)
+                              curl -s "$SERVICE_URL/api/bookings/health" | head -c 200 || true
+                              ;;
+                            *)
+                              echo "ℹ️  No specific endpoint test for $SERVICE"
+                              ;;
+                          esac
+
+                          echo ""
+                          echo "✅ Smoke test completed for ${SERVICE}"
             rollbackSteps:
               - step:
                   type: RevertPR
                   name: Revert PR
                   identifier: RevertPR
                   spec:
-                    commitId: <+pipeline.stages.Prod.spec.execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
-                    prTitle: "ROLLBACK: <+pipeline.variables.SERVICE_NAME> PRODUCTION"
+                    commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: "ROLLBACK: <+repeat.item> PRODUCTION"
                   timeout: 10m
               - step:
                   type: MergePR
@@ -397,8 +794,18 @@ pipeline:
                   identifier: SyncRollback
                   spec:
                     prune: false
+                    dryRun: false
+                    applyOnly: false
                     forceApply: true
-                    applicationRegex: <+pipeline.variables.SERVICE_NAME>-prod
+                    applicationRegex: <+repeat.item>-prod
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      serverSideApply: true
                   timeout: 10m
           environment:
             environmentRef: prod
@@ -413,3 +820,9 @@ pipeline:
                 - AllErrors
               action:
                 type: StageRollback
+        strategy:
+          repeat:
+            items: <+pipeline.variables.SERVICES.split(",")>
+            nodeName: <+repeat.item>
+            maxConcurrency: 1
+  allowStageExecutions: true

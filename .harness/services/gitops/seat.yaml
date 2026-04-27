@@ -1,6 +1,6 @@
 service:
-  name: paymentservice-gitops
-  identifier: paymentservicegitops
+  name: seatservice-gitops
+  identifier: seatservicegitops
   orgIdentifier: sandbox
   projectIdentifier: CristianRamirez
   gitOpsEnabled: true
@@ -10,7 +10,7 @@ service:
       appsetConfigs:
         - appset:
             agentIdentifier: gitops
-            identifier: payment_service_appset
+            identifier: seat_service_appset
             appSetIdentifier: cinema-services
       manifests:
         - manifest:
@@ -36,7 +36,7 @@ service:
                   connectorRef: CristianConnector
                   gitFetchType: Branch
                   paths:
-                    - platform/deploy/gitops/services/payment/overlays/<+env.identifier>
+                    - platform/deploy/gitops/services/seat/overlays/<+env.identifier>
                   branch: monorepo
                   repoName: cinema-microservice-in-GO
       artifacts:
@@ -45,7 +45,7 @@ service:
           sources:
             - spec:
                 connectorRef: DockerCristian
-                imagePath: crizstian/payment-service
+                imagePath: crizstian/seat-service
                 tag: <+input>
                 digest: ""
               identifier: serviceimage
@@ -60,7 +60,7 @@ service:
           type: String
           description: "Service name"
           required: false
-          value: payment
+          value: seat
         - name: environment
           type: String
           description: "Target environment"
@@ -85,4 +85,4 @@ service:
           type: String
           description: "Service port"
           required: false
-          value: "8007"
+          value: "8005"

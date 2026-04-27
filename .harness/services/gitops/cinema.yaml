@@ -1,6 +1,6 @@
 service:
-  name: cinema-services-gitops
-  identifier: cinemaservicesgitops
+  name: cinemaservice-gitops
+  identifier: cinemaservicegitops
   orgIdentifier: sandbox
   projectIdentifier: CristianRamirez
   gitOpsEnabled: true
@@ -10,11 +10,11 @@ service:
       appsetConfigs:
         - appset:
             agentIdentifier: gitops
-            identifier: cinema-services-appset
+            identifier: cinema_service_appset
             appSetIdentifier: cinema-services
       manifests:
         - manifest:
-            identifier: release-repo
+            identifier: release_repo
             type: ReleaseRepo
             spec:
               store:
@@ -24,10 +24,10 @@ service:
                   gitFetchType: Branch
                   paths:
                     - platform/deploy/gitops/cluster-config/<+cluster.name>/config.json
-                  branch: main
+                  branch: monorepo
                   repoName: cinema-microservice-in-GO
         - manifest:
-            identifier: deployment-repo
+            identifier: deployment_repo
             type: DeploymentRepo
             spec:
               store:
@@ -36,19 +36,19 @@ service:
                   connectorRef: CristianConnector
                   gitFetchType: Branch
                   paths:
-                    - platform/deploy/gitops/appsets/cinema-services-matrix.yaml
-                  branch: main
+                    - platform/deploy/gitops/services/cinema/overlays/<+env.identifier>
+                  branch: monorepo
                   repoName: cinema-microservice-in-GO
       artifacts:
         primary:
-          primaryArtifactRef: service-image
+          primaryArtifactRef: serviceimage
           sources:
             - spec:
-                connectorRef: account.harnessImageV1
-                imagePath: crizstian/<+pipeline.variables.SERVICE_NAME>-service
+                connectorRef: DockerCristian
+                imagePath: crizstian/cinema-service
                 tag: <+input>
                 digest: ""
-              identifier: service-image
+              identifier: serviceimage
               type: DockerRegistry
       variables:
         - name: harness_service
@@ -56,6 +56,11 @@ service:
           description: "Harness service identifier"
           required: false
           value: <+service.identifier>
+        - name: service_name
+          type: String
+          description: "Service name"
+          required: false
+          value: cinema
         - name: environment
           type: String
           description: "Target environment"
@@ -76,3 +81,8 @@ service:
           description: "Kubernetes namespace"
           required: false
           value: cinema-<+env.identifier>
+        - name: port
+          type: String
+          description: "Service port"
+          required: false
+          value: "8003"

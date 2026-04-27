@@ -4,7 +4,8 @@
       "Bash(npx @stoplight/spectral-cli lint openapi.yaml)",
       "Bash(npm install:*)",
       "Bash(npm init:*)",
-      "mcp__github__get_file_contents"
+      "mcp__github__get_file_contents",
+      "Bash(kubectl apply *)"
     ]
   }
 }

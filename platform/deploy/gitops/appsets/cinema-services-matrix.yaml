@@ -43,7 +43,7 @@ spec:
         app.kubernetes.io/name: "{{.service}}-service"
         app.kubernetes.io/environment: "{{.environment}}"
         app.kubernetes.io/part-of: cinema-microservices
-        harness.io/serviceRef: "{{.service}}-service-gitops"
+        harness.io/serviceRef: "{{.service}}servicegitops"
         harness.io/envRef: "{{.environment}}"
         harness.io/buildRef: "{{.image_tag}}"
       annotations:
@@ -64,18 +64,10 @@ spec:
         server: "{{.server_address}}"
         namespace: "{{.namespace}}"
       syncPolicy:
-        automated:
-          selfHeal: true
-          prune: true
+        # Manual sync - controlled by Harness GitOps Pipeline
         syncOptions:
           - CreateNamespace=true
           - ApplyOutOfSyncOnly=true
           - PruneLast=true
           - ServerSideApply=true
-        retry:
-          limit: 3
-          backoff:
-            duration: 5s
-            factor: 2
-            maxDuration: 3m
       revisionHistoryLimit: 5

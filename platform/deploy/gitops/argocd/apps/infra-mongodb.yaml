@@ -19,9 +19,7 @@ spec:
     server: https://kubernetes.default.svc
     namespace: cinema-infra
   syncPolicy:
-    automated:
-      selfHeal: true
-      prune: true
+    # Manual sync - controlled by Harness GitOps Pipeline
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true

@@ -33,7 +33,7 @@ spec:
       labels:
         app.kubernetes.io/name: '{{.service}}-service'
         app.kubernetes.io/environment: dev
-        harness.io/serviceRef: '{{.service}}-service-gitops'
+        harness.io/serviceRef: '{{.service}}servicegitops'
         harness.io/envRef: dev
     spec:
       project: default
@@ -45,8 +45,6 @@ spec:
         server: https://kubernetes.default.svc
         namespace: cinema-dev
       syncPolicy:
-        automated:
-          selfHeal: true
-          prune: true
+        # Manual sync - controlled by Harness GitOps Pipeline
         syncOptions:
           - CreateNamespace=true

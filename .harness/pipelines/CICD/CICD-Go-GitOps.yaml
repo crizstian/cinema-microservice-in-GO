@@ -1,0 +1,1750 @@
+pipeline:
+  name: CICD - Go GitOps Pipeline
+  identifier: CICD_Go_GitOps
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  tags:
+    version: "1.0"
+    language: go
+    type: gitops
+  description: |
+    Unified CI/CD pipeline for Go monorepo with GitOps deployment:
+    - PR Open: Security Code + Test Code stages
+    - PR Merge: Build + Release + GitOps Deploy (Dev → Staging → Prod)
+  properties:
+    ci:
+      codebase:
+        connectorRef: CristianConnector
+        repoName: cinema-microservice-in-GO
+        build: <+input>
+        prCloneStrategy: SourceBranch
+        sparseCheckout: []
+        depth: 50
+  variables:
+    - name: RUN_MODE
+      type: String
+      description: "pr_open: Security + Tests | pr_merge: Build + Release + Deploy | full: All stages"
+      required: true
+      value: <+input>.allowedValues(pr_open,pr_merge,full)
+    - name: SERVICES
+      type: String
+      description: Comma-separated list of services to process (e.g., booking,movie)
+      required: true
+      value: <+input>
+    - name: GOLANGCI_LINT_VERSION
+      type: String
+      description: golangci-lint version
+      value: v2.1.6
+    - name: DOCKER_REGISTRY
+      type: String
+      description: Docker registry prefix
+      value: crizstian
+    - name: DOCKERFILE_PATH
+      type: String
+      description: Path to Dockerfile
+      value: platform/docker/go-service/Dockerfile
+    - name: COVERAGE_THRESHOLD
+      type: Number
+      description: Minimum code coverage percentage
+      value: 80
+    - name: COMPLEXITY_THRESHOLD
+      type: Number
+      description: Max cyclomatic complexity per function
+      value: 15
+    - name: SECURITY_GATE_CRITICAL
+      type: Number
+      description: Max critical vulnerabilities allowed (code)
+      value: 0
+    - name: SECURITY_GATE_HIGH
+      type: Number
+      description: Max high vulnerabilities allowed (code)
+      value: 5
+    - name: SECURITY_GATE_SECRETS
+      type: Number
+      description: Max secrets allowed
+      value: 0
+    - name: CONTAINER_GATE_CRITICAL
+      type: Number
+      description: Max critical container vulnerabilities
+      value: 0
+    - name: CONTAINER_GATE_HIGH
+      type: Number
+      description: Max high container vulnerabilities
+      value: 3
+  stages:
+    # ============================================================================
+    # CI STAGES - Security and Test (PR Open)
+    # ============================================================================
+    - parallel:
+        - stage:
+            name: Security Code
+            identifier: security_code
+            description: Code quality and security analysis with policy enforcement
+            type: SecurityTests
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.variables.RUN_MODE> == "pr_open" || <+pipeline.variables.RUN_MODE> == "full"
+            spec:
+              cloneCodebase: true
+              caching:
+                enabled: true
+                key: go-security-<+hashFiles("**/go.sum")>
+                paths:
+                  - /harness/.go
+              buildIntelligence:
+                enabled: true
+              platform:
+                os: Linux
+                arch: Amd64
+              runtime:
+                type: Cloud
+                spec: {}
+              execution:
+                steps:
+                  - stepGroup:
+                      name: Linting
+                      identifier: linting
+                      steps:
+                        - parallel:
+                            - step:
+                                name: golangci-lint
+                                identifier: golangci_lint
+                                type: Run
+                                spec:
+                                  connectorRef: account.harnessImage
+                                  image: golangci/golangci-lint:<+pipeline.variables.GOLANGCI_LINT_VERSION>
+                                  shell: Sh
+                                  command: |
+                                    set -e
+                                    cd services/<+repeat.item>
+                                    echo "=== Running golangci-lint (warnings only, non-blocking) ==="
+                                    golangci-lint run --timeout 3m --output.formats=json > lint-report.json 2>&1 || true
+                                    golangci-lint run --timeout 3m || echo "⚠️ Lint issues found - review lint-report.json"
+                            - step:
+                                type: Gitleaks
+                                name: Gitleaks
+                                identifier: Gitleaks
+                                spec:
+                                  mode: orchestration
+                                  config: default
+                                  target:
+                                    type: repository
+                                    workspace: services/<+repeat.item>
+                                    detection: auto
+                                  advanced:
+                                    log:
+                                      level: info
+                                    fail_on_severity: none
+                                enforce:
+                                  policySets:
+                                    - security_secrets
+                        - step:
+                            name: Store Gitleaks Results
+                            identifier: store_gitleaks
+                            type: Run
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: alpine:3.19
+                              shell: Sh
+                              envVariables:
+                                GITLEAKS_TOTAL: <+execution.steps.linting.steps.Gitleaks.output.outputVariables.TOTAL>
+                              command: |
+                                mkdir -p /harness/security-results
+                                SECRETS="${GITLEAKS_TOTAL:-0}"
+                                [ "$SECRETS" = "null" ] || [ "$SECRETS" = "<+null>" ] && SECRETS=0
+                                echo "$SECRETS" >> /harness/security-results/gitleaks.txt
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          nodeName: <+repeat.item>
+                          maxConcurrency: 4
+                  - stepGroup:
+                      name: SCA Scans
+                      identifier: sca_scans
+                      steps:
+                        - parallel:
+                            - step:
+                                type: HarnessSAST
+                                name: HarnessSCA
+                                identifier: HarnessSCA
+                                spec:
+                                  mode: orchestration
+                                  config: sca
+                                  target:
+                                    type: repository
+                                    workspace: services/<+repeat.item>
+                                    detection: auto
+                                  advanced:
+                                    log:
+                                      level: info
+                                    fail_on_severity: none
+                                  tool:
+                                    app_name: <+repeat.item>
+                                enforce:
+                                  policySets:
+                                    - STO_Policy
+                                timeout: 3m
+                                failureStrategies:
+                                  - onFailure:
+                                      errors:
+                                        - Timeout
+                                      action:
+                                        type: Retry
+                                        spec:
+                                          retryCount: 3
+                                          retryIntervals:
+                                            - 5s
+                                          onRetryFailure:
+                                            action:
+                                              type: Ignore
+                            - step:
+                                type: Snyk
+                                name: Snyk SCA
+                                identifier: Snyk_SCA
+                                spec:
+                                  mode: orchestration
+                                  config: default
+                                  target:
+                                    type: repository
+                                    workspace: services/<+repeat.item>
+                                    detection: manual
+                                    name: <+repeat.item>
+                                    variant: <+codebase.branch>
+                                  advanced:
+                                    log:
+                                      level: info
+                                    fail_on_severity: none
+                                    args:
+                                      cli: "--skip-unresolved"
+                                  privileged: true
+                                  auth:
+                                    access_token: <+secrets.getValue("snyk_token")>
+                                  sbom:
+                                    format: spdx-json
+                                  tool:
+                                    ingest_tool_severity: false
+                                enforce:
+                                  policySets:
+                                    - STO_Policy
+                        - step:
+                            name: Store SCA Results
+                            identifier: store_sca
+                            type: Run
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: alpine:3.19
+                              shell: Sh
+                              envVariables:
+                                HARNESS_SCA_CRITICAL: <+execution.steps.sca_scans.steps.HarnessSCA.output.outputVariables.CRITICAL>
+                                HARNESS_SCA_HIGH: <+execution.steps.sca_scans.steps.HarnessSCA.output.outputVariables.HIGH>
+                                SNYK_SCA_CRITICAL: <+execution.steps.sca_scans.steps.Snyk_SCA.output.outputVariables.CRITICAL>
+                                SNYK_SCA_HIGH: <+execution.steps.sca_scans.steps.Snyk_SCA.output.outputVariables.HIGH>
+                              command: |
+                                mkdir -p /harness/security-results
+                                H_C="${HARNESS_SCA_CRITICAL:-0}"; [ "$H_C" = "null" ] && H_C=0
+                                H_H="${HARNESS_SCA_HIGH:-0}"; [ "$H_H" = "null" ] && H_H=0
+                                S_C="${SNYK_SCA_CRITICAL:-0}"; [ "$S_C" = "null" ] && S_C=0
+                                S_H="${SNYK_SCA_HIGH:-0}"; [ "$S_H" = "null" ] && S_H=0
+                                echo "$H_C $H_H $S_C $S_H" >> /harness/security-results/sca.txt
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          nodeName: <+repeat.item>
+                          maxConcurrency: 3
+                  - stepGroup:
+                      name: SAST Scans
+                      identifier: sast_scans
+                      steps:
+                        - parallel:
+                            - step:
+                                type: HarnessSAST
+                                name: HarnessSAST
+                                identifier: HarnessSAST
+                                spec:
+                                  mode: orchestration
+                                  config: sast
+                                  target:
+                                    type: repository
+                                    workspace: services/<+repeat.item>
+                                    detection: auto
+                                  advanced:
+                                    log:
+                                      level: info
+                                    fail_on_severity: none
+                                  tool:
+                                    app_name: <+repeat.item>
+                                enforce:
+                                  policySets:
+                                    - STO_Policy
+                                timeout: 3m
+                                failureStrategies:
+                                  - onFailure:
+                                      errors:
+                                        - Timeout
+                                      action:
+                                        type: Retry
+                                        spec:
+                                          retryCount: 3
+                                          retryIntervals:
+                                            - 5s
+                                          onRetryFailure:
+                                            action:
+                                              type: Ignore
+                            - step:
+                                type: Snyk
+                                name: Snyk SAST
+                                identifier: Snyk_SAST
+                                spec:
+                                  mode: orchestration
+                                  config: default
+                                  target:
+                                    type: repository
+                                    workspace: services/<+repeat.item>
+                                    name: <+repeat.item>
+                                    variant: <+codebase.branch>
+                                  advanced:
+                                    log:
+                                      level: info
+                                    fail_on_severity: none
+                                    args:
+                                      cli: "--skip-unresolved"
+                                  privileged: true
+                                  auth:
+                                    access_token: <+secrets.getValue("snyk_token")>
+                                  sbom:
+                                    format: spdx-json
+                                  tool:
+                                    ingest_tool_severity: true
+                                enforce:
+                                  policySets:
+                                    - STO_Policy
+                        - step:
+                            name: Store SAST Results
+                            identifier: store_sast
+                            type: Run
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: alpine:3.19
+                              shell: Sh
+                              envVariables:
+                                HARNESS_SAST_CRITICAL: <+execution.steps.sast_scans.steps.HarnessSAST.output.outputVariables.CRITICAL>
+                                HARNESS_SAST_HIGH: <+execution.steps.sast_scans.steps.HarnessSAST.output.outputVariables.HIGH>
+                                SNYK_SAST_CRITICAL: <+execution.steps.sast_scans.steps.Snyk_SAST.output.outputVariables.CRITICAL>
+                                SNYK_SAST_HIGH: <+execution.steps.sast_scans.steps.Snyk_SAST.output.outputVariables.HIGH>
+                              command: |
+                                mkdir -p /harness/security-results
+                                H_C="${HARNESS_SAST_CRITICAL:-0}"; [ "$H_C" = "null" ] && H_C=0
+                                H_H="${HARNESS_SAST_HIGH:-0}"; [ "$H_H" = "null" ] && H_H=0
+                                S_C="${SNYK_SAST_CRITICAL:-0}"; [ "$S_C" = "null" ] && S_C=0
+                                S_H="${SNYK_SAST_HIGH:-0}"; [ "$S_H" = "null" ] && S_H=0
+                                echo "$H_C $H_H $S_C $S_H" >> /harness/security-results/sast.txt
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          nodeName: <+repeat.item>
+                          maxConcurrency: 3
+                  - step:
+                      type: Run
+                      name: Evaluate Code Gate
+                      identifier: evaluate_code_gate
+                      spec:
+                        connectorRef: account.harnessImage
+                        image: alpine:3.19
+                        shell: Sh
+                        command: |
+                          #!/bin/sh
+                          set -e
+
+                          MAX_CRITICAL=$GATE_CRITICAL
+                          MAX_HIGH=$GATE_HIGH
+                          MAX_SECRETS=$GATE_SECRETS
+
+                          RESULTS_DIR="/harness/security-results"
+
+                          TOTAL_SECRETS=0
+                          if [ -f "$RESULTS_DIR/gitleaks.txt" ]; then
+                            while read -r line; do
+                              [ -n "$line" ] && TOTAL_SECRETS=$((TOTAL_SECRETS + line))
+                            done < "$RESULTS_DIR/gitleaks.txt"
+                          fi
+
+                          SCA_CRITICAL=0; SCA_HIGH=0
+                          if [ -f "$RESULTS_DIR/sca.txt" ]; then
+                            while read -r h_c h_h s_c s_h; do
+                              [ -n "$h_c" ] && SCA_CRITICAL=$((SCA_CRITICAL + h_c + s_c))
+                              [ -n "$h_h" ] && SCA_HIGH=$((SCA_HIGH + h_h + s_h))
+                            done < "$RESULTS_DIR/sca.txt"
+                          fi
+
+                          SAST_CRITICAL=0; SAST_HIGH=0
+                          if [ -f "$RESULTS_DIR/sast.txt" ]; then
+                            while read -r h_c h_h s_c s_h; do
+                              [ -n "$h_c" ] && SAST_CRITICAL=$((SAST_CRITICAL + h_c + s_c))
+                              [ -n "$h_h" ] && SAST_HIGH=$((SAST_HIGH + h_h + s_h))
+                            done < "$RESULTS_DIR/sast.txt"
+                          fi
+
+                          TOTAL_CRITICAL=$((SCA_CRITICAL + SAST_CRITICAL))
+                          TOTAL_HIGH=$((SCA_HIGH + SAST_HIGH))
+
+                          GATE_PASSED=true
+                          VIOLATIONS=""
+                          [ "$TOTAL_CRITICAL" -gt "$MAX_CRITICAL" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}CRITICAL:${TOTAL_CRITICAL}(max:${MAX_CRITICAL}) "
+                          [ "$TOTAL_HIGH" -gt "$MAX_HIGH" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}HIGH:${TOTAL_HIGH}(max:${MAX_HIGH}) "
+                          [ "$TOTAL_SECRETS" -gt "$MAX_SECRETS" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}SECRETS:${TOTAL_SECRETS}(max:${MAX_SECRETS})"
+
+                          echo ""
+                          echo "╔══════════════════════════════════════════════════════════════╗"
+                          echo "║              CODE SECURITY GATE - EVALUATION                 ║"
+                          echo "╠══════════════════════════════════════════════════════════════╣"
+                          printf "║  Critical: %-3s (max: %-3s)                                   ║\n" "$TOTAL_CRITICAL" "$MAX_CRITICAL"
+                          printf "║  High:     %-3s (max: %-3s)                                   ║\n" "$TOTAL_HIGH" "$MAX_HIGH"
+                          printf "║  Secrets:  %-3s (max: %-3s)                                   ║\n" "$TOTAL_SECRETS" "$MAX_SECRETS"
+                          echo "╠══════════════════════════════════════════════════════════════╣"
+                          if [ "$GATE_PASSED" = "true" ]; then
+                            echo "║  ✅ GATE PASSED - All thresholds met                         ║"
+                          else
+                            echo "║  ⚠️  GATE FAILED - Violations: $VIOLATIONS"
+                          fi
+                          echo "╚══════════════════════════════════════════════════════════════╝"
+
+                          {
+                            echo "TOTAL_CRITICAL=$TOTAL_CRITICAL"
+                            echo "TOTAL_HIGH=$TOTAL_HIGH"
+                            echo "TOTAL_SECRETS=$TOTAL_SECRETS"
+                            echo "CODE_GATE_PASSED=$GATE_PASSED"
+                          } >> $HARNESS_OUTPUT_FILE
+
+                          [ "$GATE_PASSED" = "false" ] && exit 1 || exit 0
+                        envVariables:
+                          GATE_CRITICAL: <+pipeline.variables.SECURITY_GATE_CRITICAL>
+                          GATE_HIGH: <+pipeline.variables.SECURITY_GATE_HIGH>
+                          GATE_SECRETS: <+pipeline.variables.SECURITY_GATE_SECRETS>
+                        outputVariables:
+                          - name: TOTAL_CRITICAL
+                          - name: TOTAL_HIGH
+                          - name: TOTAL_SECRETS
+                          - name: CODE_GATE_PASSED
+                      enforce:
+                        policySets:
+                          - security_gate_code
+                      failureStrategies:
+                        - onFailure:
+                            errors:
+                              - AllErrors
+                            action:
+                              type: ManualIntervention
+                              spec:
+                                timeout: 4h
+                                onTimeout:
+                                  action:
+                                    type: Abort
+            policySetRef:
+              - security_gate_code
+        - stage:
+            name: Test Code
+            identifier: test_code
+            description: Code complexity analysis and test execution
+            type: CI
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.variables.RUN_MODE> == "pr_open" || <+pipeline.variables.RUN_MODE> == "full"
+            spec:
+              cloneCodebase: true
+              caching:
+                enabled: true
+                key: go-test-<+hashFiles("**/go.sum")>
+                paths:
+                  - /harness/.go
+              buildIntelligence:
+                enabled: true
+              platform:
+                os: Linux
+                arch: Amd64
+              runtime:
+                type: Cloud
+                spec: {}
+              execution:
+                steps:
+                  - stepGroup:
+                      name: Detect Go Versions
+                      identifier: detect_versions
+                      steps:
+                        - step:
+                            name: Detect Go Version
+                            identifier: detect_go_version
+                            type: Run
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: alpine:3.19
+                              shell: Sh
+                              command: |
+                                cd services/<+repeat.item>
+                                GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
+                                echo "Detected Go version for <+repeat.item>: $GO_VERSION"
+                                echo "GO_VERSION=$GO_VERSION" >> $HARNESS_OUTPUT_FILE
+                              outputVariables:
+                                - name: GO_VERSION
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          nodeName: <+repeat.item>
+                          maxConcurrency: 4
+                  - stepGroup:
+                      name: Tests
+                      identifier: tests
+                      steps:
+                        - step:
+                            name: gocyclo
+                            identifier: gocyclo
+                            type: Run
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: golang:<+execution.steps.detect_versions_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
+                              shell: Sh
+                              envVariables:
+                                GOWORK: "off"
+                                THRESHOLD: <+pipeline.variables.COMPLEXITY_THRESHOLD>
+                              command: |
+                                cd services/<+repeat.item>
+                                echo "=== Complexity Report for <+repeat.item> ==="
+                                go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+                                export PATH=$(go env GOPATH)/bin:$PATH
+                                gocyclo -top 10 . || true
+                                COMPLEX=$(gocyclo -over $THRESHOLD . 2>/dev/null | wc -l)
+                                if [ "$COMPLEX" -gt 0 ]; then
+                                  echo "⚠️  Warning: $COMPLEX functions exceed complexity threshold of $THRESHOLD"
+                                fi
+                          contextType: Pipeline
+                        - parallel:
+                            - step:
+                                type: Test
+                                name: Unit Tests
+                                identifier: unit_tests
+                                spec:
+                                  connectorRef: account.harnessImage
+                                  image: golang:<+execution.steps.detect_versions_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
+                                  shell: Sh
+                                  envVariables:
+                                    GOWORK: "off"
+                                    COVERAGE_THRESHOLD: <+pipeline.variables.COVERAGE_THRESHOLD>
+                                  command: |
+                                    cd services/<+repeat.item>
+                                    echo "=== Running unit tests for <+repeat.item> ==="
+
+                                    go install github.com/jstemmer/go-junit-report/v2@latest
+                                    export PATH=$(go env GOPATH)/bin:$PATH
+
+                                    PACKAGES=$(go list ./... | grep -v -E '(integration_tests|contracts)')
+
+                                    set -o pipefail
+                                    go test -v -short -coverprofile=coverage.out $PACKAGES 2>&1 | tee test-output.txt
+                                    TEST_EXIT=$?
+
+                                    COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | sed 's/%//')
+                                    echo "Coverage: ${COVERAGE}%"
+
+                                    COVERAGE_INT=${COVERAGE%.*}
+                                    if [ "$COVERAGE_INT" -lt "$COVERAGE_THRESHOLD" ]; then
+                                      echo "❌ Coverage ${COVERAGE}% is below threshold ${COVERAGE_THRESHOLD}%"
+                                      TEST_EXIT=1
+                                    fi
+
+                                    go-junit-report -set-exit-code < test-output.txt > report.xml
+                                    exit $TEST_EXIT
+                                  reports:
+                                    type: JUnit
+                                    spec:
+                                      paths:
+                                        - services/**/report.xml
+                                  intelligenceMode: true
+                            - step:
+                                name: Contract Tests
+                                identifier: contract_tests
+                                type: Run
+                                spec:
+                                  connectorRef: account.harnessImage
+                                  image: golang:<+execution.steps.detect_versions_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
+                                  shell: Sh
+                                  envVariables:
+                                    GOWORK: "off"
+                                  command: |
+                                    cd services/<+repeat.item>
+                                    if ls *_contract_test.go 1> /dev/null 2>&1 || [ -d "contracts" ]; then
+                                      echo "=== Running Contract Tests for <+repeat.item> ==="
+                                      go test -v -tags=contract ./... 2>&1 || true
+                                    else
+                                      echo "ℹ️  No contract tests found for <+repeat.item>"
+                                    fi
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          nodeName: <+repeat.item>
+                          maxConcurrency: 3
+
+    # ============================================================================
+    # CI STAGE - Build and Release (PR Merge)
+    # ============================================================================
+    - stage:
+        name: Build and Release
+        identifier: build_and_release
+        description: Build, scan containers, and release
+        type: CI
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.RUN_MODE> == "pr_merge" || <+pipeline.variables.RUN_MODE> == "full"
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+            key: go-release-<+hashFiles("**/go.sum")>
+            paths:
+              - /harness/.go
+          buildIntelligence:
+            enabled: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - stepGroup:
+                  name: Detect and Version
+                  identifier: detect_and_version
+                  steps:
+                    - step:
+                        name: Detect Go Version
+                        identifier: detect_go_version
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          command: |
+                            cd services/<+repeat.item>
+                            GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
+                            echo "Detected Go version for <+repeat.item>: $GO_VERSION"
+                            echo "GO_VERSION=$GO_VERSION" >> $HARNESS_OUTPUT_FILE
+                          outputVariables:
+                            - name: GO_VERSION
+                    - step:
+                        name: Semantic Version
+                        identifier: semantic_version
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          command: |
+                            apk add --no-cache curl jq > /dev/null 2>&1
+
+                            BUMP="patch"
+                            PREFIX=$(echo "$BRANCH" | cut -d'/' -f1 | tr '[:upper:]' '[:lower:]')
+                            case "$PREFIX" in
+                              major|breaking) BUMP="major" ;;
+                              feature|feat) BUMP="minor" ;;
+                              fix|hotfix|patch) BUMP="patch" ;;
+                            esac
+
+                            TAGS=$(curl -s "https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=100" \
+                              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                              -H "Accept: application/vnd.github.v3+json")
+
+                            LATEST=$(echo "$TAGS" | jq -r --arg svc "$SERVICE" \
+                              '[.[] | select(.name | startswith($svc + "-v"))] | sort_by(.name | ltrimstr($svc + "-v") | split(".") | map(tonumber)) | reverse | .[0].name // ""')
+
+                            if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+                              MAJOR=0; MINOR=0; PATCH=0
+                            else
+                              VER="${LATEST#${SERVICE}-v}"
+                              MAJOR=$(echo "$VER" | cut -d. -f1)
+                              MINOR=$(echo "$VER" | cut -d. -f2)
+                              PATCH=$(echo "$VER" | cut -d. -f3)
+                            fi
+
+                            case "$BUMP" in
+                              major) NEW_VERSION="v$((MAJOR + 1)).0.0" ;;
+                              minor) NEW_VERSION="v${MAJOR}.$((MINOR + 1)).0" ;;
+                              *) NEW_VERSION="v${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+                            esac
+
+                            TAG_NAME="${SERVICE}-${NEW_VERSION}"
+                            IMAGE_TAG="${NEW_VERSION#v}"
+
+                            echo "╔══════════════════════════════════════════════════════════════╗"
+                            echo "║  Service: $SERVICE"
+                            echo "║  Branch:  $BRANCH → Bump: $BUMP"
+                            echo "║  Current: ${LATEST:-none} → New: $NEW_VERSION"
+                            echo "║  Tag:     $TAG_NAME"
+                            echo "╚══════════════════════════════════════════════════════════════╝"
+
+                            {
+                              echo "VERSION=$NEW_VERSION"
+                              echo "IMAGE_TAG=$IMAGE_TAG"
+                              echo "TAG_NAME=$TAG_NAME"
+                            } >> $HARNESS_OUTPUT_FILE
+                          envVariables:
+                            SERVICE: <+repeat.item>
+                            BRANCH: <+codebase.branch>
+                            GITHUB_REPO: crizstian/cinema-microservice-in-GO
+                            GITHUB_TOKEN: <+secrets.getValue("CristianGithub")>
+                          outputVariables:
+                            - name: VERSION
+                            - name: IMAGE_TAG
+                            - name: TAG_NAME
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 4
+              - stepGroup:
+                  name: Build and Scan
+                  identifier: build_and_scan
+                  steps:
+                    - step:
+                        name: Build Binary
+                        identifier: build_binary
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: golang:<+execution.steps.detect_and_version_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
+                          shell: Sh
+                          command: |
+                            SERVICE_DIR="services/<+repeat.item>"
+                            BINARY_PATH="${SERVICE_DIR}/<+repeat.item>"
+
+                            echo "=== Building binary for <+repeat.item> ${VERSION} ==="
+                            cd ${SERVICE_DIR}
+
+                            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+                              go build \
+                              -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                              -o <+repeat.item> \
+                              ./cmd/<+repeat.item>
+
+                            cd /harness
+                            if [ -f "${BINARY_PATH}" ]; then
+                              ls -lh ${BINARY_PATH}
+                              echo "✅ Binary ready at: ${BINARY_PATH}"
+                            else
+                              echo "❌ Binary not found at: ${BINARY_PATH}"
+                              exit 1
+                            fi
+                          envVariables:
+                            GOWORK: "off"
+                            VERSION: <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.VERSION>
+                    - step:
+                        name: Build Docker Image
+                        identifier: build_docker_image
+                        type: BuildAndPushDockerRegistry
+                        spec:
+                          connectorRef: DockerCristian
+                          repo: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
+                          tags:
+                            - <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                          dockerfile: <+pipeline.variables.DOCKERFILE_PATH>
+                          context: .
+                          buildArgs:
+                            SERVICE_NAME: <+repeat.item>
+                            SERVICE_PORT: "8000"
+                            VERSION: <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                          target: runtime
+                          caching: true
+                          envVariables:
+                            PLUGIN_NO_PUSH: "true"
+                            PLUGIN_BUILDX_LOAD: "true"
+                            PLUGIN_TAR_PATH: /harness/images/<+repeat.item>-service.tar
+                    - parallel:
+                        - step:
+                            type: AquaTrivy
+                            name: Trivy Scan
+                            identifier: trivy_scan
+                            spec:
+                              mode: orchestration
+                              config: default
+                              target:
+                                type: container
+                                workspace: /harness/images/<+repeat.item>-service.tar
+                                name: <+repeat.item>-service
+                                variant: <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                              advanced:
+                                log:
+                                  level: info
+                                fail_on_severity: none
+                              privileged: true
+                              image:
+                                type: local_archive
+                                tag: <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                                name: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
+                              sbom:
+                                format: spdx-json
+                            enforce:
+                              policySets:
+                                - security_container
+                        - step:
+                            type: HarnessSCA
+                            name: Harness Container
+                            identifier: harness_container
+                            spec:
+                              mode: orchestration
+                              config: default
+                              target:
+                                type: container
+                                workspace: /harness/images/<+repeat.item>-service.tar
+                                detection: auto
+                              advanced:
+                                log:
+                                  level: info
+                              privileged: true
+                              image:
+                                type: local_archive
+                                tag: <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                                name: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 2
+              - step:
+                  type: Run
+                  name: Evaluate Container Gate
+                  identifier: evaluate_container_gate
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:3.19
+                    shell: Sh
+                    command: |
+                      #!/bin/sh
+                      set -e
+
+                      sanitize() {
+                        val="$1"
+                        [ -z "$val" ] || [ "$val" = "null" ] || [ "$val" = "<+null>" ] && echo "0" || echo "$val"
+                      }
+
+                      MAX_CRITICAL=$GATE_CRITICAL
+                      MAX_HIGH=$GATE_HIGH
+
+                      TRIVY_C=$(sanitize "$TRIVY_CRITICAL"); TRIVY_H=$(sanitize "$TRIVY_HIGH")
+                      HARNESS_C=$(sanitize "$HARNESS_CRITICAL"); HARNESS_H=$(sanitize "$HARNESS_HIGH")
+                      NEW_CRIT=$(sanitize "$TRIVY_NEW_CRITICAL")
+
+                      TOTAL_CRITICAL=$((TRIVY_C + HARNESS_C))
+                      TOTAL_HIGH=$((TRIVY_H + HARNESS_H))
+
+                      GATE_PASSED=true
+                      VIOLATIONS=""
+                      [ "$TOTAL_CRITICAL" -gt "$MAX_CRITICAL" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}CRITICAL:${TOTAL_CRITICAL}(max:${MAX_CRITICAL}) "
+                      [ "$TOTAL_HIGH" -gt "$MAX_HIGH" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}HIGH:${TOTAL_HIGH}(max:${MAX_HIGH}) "
+                      [ "$NEW_CRIT" -gt 0 ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}NEW_CRITICAL:${NEW_CRIT}"
+
+                      echo ""
+                      echo "╔══════════════════════════════════════════════════════════════╗"
+                      echo "║            CONTAINER SECURITY GATE - EVALUATION              ║"
+                      echo "╠══════════════════════════════════════════════════════════════╣"
+                      printf "║  Critical:     %-3s (max: %-3s)                               ║\n" "$TOTAL_CRITICAL" "$MAX_CRITICAL"
+                      printf "║  High:         %-3s (max: %-3s)                               ║\n" "$TOTAL_HIGH" "$MAX_HIGH"
+                      echo "╠══════════════════════════════════════════════════════════════╣"
+                      if [ "$GATE_PASSED" = "true" ]; then
+                        echo "║  ✅ GATE PASSED - Image approved for release                 ║"
+                      else
+                        echo "║  ⚠️  GATE FAILED - Violations: $VIOLATIONS"
+                      fi
+                      echo "╚══════════════════════════════════════════════════════════════╝"
+
+                      {
+                        echo "CONTAINER_GATE_PASSED=$GATE_PASSED"
+                      } >> $HARNESS_OUTPUT_FILE
+
+                      [ "$GATE_PASSED" = "false" ] && exit 1 || exit 0
+                    envVariables:
+                      GATE_CRITICAL: <+pipeline.variables.CONTAINER_GATE_CRITICAL>
+                      GATE_HIGH: <+pipeline.variables.CONTAINER_GATE_HIGH>
+                      TRIVY_CRITICAL: <+execution.steps.build_and_scan.steps.trivy_scan.output.outputVariables.CRITICAL>
+                      TRIVY_HIGH: <+execution.steps.build_and_scan.steps.trivy_scan.output.outputVariables.HIGH>
+                      TRIVY_NEW_CRITICAL: <+execution.steps.build_and_scan.steps.trivy_scan.output.outputVariables.NEW_CRITICAL>
+                      HARNESS_CRITICAL: <+execution.steps.build_and_scan.steps.harness_container.output.outputVariables.CRITICAL>
+                      HARNESS_HIGH: <+execution.steps.build_and_scan.steps.harness_container.output.outputVariables.HIGH>
+                    outputVariables:
+                      - name: CONTAINER_GATE_PASSED
+                  enforce:
+                    policySets:
+                      - security_gate_container
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: ManualIntervention
+                          spec:
+                            timeout: 4h
+                            onTimeout:
+                              action:
+                                type: Abort
+              - stepGroup:
+                  name: Release
+                  identifier: release
+                  when:
+                    stageStatus: Success
+                    condition: <+execution.steps.evaluate_container_gate.output.outputVariables.CONTAINER_GATE_PASSED> == "true"
+                  steps:
+                    - step:
+                        type: BuildAndPushDockerRegistry
+                        name: Push Docker Image
+                        identifier: push_docker_image
+                        spec:
+                          connectorRef: DockerCristian
+                          repo: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
+                          tags:
+                            - <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                            - latest
+                          caching: true
+                          envVariables:
+                            PLUGIN_PUSH_ONLY: "true"
+                            PLUGIN_SOURCE_TAR_PATH: /harness/images/<+repeat.item>-service.tar
+                    - step:
+                        name: Create Git Tag
+                        identifier: create_git_tag
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          command: |
+                            apk add --no-cache curl jq > /dev/null 2>&1
+
+                            TAG_NAME="<+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.TAG_NAME>"
+
+                            echo "=== Creating Git Tag: $TAG_NAME ==="
+
+                            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+                              "https://api.github.com/repos/${GITHUB_REPO}/git/refs" \
+                              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                              -H "Accept: application/vnd.github.v3+json" \
+                              -d "{\"ref\":\"refs/tags/${TAG_NAME}\",\"sha\":\"${COMMIT_SHA}\"}")
+
+                            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+
+                            if [ "$HTTP_CODE" = "201" ]; then
+                              echo "✅ Tag created: $TAG_NAME"
+                            elif [ "$HTTP_CODE" = "422" ]; then
+                              echo "ℹ️  Tag already exists: $TAG_NAME"
+                            else
+                              echo "❌ Failed to create tag: $HTTP_CODE"
+                              exit 1
+                            fi
+                          envVariables:
+                            GITHUB_REPO: crizstian/cinema-microservice-in-GO
+                            GITHUB_TOKEN: <+secrets.getValue("CristianGithub")>
+                            COMMIT_SHA: <+codebase.commitSha>
+                    - step:
+                        name: Store Service Tag
+                        identifier: store_service_tag
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          command: |
+                            mkdir -p /harness/service-tags
+                            echo "<+repeat.item>:<+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>" >> /harness/service-tags/tags.txt
+                            echo "SERVICE_TAG=<+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>" >> $HARNESS_OUTPUT_FILE
+                          outputVariables:
+                            - name: SERVICE_TAG
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 2
+              - step:
+                  name: Aggregate Service Tags
+                  identifier: aggregate_tags
+                  type: Run
+                  when:
+                    stageStatus: Success
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:3.19
+                    shell: Sh
+                    command: |
+                      # Build SERVICE_TAGS in format: service1:tag1,service2:tag2
+                      if [ -f /harness/service-tags/tags.txt ]; then
+                        SERVICE_TAGS=$(cat /harness/service-tags/tags.txt | tr '\n' ',' | sed 's/,$//')
+                        echo "SERVICE_TAGS=$SERVICE_TAGS" >> $HARNESS_OUTPUT_FILE
+
+                        echo "╔══════════════════════════════════════════════════════════════╗"
+                        echo "║              RELEASE SUMMARY                                 ║"
+                        echo "╠══════════════════════════════════════════════════════════════╣"
+                        while IFS=: read -r svc tag; do
+                          printf "║  %s: %s\n" "$svc" "$tag"
+                        done < /harness/service-tags/tags.txt
+                        echo "╚══════════════════════════════════════════════════════════════╝"
+                      else
+                        echo "SERVICE_TAGS=" >> $HARNESS_OUTPUT_FILE
+                      fi
+                    outputVariables:
+                      - name: SERVICE_TAGS
+        policySetRef:
+          - security_gate_container
+
+    # ============================================================================
+    # GITOPS STAGES - Deploy to Dev
+    # ============================================================================
+    - stage:
+        name: GitOps Dev
+        identifier: gitops_dev
+        description: Deploy all services to development via GitOps
+        type: Deployment
+        when:
+          pipelineStatus: Success
+          condition: (<+pipeline.variables.RUN_MODE> == "pr_merge" || <+pipeline.variables.RUN_MODE> == "full") && "<+pipeline.stages.build_and_release.spec.execution.steps.aggregate_tags.output.outputVariables.SERVICE_TAGS>" != ""
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          service:
+            serviceRef: <+repeat.item>servicegitops
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: serviceimage
+                      sources:
+                        - identifier: serviceimage
+                          type: DockerRegistry
+                          spec:
+                            tag: <+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
+          execution:
+            steps:
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Release Repo
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec:
+                    variables:
+                      - name: image_tag
+                        type: String
+                        value: <+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
+                      - name: service_name
+                        type: String
+                        value: <+repeat.item>
+                      - name: replicas
+                        type: String
+                        value: "1"
+                      - name: environment
+                        type: String
+                        value: dev
+              - step:
+                  type: HarnessApproval
+                  name: PR Review
+                  identifier: PR_Review
+                  spec:
+                    approvalMessage: |
+                      Review GitOps PR for <+repeat.item>
+                      Environment: Dev
+                      Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
+                    includePipelineExecutionHistory: true
+                    isAutoRejectEnabled: false
+                    approvers:
+                      userGroups:
+                        - account.SalesEngineers
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                  timeout: 1d
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  type: GitOpsSync
+                  name: Sync to Cluster
+                  identifier: GitOpsSync
+                  spec:
+                    prune: true
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    applicationRegex: <+repeat.item>-dev
+                    showResourceProgress: true
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: true
+                      pruneResourcesAtLast: true
+                      applyOutOfSyncOnly: true
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      serverSideApply: true
+                  timeout: 10m
+              - step:
+                  type: Http
+                  name: Liveness Check
+                  identifier: livenessCheck
+                  timeout: 30s
+                  spec:
+                    url: http://<+repeat.item>-service.cinema-dev.svc.cluster.local:8000/health/live
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 3
+                            retryIntervals:
+                              - 10s
+                            onRetryFailure:
+                              action:
+                                type: MarkAsFailure
+              - step:
+                  type: Http
+                  name: Readiness Check
+                  identifier: readinessCheck
+                  timeout: 30s
+                  spec:
+                    url: http://<+repeat.item>-service.cinema-dev.svc.cluster.local:8000/health/ready
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 3
+                            retryIntervals:
+                              - 10s
+                            onRetryFailure:
+                              action:
+                                type: MarkAsFailure
+              - step:
+                  type: ShellScript
+                  name: Smoke Test
+                  identifier: smokeTest
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+
+                          SERVICE="<+repeat.item>"
+                          NAMESPACE="cinema-dev"
+                          SERVICE_URL="http://${SERVICE}-service.${NAMESPACE}.svc.cluster.local:8000"
+
+                          echo "╔══════════════════════════════════════════════════════════════╗"
+                          echo "║  Smoke Test: ${SERVICE}-service                              "
+                          echo "║  Environment: dev                                            "
+                          echo "╚══════════════════════════════════════════════════════════════╝"
+
+                          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL/api/health" || echo "000")
+                          if [ "$RESPONSE" = "200" ]; then
+                            echo "✅ Health check passed"
+                          else
+                            echo "⚠️  Health check returned: $RESPONSE"
+                          fi
+
+                          echo "✅ Smoke test completed for ${SERVICE}"
+            rollbackSteps:
+              - step:
+                  type: RevertPR
+                  name: Revert PR
+                  identifier: RevertPR
+                  spec:
+                    commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: "Rollback: <+repeat.item> dev"
+                  timeout: 10m
+              - step:
+                  type: MergePR
+                  name: Merge Rollback
+                  identifier: MergeRollback
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Apps
+                  identifier: FetchApps
+                  spec: {}
+                  timeout: 10m
+              - step:
+                  type: GitOpsSync
+                  name: Sync Rollback
+                  identifier: SyncRollback
+                  spec:
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    applicationRegex: <+repeat.item>-dev
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      serverSideApply: true
+                  timeout: 10m
+          environment:
+            environmentRef: dev
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: incluster
+                agentIdentifier: gitops
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        strategy:
+          repeat:
+            items: <+pipeline.variables.SERVICES.split(",")>
+            nodeName: <+repeat.item>
+            maxConcurrency: 1
+
+    # ============================================================================
+    # GITOPS - Staging Gate
+    # ============================================================================
+    - stage:
+        name: Staging Gate
+        identifier: Staging_Gate
+        description: Approval for staging deployment
+        type: Approval
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.RUN_MODE> == "pr_merge" || <+pipeline.variables.RUN_MODE> == "full"
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Approve Staging
+                  identifier: ApproveStaging
+                  type: HarnessApproval
+                  timeout: 1d
+                  spec:
+                    approvalMessage: |
+                      Approve deployment to Staging?
+                      Services: <+pipeline.variables.SERVICES>
+                      Tags: <+pipeline.stages.build_and_release.spec.execution.steps.aggregate_tags.output.outputVariables.SERVICE_TAGS>
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                      userGroups:
+                        - account.SalesEngineers
+                    isAutoRejectEnabled: false
+        tags: {}
+
+    # ============================================================================
+    # GITOPS STAGES - Deploy to Staging
+    # ============================================================================
+    - stage:
+        name: GitOps Staging
+        identifier: gitops_staging
+        description: Deploy all services to staging via GitOps
+        type: Deployment
+        when:
+          pipelineStatus: Success
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          service:
+            serviceRef: <+repeat.item>servicegitops
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: serviceimage
+                      sources:
+                        - identifier: serviceimage
+                          type: DockerRegistry
+                          spec:
+                            tag: <+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
+          execution:
+            steps:
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Release Repo
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec:
+                    variables:
+                      - name: image_tag
+                        type: String
+                        value: <+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
+                      - name: service_name
+                        type: String
+                        value: <+repeat.item>
+                      - name: replicas
+                        type: String
+                        value: "2"
+                      - name: environment
+                        type: String
+                        value: staging
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  type: GitOpsSync
+                  name: Sync to Cluster
+                  identifier: GitOpsSync
+                  spec:
+                    prune: true
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    applicationRegex: <+repeat.item>-staging
+                    showResourceProgress: true
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: true
+                      serverSideApply: true
+                      pruneResourcesAtLast: true
+                      applyOutOfSyncOnly: true
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                  timeout: 10m
+              - step:
+                  type: Http
+                  name: Liveness Check
+                  identifier: livenessCheck
+                  timeout: 30s
+                  spec:
+                    url: http://<+repeat.item>-service.cinema-staging.svc.cluster.local:8000/health/live
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 3
+                            retryIntervals:
+                              - 10s
+                            onRetryFailure:
+                              action:
+                                type: MarkAsFailure
+              - step:
+                  type: Http
+                  name: Readiness Check
+                  identifier: readinessCheck
+                  timeout: 30s
+                  spec:
+                    url: http://<+repeat.item>-service.cinema-staging.svc.cluster.local:8000/health/ready
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 3
+                            retryIntervals:
+                              - 10s
+                            onRetryFailure:
+                              action:
+                                type: MarkAsFailure
+              - step:
+                  type: ShellScript
+                  name: Smoke Test
+                  identifier: smokeTest
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+
+                          SERVICE="<+repeat.item>"
+                          NAMESPACE="cinema-staging"
+                          SERVICE_URL="http://${SERVICE}-service.${NAMESPACE}.svc.cluster.local:8000"
+
+                          echo "╔══════════════════════════════════════════════════════════════╗"
+                          echo "║  Smoke Test: ${SERVICE}-service                              "
+                          echo "║  Environment: staging                                        "
+                          echo "╚══════════════════════════════════════════════════════════════╝"
+
+                          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL/api/health" || echo "000")
+                          if [ "$RESPONSE" = "200" ]; then
+                            echo "✅ Health check passed"
+                          else
+                            echo "⚠️  Health check returned: $RESPONSE"
+                          fi
+
+                          echo "✅ Smoke test completed for ${SERVICE}"
+            rollbackSteps:
+              - step:
+                  type: RevertPR
+                  name: Revert PR
+                  identifier: RevertPR
+                  spec:
+                    commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: "Rollback: <+repeat.item> staging"
+                  timeout: 10m
+              - step:
+                  type: MergePR
+                  name: Merge Rollback
+                  identifier: MergeRollback
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Apps
+                  identifier: FetchApps
+                  spec: {}
+                  timeout: 10m
+              - step:
+                  type: GitOpsSync
+                  name: Sync Rollback
+                  identifier: SyncRollback
+                  spec:
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    applicationRegex: <+repeat.item>-staging
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      serverSideApply: true
+                  timeout: 10m
+          environment:
+            environmentRef: staging
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: incluster
+                agentIdentifier: gitops
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        strategy:
+          repeat:
+            items: <+pipeline.variables.SERVICES.split(",")>
+            nodeName: <+repeat.item>
+            maxConcurrency: 1
+
+    # ============================================================================
+    # GITOPS - Prod Gate
+    # ============================================================================
+    - stage:
+        name: Prod Gate
+        identifier: Prod_Gate
+        description: Approval for production deployment
+        type: Approval
+        when:
+          pipelineStatus: Success
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Approve Production
+                  identifier: ApproveProd
+                  type: HarnessApproval
+                  timeout: 1d
+                  spec:
+                    approvalMessage: |
+                      ⚠️ PRODUCTION DEPLOYMENT ⚠️
+                      Services: <+pipeline.variables.SERVICES>
+                      Tags: <+pipeline.stages.build_and_release.spec.execution.steps.aggregate_tags.output.outputVariables.SERVICE_TAGS>
+
+                      Please verify staging deployment before approving.
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      minimumCount: 2
+                      disallowPipelineExecutor: true
+                      userGroups:
+                        - account.SalesEngineers
+                    isAutoRejectEnabled: false
+        tags: {}
+
+    # ============================================================================
+    # GITOPS STAGES - Deploy to Prod
+    # ============================================================================
+    - stage:
+        name: GitOps Prod
+        identifier: gitops_prod
+        description: Deploy all services to production via GitOps
+        type: Deployment
+        when:
+          pipelineStatus: Success
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          service:
+            serviceRef: <+repeat.item>servicegitops
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: serviceimage
+                      sources:
+                        - identifier: serviceimage
+                          type: DockerRegistry
+                          spec:
+                            tag: <+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
+          execution:
+            steps:
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Release Repo
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec:
+                    variables:
+                      - name: image_tag
+                        type: String
+                        value: <+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
+                      - name: service_name
+                        type: String
+                        value: <+repeat.item>
+                      - name: replicas
+                        type: String
+                        value: "3"
+                      - name: environment
+                        type: String
+                        value: prod
+              - step:
+                  type: HarnessApproval
+                  name: Final PR Review
+                  identifier: FinalPRReview
+                  spec:
+                    approvalMessage: |
+                      Review production PR before merge
+                      Service: <+repeat.item>
+                      Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
+                    includePipelineExecutionHistory: true
+                    isAutoRejectEnabled: false
+                    approvers:
+                      userGroups:
+                        - account.SalesEngineers
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                  timeout: 4h
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  type: GitOpsSync
+                  name: Sync to Cluster
+                  identifier: GitOpsSync
+                  spec:
+                    prune: true
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    applicationRegex: <+repeat.item>-prod
+                    showResourceProgress: true
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: true
+                      serverSideApply: true
+                      pruneResourcesAtLast: true
+                      applyOutOfSyncOnly: true
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                  timeout: 15m
+              - step:
+                  type: Http
+                  name: Liveness Check
+                  identifier: livenessCheck
+                  timeout: 30s
+                  spec:
+                    url: http://<+repeat.item>-service.cinema-prod.svc.cluster.local:8000/health/live
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 3
+                            retryIntervals:
+                              - 10s
+                            onRetryFailure:
+                              action:
+                                type: MarkAsFailure
+              - step:
+                  type: Http
+                  name: Readiness Check
+                  identifier: readinessCheck
+                  timeout: 30s
+                  spec:
+                    url: http://<+repeat.item>-service.cinema-prod.svc.cluster.local:8000/health/ready
+                    method: GET
+                    headers: []
+                    assertion: <+httpResponseCode> == 200
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 3
+                            retryIntervals:
+                              - 10s
+                            onRetryFailure:
+                              action:
+                                type: MarkAsFailure
+              - step:
+                  type: ShellScript
+                  name: Smoke Test
+                  identifier: smokeTest
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+
+                          SERVICE="<+repeat.item>"
+                          NAMESPACE="cinema-prod"
+                          SERVICE_URL="http://${SERVICE}-service.${NAMESPACE}.svc.cluster.local:8000"
+
+                          echo "╔══════════════════════════════════════════════════════════════╗"
+                          echo "║  Smoke Test: ${SERVICE}-service                              "
+                          echo "║  Environment: prod                                           "
+                          echo "╚══════════════════════════════════════════════════════════════╝"
+
+                          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL/api/health" || echo "000")
+                          if [ "$RESPONSE" = "200" ]; then
+                            echo "✅ Health check passed"
+                          else
+                            echo "⚠️  Health check returned: $RESPONSE"
+                          fi
+
+                          echo "✅ Smoke test completed for ${SERVICE}"
+            rollbackSteps:
+              - step:
+                  type: RevertPR
+                  name: Revert PR
+                  identifier: RevertPR
+                  spec:
+                    commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: "ROLLBACK: <+repeat.item> PRODUCTION"
+                  timeout: 10m
+              - step:
+                  type: MergePR
+                  name: Merge Rollback
+                  identifier: MergeRollback
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Apps
+                  identifier: FetchApps
+                  spec: {}
+                  timeout: 10m
+              - step:
+                  type: GitOpsSync
+                  name: Sync Rollback
+                  identifier: SyncRollback
+                  spec:
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    applicationRegex: <+repeat.item>-prod
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      serverSideApply: true
+                  timeout: 10m
+          environment:
+            environmentRef: prod
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: seprod
+                agentIdentifier: gitops
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        strategy:
+          repeat:
+            items: <+pipeline.variables.SERVICES.split(",")>
+            nodeName: <+repeat.item>
+            maxConcurrency: 1
+  allowStageExecutions: true

@@ -1,0 +1,27 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: payment-service
+  description: Payment processing service - handles payment transactions, refunds, and billing
+  annotations:
+    harness.io/project-url: https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/CristianRamirez
+    harness.io/cd-serviceId: paymentservice
+    github.com/project-slug: crizstian/cinema-microservice-in-GO
+    backstage.io/techdocs-ref: dir:.
+  tags:
+    - go
+    - microservice
+    - cinema
+    - payments
+    - pci
+  links:
+    - url: https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/CristianRamirez/pipelines/CICD_Go_ShiftLeft
+      title: CI/CD Pipeline
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: production
+  owner: team-cinema
+  system: cinema-platform
+  providesApis:
+    - payment-api

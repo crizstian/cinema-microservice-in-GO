@@ -1,0 +1,233 @@
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: cinema-platform
+  description: Cinema Microservices Platform - A complete booking and management system for cinemas
+  annotations:
+    harness.io/project-url: https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/CristianRamirez
+    github.com/project-slug: crizstian/cinema-microservice-in-GO
+    backstage.io/techdocs-ref: dir:docs/
+  tags:
+    - go
+    - microservices
+    - cinema
+    - kubernetes
+    - gitops
+  links:
+    - url: https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/CristianRamirez/deployments
+      title: Harness Deployments
+      icon: dashboard
+    - url: https://github.com/crizstian/cinema-microservice-in-GO
+      title: GitHub Repository
+      icon: github
+spec:
+  owner: team-cinema
+  domain: entertainment
+---
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: entertainment
+  description: Entertainment and media services domain
+spec:
+  owner: team-cinema
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: team-cinema
+  description: Cinema Platform Development Team
+spec:
+  type: team
+  profile:
+    displayName: Cinema Platform Team
+    email: cinema-team@example.com
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: booking-api
+  description: Booking API for cinema reservations
+  tags:
+    - rest
+    - booking
+spec:
+  type: openapi
+  lifecycle: production
+  owner: team-cinema
+  system: cinema-platform
+  definition: |
+    openapi: "3.0.0"
+    info:
+      title: Booking API
+      version: "1.0"
+    paths:
+      /bookings:
+        get:
+          summary: List all bookings
+        post:
+          summary: Create a new booking
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: movie-api
+  description: Movie catalog API
+  tags:
+    - rest
+    - catalog
+spec:
+  type: openapi
+  lifecycle: production
+  owner: team-cinema
+  system: cinema-platform
+  definition: |
+    openapi: "3.0.0"
+    info:
+      title: Movie API
+      version: "1.0"
+    paths:
+      /movies:
+        get:
+          summary: List all movies
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: cinema-api
+  description: Cinema management API
+  tags:
+    - rest
+    - management
+spec:
+  type: openapi
+  lifecycle: production
+  owner: team-cinema
+  system: cinema-platform
+  definition: |
+    openapi: "3.0.0"
+    info:
+      title: Cinema API
+      version: "1.0"
+    paths:
+      /cinemas:
+        get:
+          summary: List all cinemas
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: user-api
+  description: User management API
+  tags:
+    - rest
+    - auth
+spec:
+  type: openapi
+  lifecycle: production
+  owner: team-cinema
+  system: cinema-platform
+  definition: |
+    openapi: "3.0.0"
+    info:
+      title: User API
+      version: "1.0"
+    paths:
+      /users:
+        get:
+          summary: List all users
+        post:
+          summary: Register a new user
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: seat-api
+  description: Seat availability API
+  tags:
+    - rest
+    - inventory
+spec:
+  type: openapi
+  lifecycle: production
+  owner: team-cinema
+  system: cinema-platform
+  definition: |
+    openapi: "3.0.0"
+    info:
+      title: Seat API
+      version: "1.0"
+    paths:
+      /seats:
+        get:
+          summary: Get seat availability
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: showtime-api
+  description: Showtime scheduling API
+  tags:
+    - rest
+    - scheduling
+spec:
+  type: openapi
+  lifecycle: production
+  owner: team-cinema
+  system: cinema-platform
+  definition: |
+    openapi: "3.0.0"
+    info:
+      title: Showtime API
+      version: "1.0"
+    paths:
+      /showtimes:
+        get:
+          summary: List showtimes
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: payment-api
+  description: Payment processing API
+  tags:
+    - rest
+    - payments
+spec:
+  type: openapi
+  lifecycle: production
+  owner: team-cinema
+  system: cinema-platform
+  definition: |
+    openapi: "3.0.0"
+    info:
+      title: Payment API
+      version: "1.0"
+    paths:
+      /payments:
+        post:
+          summary: Process payment
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: notification-api
+  description: Notification service API
+  tags:
+    - rest
+    - notifications
+spec:
+  type: openapi
+  lifecycle: production
+  owner: team-cinema
+  system: cinema-platform
+  definition: |
+    openapi: "3.0.0"
+    info:
+      title: Notification API
+      version: "1.0"
+    paths:
+      /notifications:
+        post:
+          summary: Send notification

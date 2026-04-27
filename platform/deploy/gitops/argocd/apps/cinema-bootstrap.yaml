@@ -20,9 +20,7 @@ spec:
     server: https://kubernetes.default.svc
     namespace: argocd
   syncPolicy:
-    automated:
-      selfHeal: true
-      prune: true
+    # Manual sync - controlled by Harness GitOps Pipeline
     syncOptions:
       - CreateNamespace=false
       - ApplyOutOfSyncOnly=true
