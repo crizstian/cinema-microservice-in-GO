@@ -25,7 +25,7 @@ service:
                     - platform/deploy/kubernetes/templates/services/service.yaml
                     - platform/deploy/kubernetes/templates/services/configmap.yaml
                   repoName: cinema-microservice-in-GO
-                  branch: main
+                  branch: monorepo
               valuesPaths:
                 - platform/deploy/kubernetes/values/base.yaml
                 - platform/deploy/kubernetes/values/environments/dev.yaml

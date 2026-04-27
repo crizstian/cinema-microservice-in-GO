@@ -1,6 +1,5 @@
 # Harness Service Definition
-# Generated from config/services.yaml
-# Use: harness_create or harness_update to sync
+# GitOps pattern - configuration lives in values files, not here
 
 service:
   name: showtime-service
@@ -37,23 +36,4 @@ service:
                 connectorRef: DockerCristian
                 imagePath: crizstian/showtime-service
                 tag: <+input>
-      variables:
-        - name: port
-          type: String
-          value: "8006"
-        - name: dbName
-          type: String
-          value: "showtime"
-        - name: cpu_request
-          type: String
-          value: "50m"
-        - name: mem_request
-          type: String
-          value: "64Mi"
-        - name: cpu_limit
-          type: String
-          value: "250m"
-        - name: mem_limit
-          type: String
-          value: "256Mi"
   gitOpsEnabled: false

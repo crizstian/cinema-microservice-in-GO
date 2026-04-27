@@ -1,21 +1,13 @@
 # Cinema Service Values
-# Template with Harness expressions - values resolved at deploy time
+# Static configuration - no Harness expressions except service.name and artifact.tag
 
 serviceName: <+service.name>
 version: <+artifact.tag>
 
-port: <+serviceVariables.port>
-dbName: <+serviceVariables.dbName>
+port: 8003
+dbName: cinema
 
 dependencies: []
-
-resources:
-  requests:
-    cpu: <+serviceVariables.cpu_request>
-    memory: <+serviceVariables.mem_request>
-  limits:
-    cpu: <+serviceVariables.cpu_limit>
-    memory: <+serviceVariables.mem_limit>
 
 autoscaling:
   minReplicas: 1
