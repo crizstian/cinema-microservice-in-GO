@@ -23,7 +23,8 @@ pipeline:
   variables:
     - name: RUN_MODE
       type: String
-      description: "pr_open: Security + Tests | pr_merge: Build + Release + Deploy | full: All stages"
+      description: "pr_open: Security + Tests | pr_merge: Build + Release + Deploy |
+        full: All stages"
       required: true
       value: <+input>.allowedValues(pr_open,pr_merge,full)
     - name: SERVICES
@@ -83,7 +84,8 @@ pipeline:
             type: SecurityTests
             when:
               pipelineStatus: Success
-              condition: <+pipeline.variables.RUN_MODE> == "pr_open" || <+pipeline.variables.RUN_MODE> == "full"
+              condition: <+pipeline.variables.RUN_MODE> == "pr_open" ||
+                <+pipeline.variables.RUN_MODE> == "full"
             spec:
               cloneCodebase: true
               caching:
@@ -448,7 +450,8 @@ pipeline:
             type: CI
             when:
               pipelineStatus: Success
-              condition: <+pipeline.variables.RUN_MODE> == "pr_open" || <+pipeline.variables.RUN_MODE> == "full"
+              condition: <+pipeline.variables.RUN_MODE> == "pr_open" ||
+                <+pipeline.variables.RUN_MODE> == "full"
             spec:
               cloneCodebase: true
               caching:
@@ -592,7 +595,8 @@ pipeline:
         type: CI
         when:
           pipelineStatus: Success
-          condition: <+pipeline.variables.RUN_MODE> == "pr_merge" || <+pipeline.variables.RUN_MODE> == "full"
+          condition: <+pipeline.variables.RUN_MODE> == "pr_merge" ||
+            <+pipeline.variables.RUN_MODE> == "full"
         spec:
           cloneCodebase: true
           caching:
@@ -888,7 +892,8 @@ pipeline:
                   identifier: release
                   when:
                     stageStatus: Success
-                    condition: <+execution.steps.evaluate_container_gate.output.outputVariables.CONTAINER_GATE_PASSED> == "true"
+                    condition: <+execution.steps.evaluate_container_gate.output.outputVariables.CONTAINER_GATE_PASSED>
+                      == "true"
                   steps:
                     - step:
                         type: BuildAndPushDockerRegistry
@@ -999,26 +1004,48 @@ pipeline:
         type: Deployment
         when:
           pipelineStatus: Success
-          condition: (<+pipeline.variables.RUN_MODE> == "pr_merge" || <+pipeline.variables.RUN_MODE> == "full") && "<+pipeline.stages.build_and_release.spec.execution.steps.aggregate_tags.output.outputVariables.SERVICE_TAGS>" != ""
+          condition: (<+pipeline.variables.RUN_MODE> == "pr_merge" ||
+            <+pipeline.variables.RUN_MODE> == "full") &&
+            "<+pipeline.stages.build_and_release.spec.execution.steps.aggregate_tags.output.outputVariables.SERVICE_TAGS>"
+            != ""
         spec:
           deploymentType: Kubernetes
           gitOpsEnabled: true
           service:
+            useFromStage: {}
             serviceRef: <+repeat.item>servicegitops
-            serviceInputs:
-              serviceDefinition:
-                type: Kubernetes
-                spec:
-                  artifacts:
-                    primary:
-                      primaryArtifactRef: serviceimage
-                      sources:
-                        - identifier: serviceimage
-                          type: DockerRegistry
-                          spec:
-                            tag: <+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
           execution:
             steps:
+              - step:
+                  type: ShellScript
+                  name: Extract Service Tag
+                  identifier: extract_tag
+                  timeout: 1m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          SERVICE_NAME="<+repeat.item>"
+                          SERVICE_TAGS="<+pipeline.stages.build_and_release.spec.execution.steps.aggregate_tags.output.outputVariables.SERVICE_TAGS>"
+
+                          # Extract tag for current service from "service1:tag1,service2:tag2" format
+                          IMAGE_TAG=$(echo "$SERVICE_TAGS" | tr ',' '\n' | grep "^${SERVICE_NAME}:" | cut -d':' -f2)
+
+                          if [ -z "$IMAGE_TAG" ]; then
+                            echo "ERROR: Could not find tag for service $SERVICE_NAME in SERVICE_TAGS: $SERVICE_TAGS"
+                            exit 1
+                          fi
+
+                          echo "Service: $SERVICE_NAME"
+                          echo "Tag: $IMAGE_TAG"
+                    outputVariables:
+                      - name: IMAGE_TAG
+                        type: String
+                        value: IMAGE_TAG
               - step:
                   type: GitOpsUpdateReleaseRepo
                   name: Update Release Repo
@@ -1028,7 +1055,7 @@ pipeline:
                     variables:
                       - name: image_tag
                         type: String
-                        value: <+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
+                        value: <+execution.steps.extract_tag.output.outputVariables.IMAGE_TAG>
                       - name: service_name
                         type: String
                         value: <+repeat.item>
@@ -1046,7 +1073,7 @@ pipeline:
                     approvalMessage: |
                       Review GitOps PR for <+repeat.item>
                       Environment: Dev
-                      Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
+                      Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+execution.steps.extract_tag.output.outputVariables.IMAGE_TAG>
                     includePipelineExecutionHistory: true
                     isAutoRejectEnabled: false
                     approvers:
@@ -1225,7 +1252,5 @@ pipeline:
             items: <+pipeline.variables.SERVICES.split(",")>
             nodeName: <+repeat.item>
             maxConcurrency: 1
-
-
 
   allowStageExecutions: true
