@@ -34,6 +34,7 @@ patches:
         value: mongodb.cinema-infra.svc.cluster.local:27017
       - op: add
         path: /data/NATS_URL
+        value: nats://nats.cinema-infra.svc.cluster.local:4222
       - op: add
         path: /data/PAYMENT_URL
         value: http://payment-service.cinema-prod.svc.cluster.local:8007
@@ -58,7 +59,6 @@ patches:
       - op: add
         path: /data/BOOKING_SERVICE_URL
         value: http://booking-service.cinema-prod.svc.cluster.local:8001
-        value: nats://nats.cinema-infra.svc.cluster.local:4222
   - target:
       kind: HorizontalPodAutoscaler
       name: payment-service
