@@ -1,0 +1,154 @@
+# ArgoCD Helm Values for Cinema Microservices
+# Usage: helm install argocd argo/argo-cd -n argocd -f values.yaml
+
+global:
+  domain: argocd.cinema.local
+
+## Server Configuration
+server:
+  replicas: 2
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    hosts:
+      - argocd.cinema.local
+    tls:
+      - secretName: argocd-tls
+        hosts:
+          - argocd.cinema.local
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  extraArgs:
+    - --insecure  # Remove in production with proper TLS
+
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
+## Controller Configuration
+controller:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
+## Repo Server Configuration
+repoServer:
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  env:
+    - name: ARGOCD_EXEC_TIMEOUT
+      value: "5m"
+
+## Redis (HA)
+redis-ha:
+  enabled: true
+  replicas: 3
+
+## Dex (OIDC/SSO) - Disable if using Harness SSO
+dex:
+  enabled: false
+
+## ApplicationSet Controller
+applicationSet:
+  enabled: true
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+## Notifications Controller
+notifications:
+  enabled: true
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+## Config
+configs:
+  params:
+    timeout.reconciliation: 180s
+    server.insecure: true  # Remove in production
+
+  cm:
+    statusbadge.enabled: "true"
+    application.resourceTrackingMethod: annotation
+    kustomize.buildOptions: --enable-helm --load-restrictor LoadRestrictionsNone
+
+    # Resource customizations for Harness
+    resource.customizations: |
+      argoproj.io/Application:
+        health.lua: |
+          hs = {}
+          hs.status = "Healthy"
+          hs.message = ""
+          if obj.status ~= nil then
+            if obj.status.health ~= nil then
+              hs.status = obj.status.health.status
+              hs.message = obj.status.health.message
+            end
+          end
+          return hs
+
+  rbac:
+    policy.default: role:readonly
+    policy.csv: |
+      p, role:developer, applications, get, */*, allow
+      p, role:developer, applications, sync, */*, allow
+      p, role:developer, applications, action/*, */*, allow
+      p, role:admin, *, *, */*, allow
+      g, argocd-admins, role:admin
+      g, developers, role:developer
+
+  secret:
+    createSecret: true
+
+## Node Placement - Schedule on agent-nodepool
+global:
+  nodeSelector:
+    cloud.google.com/gke-nodepool: agent-nodepool
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: delegate
+      effect: NoSchedule

@@ -1,0 +1,164 @@
+# Harness Delegate Helm Values
+# Cinema Microservices Project
+#
+# Usage:
+#   helm repo add harness-delegate https://app.harness.io/storage/harness-download/delegate-helm-chart/
+#   helm repo update
+#   helm upgrade --install cinema-delegate harness-delegate/harness-delegate-ng \
+#     --namespace harness-delegate-ng --create-namespace \
+#     --values delegate-values.yaml
+
+# =============================================================================
+# REQUIRED: Update these values before installation
+# =============================================================================
+
+# Your Harness Account ID (from URL: app.harness.io/ng/#/account/ACCOUNT_ID/...)
+accountId: "EeRjnXTnS4GrLG5VNNJZUw"
+
+# Delegate Token (from Account Settings → Delegates → Tokens)
+delegateToken: "YzU3YWQwMjk0YzE3N2ZjYWM2MTE3NTQ1MTFjMDA2NDU="
+
+# Harness Manager Endpoint
+# - prod-1: https://app.harness.io
+# - prod-2: https://app.harness.io/gratis
+# - prod-3: https://app3.harness.io
+managerEndpoint: "https://app.harness.io/gratis"
+
+# Delegate Name (must be unique per account)
+delegateName: "helm-delegate"
+
+# =============================================================================
+# Deployment Configuration
+# =============================================================================
+
+# Number of delegate replicas (2+ for HA)
+replicas: 2
+
+# Namespace for delegate
+namespace: harness-delegate-ng
+
+# Tags for delegate selection in pipelines
+# Use comma-separated values
+tags: "cinema,kubernetes,gitops,prod"
+
+# =============================================================================
+# Resource Configuration
+# =============================================================================
+
+resources:
+  limits:
+    cpu: "1"
+    memory: "4Gi"
+  requests:
+    cpu: "500m"
+    memory: "2Gi"
+
+# =============================================================================
+# Node Placement (match cluster config)
+# =============================================================================
+
+nodeSelector:
+  cloud.google.com/gke-nodepool: agent-nodepool
+
+tolerations:
+  - key: "dedicated"
+    operator: "Equal"
+    value: "delegate"
+    effect: "NoSchedule"
+
+# Pod affinity for HA
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              harness.io/name: cinema-delegate
+          topologyKey: kubernetes.io/hostname
+
+# =============================================================================
+# Security Configuration
+# =============================================================================
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# =============================================================================
+# Auto-Upgrade Configuration
+# =============================================================================
+
+upgrader:
+  enabled: true
+  # Schedule for checking updates (cron format)
+  # Default: every 4 hours
+  schedule: "0 */4 * * *"
+
+# =============================================================================
+# Custom Initialization Script
+# =============================================================================
+
+# Install additional tools needed for your pipelines
+initScript: |
+  #!/bin/bash
+  set -e
+
+  echo "Installing additional tools..."
+
+  # Install git (if not present)
+  if ! command -v git &> /dev/null; then
+    microdnf install -y git
+  fi
+
+  # Install kubectl (specific version if needed)
+  # curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
+  # chmod +x kubectl && mv kubectl /usr/local/bin/
+
+  # Install helm (if not present)
+  # curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+  # Install kustomize (if not present)
+  # curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+  # mv kustomize /usr/local/bin/
+
+  echo "Additional tools installed successfully"
+
+# =============================================================================
+# Proxy Configuration (uncomment if needed)
+# =============================================================================
+
+# proxy:
+#   http: "http://proxy.example.com:8080"
+#   https: "http://proxy.example.com:8080"
+#   no: "localhost,127.0.0.1,.cluster.local,app.harness.io"
+
+# =============================================================================
+# Advanced Configuration
+# =============================================================================
+
+# Java options for delegate JVM (avoid setting GC to prevent conflicts)
+# javaOpts: "-Xms1g -Xmx2g"
+
+# Delegate description
+delegateDescription: "Cinema Microservices Delegate for GitOps deployments"
+
+# Custom environment variables
+env:
+  - name: LOG_LEVEL
+    value: "INFO"
+  # - name: CUSTOM_VAR
+  #   value: "custom_value"
+
+# Service account configuration
+serviceAccount:
+  create: true
+  name: "harness-delegate"
+
+# RBAC configuration
+rbac:
+  create: true
+  # Use cluster-admin for full access
+  # Or specify custom roles for restricted access
+  clusterRole: "cluster-admin"

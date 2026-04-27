@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cinema-appsets
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: cinema-microservices
+    app.kubernetes.io/component: bootstrap
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/crizstian/cinema-microservice-in-GO.git
+    targetRevision: monorepo
+    path: platform/deploy/gitops/appsets
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true
+  revisionHistoryLimit: 3

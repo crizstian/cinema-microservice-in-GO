@@ -1,0 +1,415 @@
+pipeline:
+  name: Cinema GitOps Deploy
+  identifier: Cinema_GitOps_Deploy
+  projectIdentifier: CristianRamirez
+  orgIdentifier: sandbox
+  tags:
+    type: gitops
+    app: cinema-microservices
+  properties:
+    ci:
+      codebase:
+        connectorRef: CristianConnector
+        repoName: cinema-microservice-in-GO
+        build: <+input>
+  variables:
+    - name: SERVICE_NAME
+      type: String
+      description: "Service to deploy (booking, cinema, movie, etc.)"
+      required: true
+      value: <+input>
+  stages:
+    - stage:
+        name: Dev
+        identifier: Dev
+        description: "Deploy to development environment"
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          service:
+            serviceRef: cinemaservicesgitops
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: service-image
+                      sources:
+                        - identifier: service-image
+                          type: DockerRegistry
+                          spec:
+                            tag: <+input>
+          execution:
+            steps:
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Release Repo
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec:
+                    variables:
+                      - name: image_tag
+                        type: String
+                        value: <+artifact.tag>
+                      - name: replicas
+                        type: String
+                        value: "1"
+                      - name: environment
+                        type: String
+                        value: dev
+              - step:
+                  type: HarnessApproval
+                  name: PR Review
+                  identifier: PR_Review
+                  spec:
+                    approvalMessage: |
+                      Review the GitOps PR for <+pipeline.variables.SERVICE_NAME>
+                      Environment: Dev
+                      Image Tag: <+artifact.tag>
+                    includePipelineExecutionHistory: true
+                    isAutoRejectEnabled: false
+                    approvers:
+                      userGroups:
+                        - account.SalesEngineers
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                  timeout: 1d
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  type: GitOpsSync
+                  name: Sync to Cluster
+                  identifier: GitOpsSync
+                  spec:
+                    prune: true
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    applicationRegex: <+pipeline.variables.SERVICE_NAME>-dev
+                    showResourceProgress: true
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: true
+                      pruneResourcesAtLast: true
+                      applyOutOfSyncOnly: true
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      serverSideApply: true
+                  timeout: 10m
+            rollbackSteps:
+              - step:
+                  type: RevertPR
+                  name: Revert PR
+                  identifier: RevertPR
+                  spec:
+                    commitId: <+pipeline.stages.Dev.spec.execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: "Rollback: <+pipeline.variables.SERVICE_NAME> dev"
+                  timeout: 10m
+              - step:
+                  type: MergePR
+                  name: Merge Rollback
+                  identifier: MergeRollback
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Apps
+                  identifier: FetchApps
+                  spec: {}
+                  timeout: 10m
+              - step:
+                  type: GitOpsSync
+                  name: Sync Rollback
+                  identifier: SyncRollback
+                  spec:
+                    prune: false
+                    applicationRegex: <+pipeline.variables.SERVICE_NAME>-dev
+                  timeout: 10m
+          environment:
+            environmentRef: dev
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: incluster
+                agentIdentifier: gitops
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+
+    - stage:
+        name: Staging Gate
+        identifier: Staging_Gate
+        description: "Approval for staging deployment"
+        type: Approval
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Approve Staging
+                  identifier: ApproveStaging
+                  type: HarnessApproval
+                  timeout: 1d
+                  spec:
+                    approvalMessage: |
+                      Approve deployment to Staging?
+                      Service: <+pipeline.variables.SERVICE_NAME>
+                      Image: <+artifact.tag>
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                      userGroups:
+                        - account.SalesEngineers
+                    isAutoRejectEnabled: false
+        tags: {}
+
+    - stage:
+        name: Staging
+        identifier: Staging
+        description: "Deploy to staging environment"
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          service:
+            useFromStage:
+              stage: Dev
+          execution:
+            steps:
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Release Repo
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec:
+                    variables:
+                      - name: replicas
+                        type: String
+                        value: "2"
+                      - name: environment
+                        type: String
+                        value: staging
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  type: GitOpsSync
+                  name: Sync to Cluster
+                  identifier: GitOpsSync
+                  spec:
+                    prune: true
+                    forceApply: true
+                    applicationRegex: <+pipeline.variables.SERVICE_NAME>-staging
+                    showResourceProgress: true
+                    syncOptions:
+                      autoCreateNamespace: true
+                      serverSideApply: true
+                  timeout: 10m
+            rollbackSteps:
+              - step:
+                  type: RevertPR
+                  name: Revert PR
+                  identifier: RevertPR
+                  spec:
+                    commitId: <+pipeline.stages.Staging.spec.execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: "Rollback: <+pipeline.variables.SERVICE_NAME> staging"
+                  timeout: 10m
+              - step:
+                  type: MergePR
+                  name: Merge Rollback
+                  identifier: MergeRollback
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Apps
+                  identifier: FetchApps
+                  spec: {}
+                  timeout: 10m
+              - step:
+                  type: GitOpsSync
+                  name: Sync Rollback
+                  identifier: SyncRollback
+                  spec:
+                    prune: false
+                    applicationRegex: <+pipeline.variables.SERVICE_NAME>-staging
+                  timeout: 10m
+          environment:
+            environmentRef: staging
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: incluster
+                agentIdentifier: gitops
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+
+    - stage:
+        name: Prod Gate
+        identifier: Prod_Gate
+        description: "Approval for production deployment"
+        type: Approval
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Approve Production
+                  identifier: ApproveProd
+                  type: HarnessApproval
+                  timeout: 1d
+                  spec:
+                    approvalMessage: |
+                      ⚠️ PRODUCTION DEPLOYMENT ⚠️
+                      Service: <+pipeline.variables.SERVICE_NAME>
+                      Image: <+artifact.tag>
+
+                      Please verify staging deployment before approving.
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      minimumCount: 2
+                      disallowPipelineExecutor: true
+                      userGroups:
+                        - account.SalesEngineers
+                    isAutoRejectEnabled: false
+        tags: {}
+
+    - stage:
+        name: Prod
+        identifier: Prod
+        description: "Deploy to production environment"
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          service:
+            useFromStage:
+              stage: Dev
+          execution:
+            steps:
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Release Repo
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec:
+                    variables:
+                      - name: replicas
+                        type: String
+                        value: "3"
+                      - name: environment
+                        type: String
+                        value: prod
+              - step:
+                  type: HarnessApproval
+                  name: Final PR Review
+                  identifier: FinalPRReview
+                  spec:
+                    approvalMessage: "Review production PR before merge"
+                    approvers:
+                      userGroups:
+                        - account.SalesEngineers
+                      minimumCount: 1
+                  timeout: 4h
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  type: GitOpsSync
+                  name: Sync to Cluster
+                  identifier: GitOpsSync
+                  spec:
+                    prune: true
+                    forceApply: true
+                    applicationRegex: <+pipeline.variables.SERVICE_NAME>-prod
+                    showResourceProgress: true
+                    syncOptions:
+                      autoCreateNamespace: true
+                      serverSideApply: true
+                      pruneResourcesAtLast: true
+                  timeout: 15m
+            rollbackSteps:
+              - step:
+                  type: RevertPR
+                  name: Revert PR
+                  identifier: RevertPR
+                  spec:
+                    commitId: <+pipeline.stages.Prod.spec.execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: "ROLLBACK: <+pipeline.variables.SERVICE_NAME> PRODUCTION"
+                  timeout: 10m
+              - step:
+                  type: MergePR
+                  name: Merge Rollback
+                  identifier: MergeRollback
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Apps
+                  identifier: FetchApps
+                  spec: {}
+                  timeout: 10m
+              - step:
+                  type: GitOpsSync
+                  name: Sync Rollback
+                  identifier: SyncRollback
+                  spec:
+                    prune: false
+                    forceApply: true
+                    applicationRegex: <+pipeline.variables.SERVICE_NAME>-prod
+                  timeout: 10m
+          environment:
+            environmentRef: prod
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: seprod
+                agentIdentifier: gitops
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback

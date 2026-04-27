@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seat-service-config
+  labels:
+    app.kubernetes.io/name: seat-service
+data:
+  SERVICE_NAME: seat-service
+  SERVICE_PORT: "8005"
+  DB_NAME: seat
+  LOG_LEVEL: info

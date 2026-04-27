@@ -1,0 +1,47 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cinema-staging
+
+resources:
+  - ../../base
+
+commonLabels:
+  app.kubernetes.io/environment: staging
+  harness.io/envRef: staging
+
+images:
+  - name: crizstian/booking-service
+    newTag: latest
+
+patches:
+  - target:
+      kind: Deployment
+      name: booking-service
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  - target:
+      kind: ConfigMap
+      name: booking-service-config
+    patch: |
+      - op: add
+        path: /data/LOG_LEVEL
+        value: info
+      - op: add
+        path: /data/DB_SERVERS
+        value: mongodb.cinema-staging.svc.cluster.local:27017
+      - op: add
+        path: /data/NATS_URL
+        value: nats://nats.cinema-staging.svc.cluster.local:4222
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: booking-service
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 5

@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npx @stoplight/spectral-cli lint openapi.yaml)",
       "Bash(npm install:*)",
-      "Bash(npm init:*)"
+      "Bash(npm init:*)",
+      "mcp__github__get_file_contents"
     ]
   }
 }

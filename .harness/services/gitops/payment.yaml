@@ -1,0 +1,73 @@
+service:
+  name: paymentservice-gitops
+  identifier: paymentservicegitops
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  gitOpsEnabled: true
+  serviceDefinition:
+    spec:
+      appsetConfigs:
+        - appset:
+            agentIdentifier: gitops
+            identifier: de478ef3-9d04-570f-9f4f-058be5460120
+            appSetIdentifier: paymentservice-envs-git
+      manifests:
+        - manifest:
+            identifier: manifest
+            type: ReleaseRepo
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: CristianConnector
+                  gitFetchType: Branch
+                  paths:
+                    - cluster-config/<+cluster.name>/config.json
+                  branch: main
+                  repoName: my-gitops-demo
+        - manifest:
+            identifier: app
+            type: DeploymentRepo
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: CristianConnector
+                  gitFetchType: Branch
+                  paths:
+                    - argocd/appsets/paymentservice-envs-git.yaml
+                  branch: main
+                  repoName: my-gitops-demo
+      artifacts:
+        primary:
+          primaryArtifactRef: artifact
+          sources:
+            - spec:
+                connectorRef: account.harnessImageV1
+                imagePath: nginxdemos/hello
+                tag: <+input>
+                digest: ""
+              identifier: artifact
+              type: DockerRegistry
+      variables:
+        - name: harness_service
+          type: String
+          description: ""
+          required: false
+          value: <+service.identifier>
+        - name: environment
+          type: String
+          description: ""
+          required: false
+          value: " <+env.identifier>"
+        - name: image_tag
+          type: String
+          description: ""
+          required: false
+          value: <+artifact.tag>
+        - name: replicas
+          type: String
+          description: ""
+          required: false
+          value: "1"
+    type: Kubernetes

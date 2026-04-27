@@ -13,7 +13,7 @@ fi
 
 echo "[post-start] validating devtoolchain..."
 
-for cmd in claude harness-mcp-v2 gh gcloud kubectl terraform; do
+for cmd in claude harness-mcp-v2 gh gcloud kubectl helm terraform; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "WARN: $cmd not found in PATH"
   fi

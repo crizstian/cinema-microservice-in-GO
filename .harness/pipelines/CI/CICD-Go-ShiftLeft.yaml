@@ -1189,15 +1189,15 @@ pipeline:
                           spec:
                             tag: <+stage.variables.ARTIFACT_TAG>
           environment:
-            environmentRef: sandbox
+            environmentRef: dev
             deployToAll: false
             infrastructureDefinitions:
-              - identifier: sesandboxkubernetes
+              - identifier: SESandboxGKE
                 inputs:
-                  identifier: sesandboxkubernetes
+                  identifier: SESandboxGKE
                   type: KubernetesDirect
                   spec:
-                    namespace: cinema-dev
+                    namespace: <+input>
           execution:
             steps:
               - step:

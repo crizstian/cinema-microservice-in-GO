@@ -1,0 +1,78 @@
+service:
+  name: cinema-services-gitops
+  identifier: cinemaservicesgitops
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  gitOpsEnabled: true
+  serviceDefinition:
+    type: Kubernetes
+    spec:
+      appsetConfigs:
+        - appset:
+            agentIdentifier: gitops
+            identifier: cinema-services-appset
+            appSetIdentifier: cinema-services
+      manifests:
+        - manifest:
+            identifier: release-repo
+            type: ReleaseRepo
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: CristianConnector
+                  gitFetchType: Branch
+                  paths:
+                    - platform/deploy/gitops/cluster-config/<+cluster.name>/config.json
+                  branch: main
+                  repoName: cinema-microservice-in-GO
+        - manifest:
+            identifier: deployment-repo
+            type: DeploymentRepo
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: CristianConnector
+                  gitFetchType: Branch
+                  paths:
+                    - platform/deploy/gitops/appsets/cinema-services-matrix.yaml
+                  branch: main
+                  repoName: cinema-microservice-in-GO
+      artifacts:
+        primary:
+          primaryArtifactRef: service-image
+          sources:
+            - spec:
+                connectorRef: account.harnessImageV1
+                imagePath: crizstian/<+pipeline.variables.SERVICE_NAME>-service
+                tag: <+input>
+                digest: ""
+              identifier: service-image
+              type: DockerRegistry
+      variables:
+        - name: harness_service
+          type: String
+          description: "Harness service identifier"
+          required: false
+          value: <+service.identifier>
+        - name: environment
+          type: String
+          description: "Target environment"
+          required: false
+          value: <+env.identifier>
+        - name: image_tag
+          type: String
+          description: "Docker image tag"
+          required: false
+          value: <+artifact.tag>
+        - name: replicas
+          type: String
+          description: "Number of replicas"
+          required: false
+          value: "1"
+        - name: namespace
+          type: String
+          description: "Kubernetes namespace"
+          required: false
+          value: cinema-<+env.identifier>

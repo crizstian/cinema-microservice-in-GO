@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-service-config
+  labels:
+    app.kubernetes.io/name: user-service
+data:
+  SERVICE_NAME: user-service
+  SERVICE_PORT: "8004"
+  DB_NAME: user
+  LOG_LEVEL: info
