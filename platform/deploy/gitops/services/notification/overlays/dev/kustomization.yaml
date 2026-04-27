@@ -59,6 +59,12 @@ patches:
       - op: add
         path: /data/BOOKING_SERVICE_URL
         value: http://booking-service.cinema-dev.svc.cluster.local:8001
+      - op: add
+        path: /data/EMAIL
+        value: notifications@cinema.dev
+      - op: add
+        path: /data/EMAIL_PASS
+        value: mock_password_dev
   - target:
       kind: HorizontalPodAutoscaler
       name: notification-service
@@ -69,9 +75,3 @@ patches:
       - op: replace
         path: /spec/maxReplicas
         value: 2
-      - op: add
-        path: /data/EMAIL
-        value: notifications@cinema.dev
-      - op: add
-        path: /data/EMAIL_PASS
-        value: mock_password_dev

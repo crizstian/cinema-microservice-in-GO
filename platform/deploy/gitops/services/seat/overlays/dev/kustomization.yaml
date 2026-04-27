@@ -66,6 +66,9 @@ patches:
         path: /data/BOOKING_SERVICE_URL
         value: http://booking-service.cinema-dev.svc.cluster.local:8001
   - target:
+      - op: add
+        path: /data/REDIS_ADDR
+        value: redis.cinema-infra.svc.cluster.local:6379
       kind: HorizontalPodAutoscaler
       name: seat-service
     patch: |

@@ -59,6 +59,15 @@ patches:
       - op: add
         path: /data/BOOKING_SERVICE_URL
         value: http://booking-service.cinema-dev.svc.cluster.local:8001
+      - op: add
+        path: /data/STRIPE_MOCK
+        value: "true"
+      - op: add
+        path: /data/STRIPE_SECRET
+        value: sk_test_mock
+      - op: add
+        path: /data/STRIPE_PUBLIC
+        value: pk_test_mock
   - target:
       kind: HorizontalPodAutoscaler
       name: payment-service
@@ -69,12 +78,3 @@ patches:
       - op: replace
         path: /spec/maxReplicas
         value: 2
-      - op: add
-        path: /data/STRIPE_MOCK
-        value: "true"
-      - op: add
-        path: /data/STRIPE_SECRET
-        value: sk_test_mock
-      - op: add
-        path: /data/STRIPE_PUBLIC
-        value: pk_test_mock
