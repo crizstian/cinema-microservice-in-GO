@@ -8,12 +8,12 @@ namespace: cinema-dev
 image:
   pullPolicy: Always
 
-# Database (with user/pass authentication)
+# Database (credentials from Harness Secrets Manager)
 database:
   servers: mongodb.cinema-dev.svc.cluster.local:27017
   replica: ""
-  user: cinema
-  password: cinema123
+  user: <+secrets.getValue("db_user")>
+  password: <+secrets.getValue("db_password")>
 
 # Observability
 observability:

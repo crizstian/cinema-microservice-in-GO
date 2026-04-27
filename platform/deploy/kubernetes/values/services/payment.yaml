@@ -15,3 +15,7 @@ autoscaling:
 
 pdb:
   minAvailable: 1
+
+# Payment-specific secrets (Stripe)
+extraSecrets:
+  STRIPE_SECRET: <+secrets.getValue("stripe_secret")>

@@ -15,3 +15,7 @@ autoscaling:
 
 pdb:
   minAvailable: 1
+
+# User-specific secrets (JWT)
+extraSecrets:
+  JWT_SECRET: <+secrets.getValue("jwt_secret")>

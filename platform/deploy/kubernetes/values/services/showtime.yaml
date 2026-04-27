@@ -17,3 +17,11 @@ autoscaling:
 
 pdb:
   minAvailable: 1
+
+# Showtime uses legacy MongoDB config pattern
+mongodb:
+  uri: mongodb://<+secrets.getValue("db_user")>:<+secrets.getValue("db_password")>@mongodb.cinema-dev.svc.cluster.local:27017
+  database: showtime
+
+extraConfig:
+  MOVIE_SERVICE_URL: http://movie-service:8002
