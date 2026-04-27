@@ -1,5 +1,7 @@
 package main
 
+// Version: 1.0.0 - Multi-service GitOps deployment test
+
 import (
 	"cinemas/services/payment/internal/api"
 	"cinemas/services/payment/internal/config"
