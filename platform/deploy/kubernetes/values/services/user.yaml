@@ -16,6 +16,10 @@ autoscaling:
 pdb:
   minAvailable: 1
 
+# User-specific config (Redis)
+extraConfig:
+  REDIS_URL: redis://redis.cinema-dev.svc.cluster.local:6379
+
 # User-specific secrets (JWT)
 extraSecrets:
   JWT_SECRET: <+secrets.getValue("jwt_secret")>

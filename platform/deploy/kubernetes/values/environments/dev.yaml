@@ -15,6 +15,10 @@ database:
   user: <+secrets.getValue("db_user")>
   password: <+secrets.getValue("db_password")>
 
+# NATS messaging
+nats:
+  url: nats://nats.cinema-dev.svc.cluster.local:4222
+
 # Observability
 observability:
   logLevel: debug

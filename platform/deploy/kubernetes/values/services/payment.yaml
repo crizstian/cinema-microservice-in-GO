@@ -16,6 +16,11 @@ autoscaling:
 pdb:
   minAvailable: 1
 
+# Payment-specific config (Stripe)
+extraConfig:
+  STRIPE_PUBLIC: pk_test_mock
+  STRIPE_MOCK: "true"
+
 # Payment-specific secrets (Stripe)
 extraSecrets:
   STRIPE_SECRET: <+secrets.getValue("stripe_secret")>
