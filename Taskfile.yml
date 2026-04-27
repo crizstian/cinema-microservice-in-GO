@@ -66,6 +66,17 @@ tasks:
     desc: "Run E2E tests"
     cmds: ["{{.SCRIPTS}}/test-e2e.sh"]
 
+  test:bdd:
+    desc: "Run BDD tests with Gherkin (godog)"
+    dir: tests/bdd
+    vars:
+      TAGS: '{{.TAGS | default ""}}'
+      FORMAT: '{{.FORMAT | default "pretty"}}'
+    cmds:
+      - |
+        echo "Running BDD tests..."
+        GODOG_TAGS="{{.TAGS}}" GODOG_FORMAT="{{.FORMAT}}" go test -v ./...
+
   test:coverage:
     desc: "Check coverage: task test:coverage THRESHOLD=80"
     cmds: ["{{.SCRIPTS}}/test-coverage.sh {{.THRESHOLD | default \"80\"}}"]
@@ -150,6 +161,18 @@ tasks:
   dev:status:
     desc: "Show container status"
     cmds: ["docker compose -f {{.COMPOSE}} --profile dev ps -a"]
+
+  dev:health:
+    desc: "Health check (liveness): task dev:health"
+    cmds: ["{{.SCRIPTS}}/health-check.sh live"]
+
+  dev:health:ready:
+    desc: "Health check (readiness): task dev:health:ready"
+    cmds: ["{{.SCRIPTS}}/health-check.sh ready"]
+
+  dev:health:all:
+    desc: "Health check (all + infra): task dev:health:all"
+    cmds: ["{{.SCRIPTS}}/health-check.sh all"]
 
   # ============================================================================
   # CI PIPELINE
@@ -340,6 +363,73 @@ tasks:
         else
           mvn spring-boot:run 2>/dev/null || mvn quarkus:dev 2>/dev/null || mvn mn:run
         fi
+
+  # ============================================================================
+  # CONFIG GENERATION (Single Source of Truth)
+  # ============================================================================
+  config:generate:
+    desc: "Generate .env.local from platform/config/services.yaml"
+    cmds: ["{{.SCRIPTS}}/config-generate.sh"]
+
+  config:harness:
+    desc: "Generate Harness service definitions from platform/config/services.yaml"
+    cmds: ["{{.SCRIPTS}}/config-sync-harness.sh"]
+
+  config:all:
+    desc: "Generate all config files (.env.local + Harness services)"
+    cmds:
+      - task: config:generate
+      - task: config:harness
+
+  config:validate:
+    desc: "Validate platform/config/services.yaml"
+    cmds:
+      - |
+        if command -v yq &> /dev/null; then
+          yq eval '.' platform/config/services.yaml > /dev/null && echo "platform/config/services.yaml is valid YAML"
+        else
+          echo "yq not installed, skipping validation"
+        fi
+
+  config:show:
+    desc: "Show current service configuration"
+    cmds:
+      - |
+        echo "=== Service Configuration ==="
+        yq '.services | to_entries | .[] | .key + ": port=" + (.value.port | tostring)' platform/config/services.yaml
+
+  # ============================================================================
+  # SCAFFOLD (Multi-repo migration tooling)
+  # ============================================================================
+  scaffold:devcontainer:
+    desc: "Generate devcontainer for a repo: task scaffold:devcontainer TYPE=services DIR=./output"
+    vars:
+      TYPE: '{{.TYPE | default "services"}}'
+      DIR: '{{.DIR | default "./output"}}'
+    cmds:
+      - platform/scripts/scaffold-devcontainer.sh {{.TYPE}} {{.DIR}}
+
+  scaffold:devcontainer:all:
+    desc: "Generate devcontainers for all 3 repos: task scaffold:devcontainer:all DIR=./repos"
+    vars:
+      DIR: '{{.DIR | default "./repos"}}'
+    cmds:
+      - platform/scripts/scaffold-devcontainer.sh all {{.DIR}}
+
+  scaffold:devcontainer:services:
+    desc: "Generate services-repo devcontainer"
+    cmds:
+      - platform/scripts/scaffold-devcontainer.sh services {{.DIR | default "./services-repo"}}
+
+  scaffold:devcontainer:platform:
+    desc: "Generate platform-repo devcontainer"
+    cmds:
+      - platform/scripts/scaffold-devcontainer.sh platform {{.DIR | default "./platform-repo"}}
+
+  scaffold:devcontainer:infra:
+    desc: "Generate infra-repo devcontainer"
+    cmds:
+      - platform/scripts/scaffold-devcontainer.sh infra {{.DIR | default "./infra-repo"}}
 
   # ============================================================================
   # HELP

@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  platform-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    env_file:
+      - .env
+    volumes:
+      - ../:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /workspace
+    user: devuser
+    container_name: platform-dev
+    command: /bin/bash -c "while sleep 1000; do :; done"

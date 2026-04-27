@@ -2,7 +2,7 @@
 
 > **AI Agent Context**: This document covers CI/CD pipelines, deployment strategies, and infrastructure management. The project uses **Harness CI** for pipelines with Test Intelligence support.
 
-**Last Updated**: 2026-04-08  
+**Last Updated**: 2026-04-26  
 **CI/CD Platform**: Harness  
 **Container Registry**: ghcr.io
 
@@ -12,10 +12,11 @@
 
 1. [CI/CD Overview](#cicd-overview)
 2. [Harness Pipelines](#harness-pipelines)
-3. [Deployment](#deployment)
-4. [Docker Infrastructure](#docker-infrastructure)
-5. [Monitoring](#monitoring)
-6. [Runbooks](#runbooks)
+3. [Centralized Configuration](#centralized-configuration)
+4. [Deployment](#deployment)
+5. [Docker Infrastructure](#docker-infrastructure)
+6. [Monitoring](#monitoring)
+7. [Runbooks](#runbooks)
 
 ---
 
@@ -380,6 +381,51 @@ pipeline:
 
 ---
 
+## Centralized Configuration
+
+All service configuration is managed from a single source of truth: `config/services.yaml`.
+
+### Quick Reference
+
+```bash
+# Generate all config files
+task config:all
+
+# Generate platform/deploy/docker-compose/.env for Docker Compose
+task config:generate
+
+# Generate Harness service definitions
+task config:harness
+
+# Show current configuration
+task config:show
+```
+
+### Configuration Flow
+
+| Environment | Source | Generated Files |
+|-------------|--------|-----------------|
+| Local (Docker Compose) | `config/services.yaml` | `platform/deploy/docker-compose/.env` |
+| Remote (K8s + Harness) | `config/services.yaml` | `platform/deploy/harness/services/*.yaml` |
+| K8s Values | Harness serviceVariables | Templates use `<+serviceVariables.*>` expressions |
+
+### Service Ports
+
+| Service | Port | Database |
+|---------|------|----------|
+| booking | 8001 | booking |
+| movie | 8002 | movie |
+| cinema | 8003 | cinema |
+| user | 8004 | user |
+| seat | 8005 | seat |
+| showtime | 8006 | showtime |
+| payment | 8007 | payment |
+| notification | 8008 | notification |
+
+**Full documentation**: [Configuration Guide](./configuration-guide.md)
+
+---
+
 ## Deployment
 
 ### Deployment Options
@@ -393,23 +439,31 @@ pipeline:
 ### Docker Compose (Local)
 
 ```bash
-cd platform/deploy/docker-compose
+# Generate configuration first
+task config:generate
 
-# Start all services
-docker compose up -d
+# Start all services (uses platform/deploy/docker-compose/.env)
+task dev:up
+
+# Or manually with env file
+docker compose --env-file platform/deploy/docker-compose/.env --profile dev up -d
 
 # Start specific service
-docker compose up -d booking
+docker compose --env-file platform/deploy/docker-compose/.env --profile dev up -d booking
 
 # View logs
-docker compose logs -f booking
+task dev:logs SERVICE=booking
 
 # Stop all
-docker compose down
+task dev:down
 
 # Reset (including volumes)
-docker compose down -v
+docker compose --env-file platform/deploy/docker-compose/.env --profile dev down -v
 ```
+
+> **Note**: Always use `platform/deploy/docker-compose/.env` to ensure ports match the centralized configuration.
+
+**Full documentation**: [Docker Compose Deployment Guide](./docker-compose-deployment-guide.md)
 
 ### Kubernetes Deployment
 
@@ -464,6 +518,8 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
 ```
+
+**Full documentation**: [Kubernetes Deployment Guide](./kubernetes-deployment-guide.md)
 
 ---
 
@@ -634,12 +690,72 @@ kubectl rollout undo deployment/booking --to-revision=2
 
 ---
 
+## Testing Strategy
+
+### Source of Truth: Gherkin Features
+
+Los flujos de negocio están definidos en archivos `.feature` (Gherkin) que sirven como:
+- **Documentación ejecutable** de requisitos de negocio
+- **Tests E2E** automatizados con godog
+- **Fuente de verdad** para validar datos de prueba
+
+```
+tests/bdd/features/
+├── booking.feature   # Flujo completo de reserva
+├── movies.feature    # Catálogo y estrenos  
+└── seats.feature     # Gestión de asientos
+```
+
+### Test Commands
+
+```bash
+# Run all BDD tests
+task test:bdd
+
+# Run by tags
+task test:bdd TAGS="@smoke"
+task test:bdd TAGS="@booking"
+task test:bdd TAGS="@premieres"
+
+# Run E2E tests (Go)
+task test:e2e
+
+# Run unit tests
+task test SERVICE=booking
+```
+
+### Test Pyramid
+
+| Level | Location | Runner | Purpose |
+|-------|----------|--------|---------|
+| Unit | `services/*/internal/*_test.go` | `go test` | Lógica de negocio aislada |
+| Contract | `services/*/contracts/` | Pact | Contratos entre servicios |
+| Integration | `tests/integration/` | `go test -tags=e2e` | Flujo E2E con servicios reales |
+| BDD | `tests/bdd/features/` | godog | Validación de flujos de negocio |
+
+**ADR**: [ADR-008 - Gherkin como Fuente de Verdad](../architecture/adr/ADR-008-gherkin-source-of-truth.md)
+
+---
+
 ## Related Documentation
 
 - [Architecture Overview](../architecture/README.md)
 - [Development Guide](../development/README.md)
 - [API Documentation](../api/README.md)
 - [Contract Testing](../api/contracts.md)
+
+### Operations Guides
+
+- [Configuration Guide](./configuration-guide.md) - Centralized configuration system
+- [Docker Compose Deployment Guide](./docker-compose-deployment-guide.md) - Local development setup
+- [Kubernetes Deployment Guide](./kubernetes-deployment-guide.md) - K8s deployment with Harness
+- [Debugging Runbook](./debugging-runbook.md) - Troubleshooting guide
+
+### CI/CD Guides
+
+- [CI/CD Strategy](./ci-cd-strategy.md) - Pipeline architecture and shift-left security
+- [CI Runbook](./ci-runbook.md) - Pipeline operational procedures
+- [CI FAQ](./ci-faq.md) - Frequently asked questions about pipelines
 
 ---
 

@@ -1,0 +1,49 @@
+trigger:
+  name: PR Open - Security Validation
+  identifier: trigger_pr_open
+  enabled: true
+  description: |
+    Triggers on PR open/sync.
+    RUN_MODE=validate → Only Stage 1 (Code Security)
+    Sets GitHub status to block merge until compliance.
+  tags:
+    event: pull_request
+    mode: validate
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  pipelineIdentifier: CI_Unified_v3
+  source:
+    type: Webhook
+    spec:
+      type: Github
+      spec:
+        type: PullRequest
+        spec:
+          connectorRef: CristianConnector
+          autoAbortPreviousExecutions: true
+          payloadConditions:
+            - key: targetBranch
+              operator: In
+              value: main, master, develop
+            - key: sourceBranch
+              operator: NotEquals
+              value: main
+          headerConditions: []
+          jexlCondition: ""
+          actions:
+            - Open
+            - Reopen
+            - Synchronize
+  inputYaml: |
+    pipeline:
+      identifier: CI_Unified_v3
+      variables:
+        - name: RUN_MODE
+          type: String
+          value: validate
+        - name: SERVICES
+          type: String
+          value: <+trigger.payload.pull_request.head.ref>
+        - name: LANGUAGE
+          type: String
+          value: go

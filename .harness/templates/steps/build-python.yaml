@@ -1,0 +1,56 @@
+template:
+  name: Build Python
+  identifier: build_python
+  type: Step
+  versionLabel: "1.0.0"
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  tags:
+    language: python
+  description: Build Python application with pip or poetry
+  spec:
+    type: Run
+    spec:
+      connectorRef: account.harnessImage
+      image: python:<+input>.default(3.11-slim)
+      shell: Sh
+      command: |
+        cd <+input>
+
+        PKG_MANAGER=<+input>.default(pip)
+
+        echo "=== Installing dependencies ==="
+        if [ "$PKG_MANAGER" = "poetry" ]; then
+          pip install poetry
+          poetry install --no-interaction
+          RUNNER="poetry run"
+        else
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov ruff
+          RUNNER=""
+        fi
+
+        echo "=== Running linter ==="
+        $RUNNER ruff check . || true
+
+        echo "=== Running tests ==="
+        $RUNNER pytest --cov=. --cov-report=xml --junitxml=junit.xml -v
+
+        # Extract coverage
+        if [ -f coverage.xml ]; then
+          COV=$(grep -oP 'line-rate="\K[0-9.]+' coverage.xml | head -1)
+          COV=$(echo "$COV * 100" | bc | cut -d. -f1)
+        else
+          COV=0
+        fi
+        echo "Coverage: ${COV}%"
+
+        echo "COVERAGE=${COV}" >> $HARNESS_OUTPUT_FILE
+      reports:
+        type: JUnit
+        spec:
+          paths:
+            - "**/junit.xml"
+      outputVariables:
+        - name: COVERAGE

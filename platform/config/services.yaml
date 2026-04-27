@@ -1,0 +1,104 @@
+# config/services.yaml
+# SINGLE SOURCE OF TRUTH
+# Generates: .env.local (local), Harness service variables (remote)
+#
+# Usage:
+#   task config:generate    # Generate .env.local
+#   task config:sync        # Sync to Harness
+
+services:
+  movie:
+    port: 8002
+    dbName: movie
+    image: crizstian/movie-service
+    resources:
+      cpu_request: 50m
+      mem_request: 64Mi
+      cpu_limit: 250m
+      mem_limit: 256Mi
+    dependencies:
+      - cinema-service
+
+  booking:
+    port: 8001
+    dbName: booking
+    image: crizstian/booking-service
+    resources:
+      cpu_request: 100m
+      mem_request: 128Mi
+      cpu_limit: 500m
+      mem_limit: 512Mi
+    dependencies:
+      - seat-service
+      - payment-service
+      - showtime-service
+      - notification-service
+
+  cinema:
+    port: 8003
+    dbName: cinema
+    image: crizstian/cinema-service
+    resources:
+      cpu_request: 50m
+      mem_request: 64Mi
+      cpu_limit: 250m
+      mem_limit: 256Mi
+    dependencies: []
+
+  user:
+    port: 8004
+    dbName: user
+    image: crizstian/user-service
+    resources:
+      cpu_request: 50m
+      mem_request: 64Mi
+      cpu_limit: 250m
+      mem_limit: 256Mi
+    dependencies: []
+
+  seat:
+    port: 8005
+    dbName: seat
+    image: crizstian/seat-service
+    resources:
+      cpu_request: 100m
+      mem_request: 128Mi
+      cpu_limit: 500m
+      mem_limit: 512Mi
+    dependencies:
+      - showtime-service
+
+  showtime:
+    port: 8006
+    dbName: showtime
+    image: crizstian/showtime-service
+    resources:
+      cpu_request: 50m
+      mem_request: 64Mi
+      cpu_limit: 250m
+      mem_limit: 256Mi
+    dependencies:
+      - movie-service
+      - cinema-service
+
+  payment:
+    port: 8007
+    dbName: payment
+    image: crizstian/payment-service
+    resources:
+      cpu_request: 100m
+      mem_request: 128Mi
+      cpu_limit: 500m
+      mem_limit: 512Mi
+    dependencies: []
+
+  notification:
+    port: 8008
+    dbName: notification
+    image: crizstian/notification-service
+    resources:
+      cpu_request: 50m
+      mem_request: 64Mi
+      cpu_limit: 250m
+      mem_limit: 256Mi
+    dependencies: []

@@ -13,7 +13,9 @@
         "ms-vscode-remote.remote-containers",
         "esbenp.prettier-vscode",
         "ShiftLeft.shiftleft-core",
-        "shd101wyy.markdown-preview-enhanced"
+        "shd101wyy.markdown-preview-enhanced",
+        "mermaidchart.vscode-mermaid-chart",
+        "bierner.markdown-mermaid"
       ],
       "settings": {
         "terminal.integrated.defaultProfile.linux": "sh",

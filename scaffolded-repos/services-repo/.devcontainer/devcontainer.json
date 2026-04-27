@@ -1,0 +1,80 @@
+{
+  "name": "services-dev",
+  "dockerComposeFile": ["docker-compose.yml"],
+  "service": "services-dev",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "golang.go",
+        "vscjava.vscode-java-pack",
+        "ms-python.python",
+        "redhat.vscode-yaml",
+        "humao.rest-client",
+        "ms-vscode-remote.remote-containers",
+        "esbenp.prettier-vscode",
+        "mermaidchart.vscode-mermaid-chart",
+        "bierner.markdown-mermaid"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "go.useLanguageServer": true,
+        "go.lintTool": "golangci-lint",
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "java.configuration.runtimes": [
+          {
+            "name": "JavaSE-21",
+            "path": "/usr/lib/jvm/java-21-openjdk"
+          }
+        ]
+      },
+      "mcp": {
+        "servers": {
+          "harness": {
+            "command": "npx",
+            "args": ["-y", "harness-mcp-v2"],
+            "env": {
+              "HARNESS_API_KEY": "${containerEnv:HARNESS_API_KEY}",
+              "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
+              "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
+              "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
+              "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}"
+            }
+          },
+          "github": {
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+            "env": {
+              "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}"
+            }
+          },
+          "perplexity": {
+            "command": "npx",
+            "args": ["-y", "@perplexity-ai/mcp-server"],
+            "env": {
+              "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}"
+            }
+          }
+        }
+      }
+    }
+  },
+  "remoteEnv": {
+    "HARNESS_API_KEY": "${containerEnv:HARNESS_API_KEY}",
+    "HARNESS_DEFAULT_ORG_ID": "${containerEnv:HARNESS_DEFAULT_ORG_ID}",
+    "HARNESS_DEFAULT_PROJECT_ID": "${containerEnv:HARNESS_DEFAULT_PROJECT_ID}",
+    "HARNESS_BASE_URL": "${containerEnv:HARNESS_BASE_URL}",
+    "HARNESS_TOOLSETS": "${containerEnv:HARNESS_TOOLSETS}",
+    "GITHUB_PERSONAL_ACCESS_TOKEN": "${containerEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
+    "GH_TOKEN": "${containerEnv:GH_TOKEN}",
+    "PERPLEXITY_API_KEY": "${containerEnv:PERPLEXITY_API_KEY}",
+    "SHIFTLEFT_ACCESS_TOKEN": "${containerEnv:SHIFTLEFT_ACCESS_TOKEN}",
+    "SHIFTLEFT_ORG_ID": "${containerEnv:SHIFTLEFT_ORG_ID}",
+    "GIT_USER_NAME": "${containerEnv:GIT_USER_NAME}",
+    "GIT_USER_EMAIL": "${containerEnv:GIT_USER_EMAIL}"
+  },
+  "remoteUser": "devuser",
+  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
+  "postStartCommand": "bash .devcontainer/scripts/post-start.sh"
+}

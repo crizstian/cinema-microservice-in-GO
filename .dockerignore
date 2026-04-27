@@ -1,0 +1,49 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.harness
+.github
+
+# IDE
+.vscode
+.idea
+.claude
+*.swp
+*.swo
+
+# Documentation
+docs/
+*.md
+LICENSE
+
+# Infrastructure (not needed for service builds)
+platform/deploy/
+platform/terraform/
+platform/scripts/
+platform/docker/devcontainer/
+platform/docker/e2e-runner/
+platform/docker/mongodb/
+
+# Test files (excluded from production images)
+**/*_test.go
+**/testdata/
+**/mocks/
+coverage.out
+coverage.html
+junit-report.xml
+
+# Build artifacts
+**/bin/
+**/*.exe
+**/*.dll
+**/*.so
+**/*.dylib
+
+# Misc
+.env
+.env.*
+*.log
+tmp/

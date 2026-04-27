@@ -45,7 +45,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: {{ .Values.serviceName }}
-          image: {{ .Values.image.registry }}/{{ .Values.serviceName }}-service:{{ default .Values.image.tag .Values.version }}
+          image: {{ .Values.image.registry }}/{{ .Values.serviceName }}:{{ default .Values.image.tag .Values.version }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http

@@ -254,11 +254,77 @@ ingress-nginx.yaml # Ingress controller
 
 ---
 
-### 1.2 Verificar estructura de values
+### 1.2 Configuración Centralizada
+
+**Objetivo:** Entender el sistema de configuración centralizada que alimenta tanto Docker Compose (local) como Kubernetes (remoto).
+
+**Por qué es importante:** Toda la configuración de servicios se define en un único archivo (`platform/config/services.yaml`), eliminando inconsistencias entre entornos.
+
+#### Single Source of Truth
+
+```
+platform/config/services.yaml  ← EDITAR AQUÍ
+         │
+         ├──► platform/deploy/docker-compose/.env (Docker Compose)
+         │
+         ├──► platform/deploy/harness/services/*.yaml (Harness)
+         │
+         └──► values/services/*.yaml usa expresiones Harness
+```
+
+#### Generar configuración
+
+```bash
+# Generar platform/deploy/docker-compose/.env para Docker Compose
+task config:generate
+
+# Generar definiciones de Harness services
+task config:harness
+
+# Generar ambos
+task config:all
+
+# Ver configuración actual
+task config:show
+```
+
+**Respuesta esperada:**
+```
+=== Service Configuration ===
+movie: port=8002
+booking: port=8001
+cinema: port=8003
+user: port=8004
+seat: port=8005
+showtime: port=8006
+payment: port=8007
+notification: port=8008
+```
+
+#### Puertos de Servicios (desde platform/config/services.yaml)
+
+| Service | Port | Database |
+|---------|------|----------|
+| booking | 8001 | booking |
+| movie | 8002 | movie |
+| cinema | 8003 | cinema |
+| user | 8004 | user |
+| seat | 8005 | seat |
+| showtime | 8006 | showtime |
+| payment | 8007 | payment |
+| notification | 8008 | notification |
+
+**Documentación completa:** [Configuration Guide](./configuration-guide.md)
+
+---
+
+### 1.3 Verificar estructura de values
 
 **Objetivo:** Revisar la configuración organizada por capas (base → entorno → servicio).
 
 **Por qué es importante:** El renderer Go fusiona valores en orden: `base.yaml` → `environments/{env}.yaml` → `services/{svc}.yaml`. Valores posteriores sobrescriben anteriores.
+
+**Nota:** Los archivos `values/services/*.yaml` ahora usan **expresiones Harness** (`<+serviceVariables.*>`), que son resueltas por Harness durante el deployment. Para desarrollo local, usa el renderer Go con valores estáticos.
 
 ```bash
 # Verificar estructura de values
@@ -304,23 +370,34 @@ for svc in booking movie cinema; do
 done
 ```
 
-**Respuesta esperada:**
+**Respuesta esperada (con expresiones Harness):**
 ```yaml
 === booking ===
-port: 8001
-dbName: booking
+serviceName: <+service.name>
+version: <+artifact.tag>
+port: <+serviceVariables.port>
+dbName: <+serviceVariables.dbName>
 dependencies:
-  - seat
-  - payment
-  - showtime
-  - notification
+  - seat-service
+  - payment-service
+  - showtime-service
+  - notification-service
 ...
 ```
 
+**Expresiones Harness en values:**
+
+| Expresión | Resolución | Fuente |
+|-----------|------------|--------|
+| `<+service.name>` | `booking-service` | Nombre del Harness Service |
+| `<+artifact.tag>` | `v0.0.3` | Tag de imagen seleccionado |
+| `<+serviceVariables.port>` | `8001` | Variable definida en Harness Service |
+| `<+serviceVariables.dbName>` | `booking` | Variable definida en Harness Service |
+
 **Qué verificar:**
-- `port`: Cada servicio debe tener un puerto único
-- `dbName`: Nombre de la base de datos que usará el servicio
-- `resources`: Recursos asignados (sobrescriben base si se especifican)
+- Expresiones Harness correctamente formateadas
+- Variables definidas en el Harness Service correspondiente
+- Para desarrollo local, usar `task k8s:render` con valores estáticos del `platform/config/services.yaml`
 
 ---
 
@@ -1150,16 +1227,16 @@ notification-xxx                1/1     Running   0          4m
 booking-xxx                     1/1     Running   0          2m
 
 === Services ===
-NAME           TYPE        CLUSTER-IP       PORT(S)
-mongodb        ClusterIP   34.118.xxx.xxx   27017/TCP
-movie          ClusterIP   34.118.xxx.xxx   80/TCP
-cinema         ClusterIP   34.118.xxx.xxx   80/TCP
-user           ClusterIP   34.118.xxx.xxx   80/TCP
-showtime       ClusterIP   34.118.xxx.xxx   80/TCP
-seat           ClusterIP   34.118.xxx.xxx   80/TCP
-payment        ClusterIP   34.118.xxx.xxx   80/TCP
-notification   ClusterIP   34.118.xxx.xxx   80/TCP
-booking        ClusterIP   34.118.xxx.xxx   80/TCP
+NAME                  TYPE        CLUSTER-IP       PORT(S)
+mongodb               ClusterIP   34.118.xxx.xxx   27017/TCP
+movie-service         ClusterIP   34.118.xxx.xxx   8002/TCP
+cinema-service        ClusterIP   34.118.xxx.xxx   8003/TCP
+user-service          ClusterIP   34.118.xxx.xxx   8004/TCP
+showtime-service      ClusterIP   34.118.xxx.xxx   8006/TCP
+seat-service          ClusterIP   34.118.xxx.xxx   8005/TCP
+payment-service       ClusterIP   34.118.xxx.xxx   8007/TCP
+notification-service  ClusterIP   34.118.xxx.xxx   8008/TCP
+booking-service       ClusterIP   34.118.xxx.xxx   8001/TCP
 ```
 
 **Checklist de validación:**
@@ -1823,16 +1900,18 @@ kubectl rollout undo deployment/booking -n cinema-dev
 
 ### URLs de Acceso (con port-forward)
 
-| Servicio | Comando | URL Local |
-|----------|---------|-----------|
-| booking | `kubectl port-forward -n cinema-dev svc/booking 8001:80` | http://localhost:8001 |
-| movie | `kubectl port-forward -n cinema-dev svc/movie 8002:80` | http://localhost:8002 |
-| cinema | `kubectl port-forward -n cinema-dev svc/cinema 8003:80` | http://localhost:8003 |
-| user | `kubectl port-forward -n cinema-dev svc/user 8004:80` | http://localhost:8004 |
-| seat | `kubectl port-forward -n cinema-dev svc/seat 3003:80` | http://localhost:3003 |
-| showtime | `kubectl port-forward -n cinema-dev svc/showtime 3004:80` | http://localhost:3004 |
-| payment | `kubectl port-forward -n cinema-dev svc/payment 8082:80` | http://localhost:8082 |
-| notification | `kubectl port-forward -n cinema-dev svc/notification 8085:80` | http://localhost:8085 |
+| Servicio | Puerto | Comando | URL Local |
+|----------|--------|---------|-----------|
+| booking-service | 8001 | `kubectl port-forward -n cinema-dev svc/booking-service 8001:8001` | http://localhost:8001 |
+| movie-service | 8002 | `kubectl port-forward -n cinema-dev svc/movie-service 8002:8002` | http://localhost:8002 |
+| cinema-service | 8003 | `kubectl port-forward -n cinema-dev svc/cinema-service 8003:8003` | http://localhost:8003 |
+| user-service | 8004 | `kubectl port-forward -n cinema-dev svc/user-service 8004:8004` | http://localhost:8004 |
+| seat-service | 8005 | `kubectl port-forward -n cinema-dev svc/seat-service 8005:8005` | http://localhost:8005 |
+| showtime-service | 8006 | `kubectl port-forward -n cinema-dev svc/showtime-service 8006:8006` | http://localhost:8006 |
+| payment-service | 8007 | `kubectl port-forward -n cinema-dev svc/payment-service 8007:8007` | http://localhost:8007 |
+| notification-service | 8008 | `kubectl port-forward -n cinema-dev svc/notification-service 8008:8008` | http://localhost:8008 |
+
+> **Nota:** Los puertos ahora coinciden entre el Service y el container (no más mapeo 80:puerto). Esto sigue las mejores prácticas para microservicios internos.
 
 ### Checklist de Despliegue
 
@@ -2150,7 +2229,38 @@ El pipeline `CD_Kubernetes` incluye el flujo completo:
 
 ## Versiones
 
-### v0.0.3 (Actual)
+### v0.0.4 (Actual)
+
+**Cambios:**
+- **Configuración centralizada** - Single source of truth en `platform/config/services.yaml`
+- **Nombres de servicios estandarizados** - Convención `<app>-service` (movie-service, booking-service, etc.)
+- **Puertos reales en K8s Service** - Service port = container port (8002:8002, no 80:8002)
+- **Expresiones Harness en values/** - `<+serviceVariables.*>` resueltas por Harness
+- **Generadores de configuración** - `task config:generate` y `task config:harness`
+- **platform/deploy/docker-compose/.env generado** - Docker Compose usa variables desde config central
+
+**Nuevos tasks:**
+```bash
+task config:generate   # Genera platform/deploy/docker-compose/.env
+task config:harness    # Genera Harness service definitions
+task config:all        # Genera ambos
+task config:show       # Muestra configuración actual
+```
+
+**Estructura de archivos:**
+```
+platform/
+├── config/
+│   └── services.yaml           # ← SINGLE SOURCE OF TRUTH
+├── deploy/
+│   ├── harness/services/       # Generado por task config:harness
+│   ├── docker-compose/         # Usa platform/deploy/docker-compose/.env
+│   └── kubernetes/values/      # Templates con expresiones Harness
+```
+
+---
+
+### v0.0.3
 
 **Cambios:**
 - **MongoDB standalone mode** para dev (sin replica set, simplifica configuración)

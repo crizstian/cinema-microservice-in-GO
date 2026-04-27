@@ -219,20 +219,28 @@ services:
       dockerfile: platform/docker/go-service/Dockerfile
       args:
         SERVICE_NAME: movie
-        SERVICE_PORT: 8000
-    image: ${REGISTRY:-cinema}/movie:${VERSION:-dev}
+        SERVICE_PORT: ${MOVIE_PORT:-8002}
+    image: ${MOVIE_IMAGE:-crizstian/movie-service}:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-movie
     hostname: movie
     profiles: [dev, test, debug, perf]
     ports:
-      - "8000:8000"
+      - "${MOVIE_PORT:-8002}:${MOVIE_PORT:-8002}"
     environment:
       <<: [*mongo-env, *nats-env]
       DB_SERVERS: "${MONGO_SERVERS:-mongo:27017}"
-      SERVICE_PORT: "8000"
+      DB_NAME: "${MOVIE_DB:-movie}"
+      SERVICE_PORT: "${MOVIE_PORT:-8002}"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || wget -qO- http://localhost:8000/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${MOVIE_PORT:-8002}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
     networks:
       - cinema-network
 
@@ -242,21 +250,28 @@ services:
       dockerfile: platform/docker/go-service/Dockerfile
       args:
         SERVICE_NAME: cinema
-        SERVICE_PORT: 8085
-    image: ${REGISTRY:-cinema}/cinema:${VERSION:-dev}
+        SERVICE_PORT: ${CINEMA_PORT:-8003}
+    image: ${CINEMA_IMAGE:-crizstian/cinema-service}:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-cinema
     hostname: cinema
     profiles: [dev, test, debug, perf]
     ports:
-      - "8085:8085"
+      - "${CINEMA_PORT:-8003}:${CINEMA_PORT:-8003}"
     environment:
       <<: *nats-env
       MONGO_URI: "mongodb://${MONGO_SERVERS:-mongo:27017}/?replicaSet=rs0"
-      MONGO_DB: "cinema"
-      PORT: "8085"
+      MONGO_DB: "${CINEMA_DB:-cinema}"
+      PORT: "${CINEMA_PORT:-8003}"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/health || wget -qO- http://localhost:8085/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${CINEMA_PORT:-8003}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
     networks:
       - cinema-network
 
@@ -266,22 +281,36 @@ services:
       dockerfile: platform/docker/go-service/Dockerfile
       args:
         SERVICE_NAME: user
-        SERVICE_PORT: 8004
-    image: ${REGISTRY:-cinema}/user:${VERSION:-dev}
+        SERVICE_PORT: ${USER_PORT:-8004}
+    image: ${USER_IMAGE:-crizstian/user-service}:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-user
     hostname: user
     profiles: [dev, test, debug, perf]
     ports:
-      - "8004:8004"
+      - "${USER_PORT:-8004}:${USER_PORT:-8004}"
     environment:
       <<: [*mongo-env, *nats-env]
       DB_SERVERS: "${MONGO_SERVERS:-mongo:27017}"
-      SERVICE_PORT: "8004"
+      DB_NAME: "${USER_DB:-user}"
+      SERVICE_PORT: "${USER_PORT:-8004}"
       JWT_SECRET: "${JWT_SECRET:-dev-secret-change-in-production}"
       REDIS_URL: "redis://redis:6379"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8004/health || wget -qO- http://localhost:8004/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${USER_PORT:-8004}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
+      redis-dev:
+        condition: service_healthy
+        required: false
+      redis-test:
+        condition: service_healthy
+        required: false
     networks:
       - cinema-network
 
@@ -291,22 +320,29 @@ services:
       dockerfile: platform/docker/go-service/Dockerfile
       args:
         SERVICE_NAME: showtime
-        SERVICE_PORT: 3003
-    image: ${REGISTRY:-cinema}/showtime:${VERSION:-dev}
+        SERVICE_PORT: ${SHOWTIME_PORT:-8006}
+    image: ${SHOWTIME_IMAGE:-crizstian/showtime-service}:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-showtime
     hostname: showtime
     profiles: [dev, test, debug, perf]
     ports:
-      - "3003:3003"
+      - "${SHOWTIME_PORT:-8006}:${SHOWTIME_PORT:-8006}"
     environment:
       <<: *nats-env
       MONGO_URI: "mongodb://${MONGO_SERVERS:-mongo:27017}/?replicaSet=rs0"
-      MONGO_DB: "cinema"
-      PORT: "3003"
-      MOVIE_SERVICE_URL: "http://movie:8000"
+      MONGO_DB: "${SHOWTIME_DB:-showtime}"
+      PORT: "${SHOWTIME_PORT:-8006}"
+      MOVIE_SERVICE_URL: "http://movie:${MOVIE_PORT:-8002}"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3003/health || wget -qO- http://localhost:3003/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${SHOWTIME_PORT:-8006}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
     networks:
       - cinema-network
 
@@ -316,25 +352,37 @@ services:
       dockerfile: platform/docker/go-service/Dockerfile
       args:
         SERVICE_NAME: seat
-        SERVICE_PORT: 3004
-    image: ${REGISTRY:-cinema}/seat:${VERSION:-dev}
+        SERVICE_PORT: ${SEAT_PORT:-8005}
+    image: ${SEAT_IMAGE:-crizstian/seat-service}:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-seat
     hostname: seat
     profiles: [dev, test, debug, perf]
     ports:
-      - "3004:3004"
+      - "${SEAT_PORT:-8005}:${SEAT_PORT:-8005}"
     environment:
       <<: *nats-env
-      MONGO_URI: "mongodb://${MONGO_SERVERS:-mongo:27017}/cinema_seats?replicaSet=rs0"
-      MONGO_DB: "cinema_seats"
+      MONGO_URI: "mongodb://${MONGO_SERVERS:-mongo:27017}/${SEAT_DB:-seat}?replicaSet=rs0"
+      MONGO_DB: "${SEAT_DB:-seat}"
       REDIS_ADDR: "redis:6379"
       REDIS_PASS: ""
-      PORT: "3004"
-      # TTL: 300s for dev, 5s for test (allows Test10_HoldExpiration to run)
+      PORT: "${SEAT_PORT:-8005}"
       HOLD_TTL_SECONDS: "${HOLD_TTL_SECONDS:-300}"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3004/health || wget -qO- http://localhost:3004/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${SEAT_PORT:-8005}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
+      redis-dev:
+        condition: service_healthy
+        required: false
+      redis-test:
+        condition: service_healthy
+        required: false
     networks:
       - cinema-network
 
@@ -344,23 +392,31 @@ services:
       dockerfile: platform/docker/go-service/Dockerfile
       args:
         SERVICE_NAME: payment
-        SERVICE_PORT: 8000
-    image: ${REGISTRY:-cinema}/payment:${VERSION:-dev}
+        SERVICE_PORT: ${PAYMENT_PORT:-8007}
+    image: ${PAYMENT_IMAGE:-crizstian/payment-service}:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-payment
     hostname: payment
     profiles: [dev, test, debug, perf]
     ports:
-      - "8001:8000"
+      - "${PAYMENT_PORT:-8007}:${PAYMENT_PORT:-8007}"
     environment:
       <<: [*mongo-env, *nats-env]
       DB_SERVERS: "${MONGO_SERVERS:-mongo:27017}"
-      SERVICE_PORT: "8000"
+      DB_NAME: "${PAYMENT_DB:-payment}"
+      SERVICE_PORT: "${PAYMENT_PORT:-8007}"
       STRIPE_PUBLIC: "pk_test_mock"
       STRIPE_SECRET: "sk_test_mock"
       STRIPE_MOCK: "true"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || wget -qO- http://localhost:8000/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${PAYMENT_PORT:-8007}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
     networks:
       - cinema-network
 
@@ -370,21 +426,21 @@ services:
       dockerfile: platform/docker/go-service/Dockerfile
       args:
         SERVICE_NAME: notification
-        SERVICE_PORT: 8000
-    image: ${REGISTRY:-cinema}/notification:${VERSION:-dev}
+        SERVICE_PORT: ${NOTIFICATION_PORT:-8008}
+    image: ${NOTIFICATION_IMAGE:-crizstian/notification-service}:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-notification
     hostname: notification
     profiles: [dev, test, debug, perf]
     ports:
-      - "8002:8000"
+      - "${NOTIFICATION_PORT:-8008}:${NOTIFICATION_PORT:-8008}"
     environment:
       <<: *nats-env
-      SERVICE_PORT: "8000"
+      SERVICE_PORT: "${NOTIFICATION_PORT:-8008}"
       EMAIL: "${NOTIFICATION_EMAIL:-dev@cinema.local}"
       EMAIL_PASS: "${NOTIFICATION_PASS:-dev-password}"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || wget -qO- http://localhost:8000/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${NOTIFICATION_PORT:-8008}/health/live || exit 1"]
     networks:
       - cinema-network
 
@@ -394,24 +450,32 @@ services:
       dockerfile: platform/docker/go-service/Dockerfile
       args:
         SERVICE_NAME: booking
-        SERVICE_PORT: 8082
-    image: ${REGISTRY:-cinema}/booking:${VERSION:-dev}
+        SERVICE_PORT: ${BOOKING_PORT:-8001}
+    image: ${BOOKING_IMAGE:-crizstian/booking-service}:${VERSION:-dev}
     container_name: ${ENV_PREFIX:-cinema}-booking
     hostname: booking
     profiles: [dev, test, debug, perf]
     ports:
-      - "8082:8082"
+      - "${BOOKING_PORT:-8001}:${BOOKING_PORT:-8001}"
     environment:
       <<: [*mongo-env, *nats-env]
       DB_SERVERS: "${MONGO_SERVERS:-mongo:27017}"
-      SERVICE_PORT: "8082"
-      PAYMENT_URL: "http://payment:8000"
-      NOTIFICATION_URL: "http://notification:8000"
-      SEAT_SERVICE_URL: "http://seat:3004"
-      SHOWTIME_SERVICE_URL: "http://showtime:3003"
+      DB_NAME: "${BOOKING_DB:-booking}"
+      SERVICE_PORT: "${BOOKING_PORT:-8001}"
+      PAYMENT_URL: "http://payment:${PAYMENT_PORT:-8007}"
+      NOTIFICATION_URL: "http://notification:${NOTIFICATION_PORT:-8008}"
+      SEAT_SERVICE_URL: "http://seat:${SEAT_PORT:-8005}"
+      SHOWTIME_SERVICE_URL: "http://showtime:${SHOWTIME_PORT:-8006}"
     healthcheck:
       <<: *service-healthcheck
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health || wget -qO- http://localhost:8082/ping | grep -q pong"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${BOOKING_PORT:-8001}/health/live || exit 1"]
+    depends_on:
+      mongo-init-dev:
+        condition: service_completed_successfully
+        required: false
+      mongo-init-test:
+        condition: service_completed_successfully
+        required: false
     networks:
       - cinema-network
 
@@ -427,15 +491,14 @@ services:
     profiles: [e2e]
     environment:
       GOWORK: "off"
-      USER_SERVICE_URL: "http://user:8004"
-      MOVIE_SERVICE_URL: "http://movie:8000"
-      CINEMA_SERVICE_URL: "http://cinema:8085"
-      SHOWTIME_SERVICE_URL: "http://showtime:3003"
-      SEAT_SERVICE_URL: "http://seat:3004"
-      PAYMENT_SERVICE_URL: "http://payment:8000"
-      BOOKING_SERVICE_URL: "http://booking:8082"
-      NOTIFICATION_SERVICE_URL: "http://notification:8000"
-      # Short TTL for Test10_HoldExpiration
+      USER_SERVICE_URL: "http://user:${USER_PORT:-8004}"
+      MOVIE_SERVICE_URL: "http://movie:${MOVIE_PORT:-8002}"
+      CINEMA_SERVICE_URL: "http://cinema:${CINEMA_PORT:-8003}"
+      SHOWTIME_SERVICE_URL: "http://showtime:${SHOWTIME_PORT:-8006}"
+      SEAT_SERVICE_URL: "http://seat:${SEAT_PORT:-8005}"
+      PAYMENT_SERVICE_URL: "http://payment:${PAYMENT_PORT:-8007}"
+      BOOKING_SERVICE_URL: "http://booking:${BOOKING_PORT:-8001}"
+      NOTIFICATION_SERVICE_URL: "http://notification:${NOTIFICATION_PORT:-8008}"
       HOLD_TTL_SECONDS: "${HOLD_TTL_SECONDS:-5}"
     networks:
       - cinema-network

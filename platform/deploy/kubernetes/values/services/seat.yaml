@@ -1,19 +1,22 @@
 # Seat Service Values
-# Manages seat availability and reservations
+# Template with Harness expressions - values resolved at deploy time
 
-port: 8005
-dbName: seat
+serviceName: <+service.name>
+version: <+artifact.tag>
+
+port: <+serviceVariables.port>
+dbName: <+serviceVariables.dbName>
 
 dependencies:
-  - showtime
+  - showtime-service
 
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: <+serviceVariables.cpu_request>
+    memory: <+serviceVariables.mem_request>
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: <+serviceVariables.cpu_limit>
+    memory: <+serviceVariables.mem_limit>
 
 autoscaling:
   minReplicas: 2

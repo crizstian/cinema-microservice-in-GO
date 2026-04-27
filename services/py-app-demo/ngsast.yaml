@@ -1,0 +1,62 @@
+ngsast:
+  - app:
+      name: py-app-demo
+      language: PYTHON
+      policy: io.shiftleft/defaultWithDict
+      additional-findings:
+        - python-secrets
+      modify-findings:
+        - python-severity-rules
+        - filter-low-noise
+  - default:
+      policy: io.shiftleft/defaultWithDict
+finding-modifications:
+  python-severity-rules:
+    filter:
+      category:
+        - SQL Injection
+        - Command Injection
+        - Sensitive Data Leak
+      type:
+        - vuln
+    tags:
+      - key: cvss_score
+        value: 9.0
+      - key: severity
+        value: critical
+      - key: cvss_31_severity_rating
+        value: critical
+  filter-low-noise:
+    filter:
+      severity:
+        - low
+        - info
+    tags:
+      - key: severity
+        value: info
+      - key: cvss_score
+        value: 0
+      - key: suppressed
+        value: "true"
+additional-findings:
+  python-secrets:
+    name: secrets
+    entropy: 0.5
+    include:
+      - "**/*.py"
+      - "**/*.ini"
+      - "**/*.cfg"
+      - "**/*.env"
+      - "**/*.yaml"
+      - "**/*.yml"
+      - "**/*.json"
+      - src/**
+      - config/**
+    exclude:
+      - tests/**
+      - test/**
+      - "**/test_*.py"
+      - "**/*_test.py"
+      - venv/**
+      - .venv/**
+      - __pycache__/**

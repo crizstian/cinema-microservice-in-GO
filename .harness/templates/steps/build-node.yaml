@@ -1,0 +1,57 @@
+template:
+  name: Build Node
+  identifier: build_node
+  type: Step
+  versionLabel: "1.0.0"
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  tags:
+    language: node
+  description: Build Node.js application with npm or yarn
+  spec:
+    type: Run
+    spec:
+      connectorRef: account.harnessImage
+      image: node:<+input>.default(20-alpine)
+      shell: Sh
+      command: |
+        cd <+input>
+
+        PKG_MANAGER=<+input>.default(npm)
+
+        echo "=== Installing dependencies ==="
+        if [ "$PKG_MANAGER" = "yarn" ]; then
+          yarn install --frozen-lockfile
+        elif [ "$PKG_MANAGER" = "pnpm" ]; then
+          npm install -g pnpm
+          pnpm install --frozen-lockfile
+        else
+          npm ci
+        fi
+
+        echo "=== Running linter ==="
+        npm run lint || true
+
+        echo "=== Running tests ==="
+        npm test -- --coverage --ci --reporters=jest-junit || npm test
+
+        # Extract coverage
+        if [ -f coverage/coverage-summary.json ]; then
+          COV=$(node -e "console.log(require('./coverage/coverage-summary.json').total.lines.pct)")
+        else
+          COV=0
+        fi
+        echo "Coverage: ${COV}%"
+
+        echo "=== Building ==="
+        npm run build
+
+        echo "COVERAGE=${COV}" >> $HARNESS_OUTPUT_FILE
+      reports:
+        type: JUnit
+        spec:
+          paths:
+            - "**/junit.xml"
+            - "**/test-results.xml"
+      outputVariables:
+        - name: COVERAGE

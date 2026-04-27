@@ -1,0 +1,50 @@
+# =============================================================================
+# Py App Demo - Dependencies
+# ADVERTENCIA: Contiene versiones VULNERABLES intencionales para demo de Harness STO
+# =============================================================================
+
+# Framework web - Known vulnerabilities
+Flask==2.0.1  # CVE-2023-30861 (High)
+Werkzeug==2.0.1  # CVE-2023-25577 (High)
+
+# Jinja2 compatible con Flask 2.0.1
+Jinja2==3.0.3  # CVE-2024-22195 (Medium)
+MarkupSafe==2.0.1
+
+# Serialización - CRITICAL vulnerabilities
+PyYAML==5.4  # CVE-2020-14343 (Critical) - Arbitrary Code Execution
+
+# HTTP - Multiple vulnerabilities
+requests==2.25.1  # CVE-2023-32681 (Medium)
+urllib3==1.26.5  # CVE-2021-33503, CVE-2023-43804 (High)
+
+# Criptografía - Known vulnerabilities
+cryptography==3.4.8  # CVE-2023-23931 (Medium)
+PyJWT==1.7.1  # CVE-2022-29217 (High) - Algorithm confusion
+
+# Base de datos
+SQLAlchemy==1.4.0  # Older version with potential issues
+
+# Parsing - CRITICAL
+lxml==4.6.3  # CVE-2021-28957, CVE-2021-43818 (High)
+Pillow==8.2.0  # CVE-2021-25287, CVE-2021-25288 (Critical)
+
+# Networking
+paramiko==2.7.2  # CVE-2022-24302 (Medium)
+
+# Web/API
+aiohttp==3.7.4  # CVE-2021-21330, CVE-2023-37276 (High)
+
+# Template engines
+mako==1.1.4  # CVE-2022-40023 (High) - XSS
+
+# Utilities
+itsdangerous==2.0.1
+click==8.0.1
+
+# Validation
+pydantic==1.8.2  # CVE-2021-29510 (Medium)
+
+# Testing
+pytest==7.4.0
+pytest-cov==4.1.0

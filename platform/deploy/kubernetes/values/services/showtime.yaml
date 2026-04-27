@@ -1,20 +1,23 @@
 # Showtime Service Values
-# Manages movie showtimes
+# Template with Harness expressions - values resolved at deploy time
 
-port: 8006
-dbName: showtime
+serviceName: <+service.name>
+version: <+artifact.tag>
+
+port: <+serviceVariables.port>
+dbName: <+serviceVariables.dbName>
 
 dependencies:
-  - movie
-  - cinema
+  - movie-service
+  - cinema-service
 
 resources:
   requests:
-    cpu: 50m
-    memory: 64Mi
+    cpu: <+serviceVariables.cpu_request>
+    memory: <+serviceVariables.mem_request>
   limits:
-    cpu: 250m
-    memory: 256Mi
+    cpu: <+serviceVariables.cpu_limit>
+    memory: <+serviceVariables.mem_limit>
 
 autoscaling:
   minReplicas: 1

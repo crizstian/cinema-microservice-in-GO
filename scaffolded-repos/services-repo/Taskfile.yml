@@ -1,0 +1,282 @@
+# https://taskfile.dev
+version: "3"
+
+vars:
+  SERVICE: '{{.SERVICE | default "booking"}}'
+  COVERAGE_THRESHOLD: '{{.COVERAGE_THRESHOLD | default "80"}}'
+
+tasks:
+  # ============================================================================
+  # DEFAULT
+  # ============================================================================
+  default:
+    desc: "Show available tasks"
+    cmds: ["task --list"]
+
+  # ============================================================================
+  # CODE QUALITY
+  # ============================================================================
+  quality:
+    desc: "Run all quality checks: task quality SERVICE=booking"
+    cmds:
+      - task: quality:lint
+      - task: quality:vet
+      - task: quality:complexity
+
+  quality:lint:
+    desc: "Run golangci-lint: task quality:lint SERVICE=booking"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - golangci-lint run ./... --timeout 5m
+
+  quality:vet:
+    desc: "Run go vet: task quality:vet SERVICE=booking"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - go vet ./...
+
+  quality:complexity:
+    desc: "Check cyclomatic complexity: task quality:complexity SERVICE=booking"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - |
+        if command -v gocyclo &> /dev/null; then
+          gocyclo -over 15 . || echo "High complexity detected"
+        else
+          echo "gocyclo not installed, skipping"
+        fi
+
+  quality:all:
+    desc: "Run quality checks on all services"
+    cmds:
+      - |
+        for svc in services/*/; do
+          svc_name=$(basename "$svc")
+          echo "=== Quality: $svc_name ==="
+          task quality SERVICE="$svc_name" || true
+        done
+
+  # ============================================================================
+  # TESTS
+  # ============================================================================
+  test:
+    desc: "Run unit tests: task test SERVICE=booking"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - go test -v -race -coverprofile=coverage.out ./...
+
+  test:coverage:
+    desc: "Run tests with coverage report: task test:coverage SERVICE=booking"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - go test -v -race -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out
+      - |
+        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+        echo "Coverage: ${COVERAGE}%"
+        if (( $(echo "$COVERAGE < {{.COVERAGE_THRESHOLD}}" | bc -l) )); then
+          echo "ERROR: Coverage ${COVERAGE}% is below threshold {{.COVERAGE_THRESHOLD}}%"
+          exit 1
+        fi
+
+  test:html:
+    desc: "Generate HTML coverage report: task test:html SERVICE=booking"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "Coverage report: services/{{.SERVICE}}/coverage.html"
+
+  test:all:
+    desc: "Run tests for all services"
+    cmds:
+      - |
+        for svc in services/*/; do
+          svc_name=$(basename "$svc")
+          echo "=== Testing: $svc_name ==="
+          task test SERVICE="$svc_name" || true
+        done
+
+  test:benchmark:
+    desc: "Run benchmark tests: task test:benchmark SERVICE=booking"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - go test -bench=. -benchmem ./...
+
+  # ============================================================================
+  # BUILD
+  # ============================================================================
+  build:
+    desc: "Build binary: task build SERVICE=booking"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/{{.SERVICE}} ./cmd/{{.SERVICE}}
+
+  build:docker:
+    desc: "Build Docker image: task build:docker SERVICE=booking [VERSION=latest]"
+    vars:
+      VERSION: '{{.VERSION | default "latest"}}'
+    cmds:
+      - docker build -t {{.SERVICE}}:{{.VERSION}} -f services/{{.SERVICE}}/Dockerfile services/{{.SERVICE}}
+
+  build:all:
+    desc: "Build all services"
+    cmds:
+      - |
+        for svc in services/*/; do
+          svc_name=$(basename "$svc")
+          echo "=== Building: $svc_name ==="
+          task build SERVICE="$svc_name" || true
+        done
+
+  # ============================================================================
+  # RUN
+  # ============================================================================
+  run:
+    desc: "Run service locally: task run SERVICE=booking"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - go run ./cmd/{{.SERVICE}}
+
+  run:docker:
+    desc: "Run service in Docker: task run:docker SERVICE=booking"
+    cmds:
+      - task: build:docker
+      - docker run --rm -p 8080:8080 {{.SERVICE}}:latest
+
+  # ============================================================================
+  # DEPENDENCIES
+  # ============================================================================
+  deps:
+    desc: "Download dependencies: task deps SERVICE=booking"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - go mod download
+      - go mod tidy
+
+  deps:update:
+    desc: "Update dependencies: task deps:update SERVICE=booking"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - go get -u ./...
+      - go mod tidy
+
+  deps:all:
+    desc: "Download dependencies for all services"
+    cmds:
+      - |
+        for svc in services/*/; do
+          svc_name=$(basename "$svc")
+          echo "=== Deps: $svc_name ==="
+          task deps SERVICE="$svc_name" || true
+        done
+
+  # ============================================================================
+  # OPENAPI
+  # ============================================================================
+  openapi:lint:
+    desc: "Lint OpenAPI spec: task openapi:lint SERVICE=booking"
+    cmds:
+      - |
+        SPEC="services/{{.SERVICE}}/api/openapi.yaml"
+        if [ -f "$SPEC" ]; then
+          spectral lint "$SPEC" || true
+        else
+          echo "No OpenAPI spec found: $SPEC"
+        fi
+
+  openapi:generate:
+    desc: "Generate code from OpenAPI spec: task openapi:generate SERVICE=booking"
+    cmds:
+      - |
+        SPEC="services/{{.SERVICE}}/api/openapi.yaml"
+        if [ -f "$SPEC" ]; then
+          echo "OpenAPI spec found: $SPEC"
+          # Add your oapi-codegen or similar command here
+        else
+          echo "No OpenAPI spec found: $SPEC"
+        fi
+
+  # ============================================================================
+  # JAVA SERVICES
+  # ============================================================================
+  java:test:
+    desc: "Run Java tests: task java:test SERVICE=analytics"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - |
+        if [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+          ./gradlew test --no-daemon
+        elif [ -f "pom.xml" ]; then
+          mvn test
+        else
+          echo "No Java build file found"
+        fi
+
+  java:build:
+    desc: "Build Java service: task java:build SERVICE=analytics"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - |
+        if [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+          ./gradlew build --no-daemon
+        elif [ -f "pom.xml" ]; then
+          mvn package -DskipTests
+        else
+          echo "No Java build file found"
+        fi
+
+  # ============================================================================
+  # VALIDATE (CI-like)
+  # ============================================================================
+  validate:
+    desc: "Full validation (quality + tests): task validate SERVICE=booking"
+    cmds:
+      - task: quality
+        vars: { SERVICE: "{{.SERVICE}}" }
+      - task: test
+        vars: { SERVICE: "{{.SERVICE}}" }
+
+  validate:all:
+    desc: "Validate all services"
+    cmds:
+      - task: quality:all
+      - task: test:all
+
+  # ============================================================================
+  # CLEAN
+  # ============================================================================
+  clean:
+    desc: "Clean build artifacts: task clean SERVICE=booking"
+    dir: services/{{.SERVICE}}
+    cmds:
+      - rm -rf bin/ coverage.out coverage.html
+      - go clean -cache
+
+  clean:all:
+    desc: "Clean all services"
+    cmds:
+      - |
+        for svc in services/*/; do
+          svc_name=$(basename "$svc")
+          echo "=== Cleaning: $svc_name ==="
+          task clean SERVICE="$svc_name" || true
+        done
+
+  # ============================================================================
+  # ENVIRONMENT VALIDATION
+  # ============================================================================
+  validate:env:
+    desc: "Validate devcontainer environment (tools, auth, MCP)"
+    cmds:
+      - bash .devcontainer/scripts/validate.sh
+
+  validate:env:json:
+    desc: "Validate environment (JSON output)"
+    cmds:
+      - bash .devcontainer/scripts/validate.sh --json
+
+  validate:env:quiet:
+    desc: "Validate environment (quiet mode)"
+    cmds:
+      - bash .devcontainer/scripts/validate.sh --quiet

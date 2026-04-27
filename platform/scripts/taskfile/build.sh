@@ -1,6 +1,11 @@
 #!/bin/bash
 # Build Docker image for a service with semantic versioning
 # Usage: ./build.sh <service> [version] [--push]
+#
+# This script:
+# 1. Compiles Go binary locally (benefits from host Go cache)
+# 2. Builds Docker image using pre-compiled binary (BINARY_SOURCE=prebuilt)
+# 3. Optionally pushes to registry
 
 set -euo pipefail
 
@@ -21,22 +26,29 @@ if [ -z "$VERSION" ]; then
 fi
 
 IMAGE_NAME="$REGISTRY/${SERVICE}-service"
+SERVICE_DIR="services/$SERVICE"
 
 echo "=== Building Docker image for $SERVICE ==="
 echo "Version: $VERSION"
 echo "Image: $IMAGE_NAME"
 echo ""
 
-cd "services/$SERVICE"
+# Step 1: Build Go binary locally
+echo "=== Step 1: Compiling Go binary ==="
+cd "$SERVICE_DIR"
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  go build -ldflags="-s -w -X main.Version=${VERSION}" \
+  go build -ldflags="-s -w -X main.Version=${VERSION} -X main.CommitSHA=${COMMIT_SHA} -X main.BuildDate=${BUILD_DATE}" \
   -o "$SERVICE" \
   "./cmd/$SERVICE"
 echo "Binary built: $(ls -lh "$SERVICE")"
 cd - > /dev/null
 
+# Step 2: Build Docker image using pre-compiled binary
+echo ""
+echo "=== Step 2: Building Docker image (using pre-compiled binary) ==="
 docker build \
   --file platform/docker/go-service/Dockerfile \
+  --target runtime-prebuilt \
   --build-arg SERVICE_NAME="$SERVICE" \
   --build-arg SERVICE_PORT=8000 \
   --build-arg VERSION="$VERSION" \
@@ -45,6 +57,9 @@ docker build \
   --tag "$IMAGE_NAME:v$VERSION" \
   --tag "$IMAGE_NAME:latest" \
   .
+
+# Cleanup: remove local binary
+rm -f "$SERVICE_DIR/$SERVICE"
 
 echo ""
 echo "Built: $IMAGE_NAME:v$VERSION"

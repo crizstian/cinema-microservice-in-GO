@@ -1,0 +1,51 @@
+template:
+  name: Build Java
+  identifier: build_java
+  type: Step
+  versionLabel: "1.0.0"
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  tags:
+    language: java
+  description: Build Java application with Maven or Gradle
+  spec:
+    type: Run
+    spec:
+      connectorRef: account.harnessImage
+      image: maven:<+input>.default(3.9-eclipse-temurin-21)
+      shell: Sh
+      command: |
+        cd <+input>
+
+        BUILD_TOOL=<+input>.default(maven)
+
+        if [ "$BUILD_TOOL" = "gradle" ]; then
+          echo "=== Building with Gradle ==="
+          ./gradlew clean build -x test
+          ./gradlew test jacocoTestReport
+
+          # Extract coverage
+          COV=$(grep -o 'Total[^%]*%' build/reports/jacoco/test/html/index.html | head -1 | grep -o '[0-9]*%' | tr -d '%')
+        else
+          echo "=== Building with Maven ==="
+          mvn clean package -DskipTests
+          mvn test jacoco:report
+
+          # Extract coverage
+          COV=$(grep -o '<counter type="LINE"[^/]*' target/site/jacoco/jacoco.xml | head -1 | grep -oP 'covered="\K[0-9]+')
+        fi
+
+        echo "Coverage: ${COV:-0}%"
+        echo "COVERAGE=${COV:-0}" >> $HARNESS_OUTPUT_FILE
+
+        # Find JAR
+        JAR=$(find . -name "*.jar" -path "*/target/*" -not -name "*-sources.jar" | head -1)
+        echo "Built: $JAR"
+      reports:
+        type: JUnit
+        spec:
+          paths:
+            - "**/target/surefire-reports/*.xml"
+            - "**/build/test-results/test/*.xml"
+      outputVariables:
+        - name: COVERAGE

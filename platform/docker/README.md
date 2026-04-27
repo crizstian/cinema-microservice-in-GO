@@ -29,25 +29,90 @@ platform/docker/
 
 ### Go Service Dockerfile
 
-Centralized multi-stage build for all microservices:
+Centralized multi-stage build supporting both local development and CI pipelines:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        DOCKERFILE STAGES                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Targets: runtime (default) | runtime-prebuilt                         │
+│                                                                         │
+│  ┌─────────────────┐       ┌─────────────────┐                         │
+│  │     builder     │       │    prebuilt     │                         │
+│  │  (compile src)  │       │ (copy binary)   │                         │
+│  │                 │       │                 │                         │
+│  │  golang:alpine  │       │     scratch     │                         │
+│  │  go build → /app│       │  COPY bin → /app│                         │
+│  └────────┬────────┘       └────────┬────────┘                         │
+│           │                         │                                   │
+│           ▼                         ▼                                   │
+│  ┌─────────────────┐       ┌─────────────────┐                         │
+│  │    runtime      │       │runtime-prebuilt │                         │
+│  │   (default)     │       │   (CI target)   │                         │
+│  │  alpine:3.21    │       │   alpine:3.21   │                         │
+│  │  COPY --from=   │       │  COPY --from=   │                         │
+│  │     builder     │       │    prebuilt     │                         │
+│  └─────────────────┘       └─────────────────┘                         │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Usage: Local Development
+
+Compiles Go code inside Docker (self-contained):
 
 ```bash
-# Build via Task
+# Via Task (recommended)
 task build SERVICE=booking
 
-# Or directly
+# Direct docker build (uses default 'runtime' target)
 docker build \
   -f platform/docker/go-service/Dockerfile \
   --build-arg SERVICE_NAME=booking \
-  --build-arg SERVICE_PORT=8082 \
+  --build-arg SERVICE_PORT=8001 \
   -t cinema/booking:latest .
 ```
 
-Features:
-- Multi-stage build (builder + runtime)
-- Non-root user for security
-- Health check endpoint
-- Build metadata labels
+#### Usage: CI Pipeline (Harness)
+
+Uses pre-compiled binary for faster builds with Cache Intelligence:
+
+```bash
+# Step 1: Build binary (benefits from Go module cache)
+cd services/booking
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o booking ./cmd/booking
+
+# Step 2: Build image using 'runtime-prebuilt' target (just copies binary, very fast)
+docker build \
+  -f platform/docker/go-service/Dockerfile \
+  --target runtime-prebuilt \
+  --build-arg SERVICE_NAME=booking \
+  --build-arg SERVICE_PORT=8001 \
+  -t cinema/booking:latest .
+```
+
+#### Build Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `SERVICE_NAME` | (required) | Service name (e.g., booking, movie) |
+| `SERVICE_PORT` | 8000 | Port to expose |
+| `VERSION` | 0.0.0-dev | Semantic version |
+| `COMMIT_SHA` | unknown | Git commit SHA |
+| `BUILD_DATE` | unknown | ISO8601 build timestamp |
+| `--target` | runtime | `runtime` (compile) or `runtime-prebuilt` (copy) |
+| `GO_VERSION` | 1.24 | Go version for builder stage |
+| `ALPINE_VERSION` | 3.21 | Alpine version for runtime |
+
+#### Features
+
+- **Dual-mode build**: Same Dockerfile for local and CI
+- **Multi-stage**: Minimal runtime image (~10MB)
+- **Non-root user**: Runs as `appuser:appgroup` (UID 1000)
+- **Health check**: Built-in `/health/live` endpoint check
+- **OCI labels**: Standard image metadata
+- **Cache optimized**: Separate layers for deps vs source
 
 ### DevContainer
 
@@ -108,8 +173,41 @@ Available profiles:
 
 ---
 
+## CI/CD Integration
+
+The Go service Dockerfile is optimized for Harness CI:
+
+| Feature | Local | CI Pipeline |
+|---------|-------|-------------|
+| **Target** | `runtime` (default) | `runtime-prebuilt` |
+| **Go module cache** | Docker layer cache | Harness Cache Intelligence |
+| **Build speed** | ~30-60s | ~5-10s (cache hit) |
+| **Context required** | Full repo | Full repo |
+
+### CI Pipeline Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Harness CI Pipeline                                                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  1. Build Binary Step (golang image)                                   │
+│     └─ Uses Cache Intelligence for /harness/.go (GOPATH)               │
+│     └─ Output: services/<service>/<service> binary                     │
+│                                                                         │
+│  2. BuildAndPushDockerRegistry Step                                    │
+│     └─ --target runtime-prebuilt                                       │
+│     └─ Skips builder stage, just copies binary                         │
+│     └─ Uses Docker layer caching for runtime layers                    │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Related
 
 - [Docker Compose](../deploy/docker-compose/)
 - [Development Guide](../../docs/development/README.md)
 - [Taskfile.yml](../../Taskfile.yml)
+- [CI Pipeline](.harness/pipelines/CI/CI-Unified-v3.yaml)

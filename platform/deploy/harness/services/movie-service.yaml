@@ -1,0 +1,59 @@
+# Harness Service Definition
+# Generated from config/services.yaml
+# Use: harness_create or harness_update to sync
+
+service:
+  name: movie-service
+  identifier: movieservice
+  serviceDefinition:
+    type: Kubernetes
+    spec:
+      manifests:
+        - manifest:
+            identifier: templates
+            type: K8sManifest
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: CristianConnector
+                  gitFetchType: Branch
+                  paths:
+                    - platform/deploy/kubernetes/templates/services/
+                  repoName: cinema-microservice-in-GO
+                  branch: <+pipeline.variables.branch>
+              valuesPaths:
+                - platform/deploy/kubernetes/values/base.yaml
+                - platform/deploy/kubernetes/values/environments/<+env.name>.yaml
+                - platform/deploy/kubernetes/values/services/movie.yaml
+              skipResourceVersioning: true
+      artifacts:
+        primary:
+          primaryArtifactRef: artifact
+          sources:
+            - identifier: artifact
+              type: DockerRegistry
+              spec:
+                connectorRef: DockerCristian
+                imagePath: crizstian/movie-service
+                tag: <+input>
+      variables:
+        - name: port
+          type: String
+          value: "8002"
+        - name: dbName
+          type: String
+          value: "movie"
+        - name: cpu_request
+          type: String
+          value: "50m"
+        - name: mem_request
+          type: String
+          value: "64Mi"
+        - name: cpu_limit
+          type: String
+          value: "250m"
+        - name: mem_limit
+          type: String
+          value: "256Mi"
+  gitOpsEnabled: false

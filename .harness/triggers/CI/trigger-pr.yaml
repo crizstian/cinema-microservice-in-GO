@@ -1,0 +1,45 @@
+trigger:
+  name: PR Trigger
+  identifier: PR_Trigger
+  enabled: true
+  stagesToExecute:
+    - security_scan_code
+    - build_and_test
+  description: ""
+  tags: {}
+  encryptedWebhookSecretIdentifier: ""
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  pipelineIdentifier: ci_shift_left_security
+  source:
+    type: Webhook
+    spec:
+      type: Github
+      spec:
+        type: PullRequest
+        spec:
+          connectorRef: CristianConnector
+          autoAbortPreviousExecutions: true
+          payloadConditions:
+            - key: changedFiles
+              operator: Regex
+              value: ^services/py-app-demo/.*
+            - key: targetBranch
+              operator: Equals
+              value: monorepo
+          headerConditions: []
+          repoName: cinema-microservice-in-GO
+          actions:
+            - Open
+            - Synchronize
+            - Reopen
+  inputYaml: |
+    pipeline:
+      identifier: ci_shift_left_security
+      properties:
+        ci:
+          codebase:
+            build:
+              type: PR
+              spec:
+                number: <+trigger.prNumber>

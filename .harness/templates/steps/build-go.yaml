@@ -1,0 +1,50 @@
+template:
+  name: Build Go
+  identifier: build_go
+  type: Step
+  versionLabel: "1.0.0"
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  tags:
+    language: go
+  description: Build Go binary and run tests
+  spec:
+    type: Run
+    spec:
+      connectorRef: account.harnessImage
+      image: golang:<+input>.default(1.24)
+      shell: Sh
+      command: |
+        # Install tools
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        go install github.com/jstemmer/go-junit-report/v2@latest
+        export PATH=$(go env GOPATH)/bin:$PATH
+
+        cd <+input>
+
+        # Lint
+        echo "=== Running linter ==="
+        golangci-lint run --timeout 3m
+
+        # Test with coverage
+        echo "=== Running tests ==="
+        go test -v -race -coverprofile=coverage.out ./... 2>&1 | go-junit-report > junit.xml
+        COV=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+        echo "Coverage: ${COV}%"
+
+        # Build binary
+        echo "=== Building binary ==="
+        SERVICE_NAME=<+input>
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+          go build -ldflags="-s -w -X main.Version=<+input>" \
+          -o ${SERVICE_NAME} ./cmd/${SERVICE_NAME}
+
+        ls -lh ${SERVICE_NAME}
+        echo "COVERAGE=${COV}" >> $HARNESS_OUTPUT_FILE
+      reports:
+        type: JUnit
+        spec:
+          paths:
+            - "**/junit.xml"
+      outputVariables:
+        - name: COVERAGE

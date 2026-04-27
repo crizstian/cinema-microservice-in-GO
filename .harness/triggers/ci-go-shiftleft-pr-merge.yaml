@@ -1,0 +1,51 @@
+trigger:
+  name: CI Go ShiftLeft - PR Merge
+  identifier: ci_go_shiftleft_pr_merge
+  enabled: true
+  description: Triggers Push and Release stage on PR merge to main
+  tags:
+    type: pr-merge
+    pipeline: CI_Go_ShiftLeft
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  pipelineIdentifier: CI_Go_ShiftLeft
+  source:
+    type: Webhook
+    spec:
+      type: Github
+      spec:
+        type: PullRequest
+        spec:
+          connectorRef: CristianConnector
+          autoAbortPreviousExecutions: false
+          payloadConditions:
+            - key: targetBranch
+              operator: In
+              value: main, master, step-1
+            - key: <+trigger.payload.action>
+              operator: Equals
+              value: closed
+            - key: <+trigger.payload.pull_request.merged>
+              operator: Equals
+              value: "true"
+          headerConditions: []
+          jexlCondition: <+trigger.payload.action> == "closed" && <+trigger.payload.pull_request.merged> == true
+          actions:
+            - Close
+  inputYaml: |
+    pipeline:
+      identifier: CI_Go_ShiftLeft
+      properties:
+        ci:
+          codebase:
+            build:
+              type: branch
+              spec:
+                branch: <+trigger.targetBranch>
+      variables:
+        - name: RUN_MODE
+          type: String
+          value: pr_merge
+        - name: SERVICES
+          type: String
+          value: <+trigger.payload.pull_request.head.ref>.matches("services/([^/]+)/.*") ? <+trigger.payload.pull_request.head.ref>.replaceAll("services/([^/]+)/.*", "$1") : "booking,movie,showtime,user"

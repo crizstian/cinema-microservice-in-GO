@@ -48,6 +48,9 @@ cd cinema-microservices
 # Install dependencies
 go work sync
 
+# Generate configuration files
+task config:all
+
 # Start full development environment
 task dev:up
 
@@ -131,6 +134,18 @@ go work use ./services/new-service
 
 ### Environment Variables
 
+#### Centralized Configuration
+
+All service configuration is managed in `config/services.yaml`. Generate environment files with:
+
+```bash
+task config:generate   # Generates platform/deploy/docker-compose/.env
+task config:harness    # Generates Harness service definitions
+task config:all        # Generates both
+```
+
+See [Configuration Guide](../operations/configuration-guide.md) for full documentation.
+
 #### MongoDB Connection
 
 ```env
@@ -141,12 +156,18 @@ DB_NAME=booking
 DB_REPLICA=rs1
 ```
 
-#### Service Configuration
+#### Service Ports (from config/services.yaml)
 
-```env
-SERVICE_PORT=8000
-LOG_LEVEL=debug
-```
+| Service | Port |
+|---------|------|
+| booking | 8001 |
+| movie | 8002 |
+| cinema | 8003 |
+| user | 8004 |
+| seat | 8005 |
+| showtime | 8006 |
+| payment | 8007 |
+| notification | 8008 |
 
 #### External Services
 
@@ -199,15 +220,21 @@ task build:all
 # List all commands
 task --list
 
+# Configuration
+task config:all           # Generate all config files
+task config:generate      # Generate platform/deploy/docker-compose/.env
+task config:harness       # Generate Harness service definitions
+task config:show          # Show current service configuration
+
 # Building
 task build SERVICE=movie  # Build single service image
 task build:all            # Build all service images
 
 # Development Environment
-task dev:up               # Start dev environment (3 MongoDB replicas)
+task dev:up               # Start dev environment (uses platform/deploy/docker-compose/.env)
 task dev:down             # Stop and clean volumes
-task dev:log              # Stream logs
-task dev:clean            # Remove images and build cache
+task dev:logs             # Stream logs
+task dev:status           # Show container status
 
 # Testing
 task test SERVICE=booking # Unit tests for single service
@@ -668,10 +695,12 @@ go clean -modcache
 - [Services Documentation](../services/README.md)
 - [API Documentation](../api/README.md)
 - [Operations Guide](../operations/README.md)
+- [Configuration Guide](../operations/configuration-guide.md) - Centralized config system
 
 ### Development Guides
 
 - [dev:up Laboratory](./dev-up-laboratory.md) - Interactive tutorial for all dev:up use cases
+- [Configuration Guide](../operations/configuration-guide.md) - Single source of truth for service config
 - [Debugging Runbook](../operations/debugging-runbook.md) - Quick troubleshooting guide
 - [Performance Baseline](../operations/performance-baseline.md) - Latency and throughput metrics
 

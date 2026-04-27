@@ -1,0 +1,256 @@
+# Example: Pipeline using templates for Go
+# This demonstrates how to compose a pipeline from shared templates
+
+pipeline:
+  name: CI - Go Services (Template-based)
+  identifier: CI_Go_Template
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  tags:
+    language: go
+    template-based: "true"
+  description: |
+    Go CI pipeline composed from shared templates.
+    Demonstrates template reuse pattern.
+  properties:
+    ci:
+      codebase:
+        connectorRef: CristianConnector
+        repoName: cinema-microservice-in-GO
+        build: <+input>
+        prCloneStrategy: SourceBranch
+        depth: 50
+  variables:
+    - name: RUN_MODE
+      type: String
+      required: true
+      value: <+input>.allowedValues(validate,full)
+    - name: SERVICES
+      type: String
+      required: true
+      value: <+input>
+    - name: GO_VERSION
+      type: String
+      value: "1.24"
+    - name: DOCKER_REGISTRY
+      type: String
+      value: crizstian
+
+  stages:
+    # ══════════════════════════════════════════════════════════════════════
+    # STAGE 1: CODE SECURITY (Uses shared template)
+    # ══════════════════════════════════════════════════════════════════════
+    - stage:
+        name: Security Scan - Code
+        identifier: security_scan_code
+        template:
+          templateRef: security_scan_code
+          versionLabel: "1.0.0"
+          templateInputs:
+            spec:
+              caching:
+                key: go-mod-<+hashFiles("**/go.sum")>
+                paths:
+                  - /harness/.go
+              execution:
+                steps:
+                  - stepGroup:
+                      identifier: SCA
+                      steps:
+                        - parallel:
+                            - step:
+                                identifier: HarnessSCA
+                                spec:
+                                  target:
+                                    workspace: services/<+repeat.item>
+                            - step:
+                                identifier: Snyk_SCA
+                                spec:
+                                  target:
+                                    workspace: services/<+repeat.item>
+                                    name: <+repeat.item>
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          maxConcurrency: 3
+                  - stepGroup:
+                      identifier: SAST
+                      steps:
+                        - parallel:
+                            - step:
+                                identifier: HarnessSAST
+                                spec:
+                                  target:
+                                    workspace: services/<+repeat.item>
+                            - step:
+                                identifier: Snyk_SAST
+                                spec:
+                                  target:
+                                    workspace: services/<+repeat.item>
+                                    name: <+repeat.item>
+                            - step:
+                                identifier: Semgrep
+                                spec:
+                                  target:
+                                    workspace: services/<+repeat.item>
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          maxConcurrency: 3
+        when:
+          condition: <+pipeline.variables.RUN_MODE> == "validate"
+
+    # ══════════════════════════════════════════════════════════════════════
+    # STAGE 2: BUILD (Language-specific)
+    # ══════════════════════════════════════════════════════════════════════
+    - stage:
+        name: Build Go Services
+        identifier: build_go
+        type: CI
+        when:
+          condition: <+pipeline.variables.RUN_MODE> == "full"
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+            key: go-release-<+hashFiles("**/go.sum")>
+            paths:
+              - /harness/.go
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - stepGroup:
+                  name: Build Services
+                  identifier: build_services
+                  steps:
+                    # Use Go build template
+                    - step:
+                        name: Build Go
+                        identifier: build_go_step
+                        template:
+                          templateRef: build_go
+                          versionLabel: "1.0.0"
+                          templateInputs:
+                            spec:
+                              image: golang:<+pipeline.variables.GO_VERSION>
+                              command: |
+                                # Template inputs filled by pipeline
+                                cd services/<+repeat.item>
+                                # ... rest from template
+
+                    # Build Docker image
+                    - step:
+                        name: Build Docker Image
+                        identifier: build_docker_image
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: docker:latest
+                          shell: Sh
+                          command: |
+                            docker build \
+                              -f platform/docker/go-service/Dockerfile \
+                              --target runtime-prebuilt \
+                              --build-arg SERVICE_NAME=<+repeat.item> \
+                              -t ${DOCKER_REGISTRY}/<+repeat.item>-service:${VERSION} .
+                            docker save ${DOCKER_REGISTRY}/<+repeat.item>-service:${VERSION} \
+                              -o /harness/<+repeat.item>-service.tar
+                          privileged: true
+                          envVariables:
+                            DOCKER_REGISTRY: <+pipeline.variables.DOCKER_REGISTRY>
+                            VERSION: <+pipeline.sequenceId>
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      maxConcurrency: 2
+
+    # ══════════════════════════════════════════════════════════════════════
+    # STAGE 3: CONTAINER SECURITY (Uses shared template)
+    # ══════════════════════════════════════════════════════════════════════
+    - stage:
+        name: Container Security
+        identifier: container_security
+        template:
+          templateRef: container_security_scan
+          versionLabel: "1.0.0"
+          templateInputs:
+            spec:
+              execution:
+                steps:
+                  - stepGroup:
+                      identifier: Container_Security
+                      steps:
+                        - parallel:
+                            - step:
+                                identifier: trivy
+                                spec:
+                                  target:
+                                    name: <+repeat.item>-service
+                                    variant: <+pipeline.sequenceId>
+                                  image:
+                                    name: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
+                                    tag: <+pipeline.sequenceId>
+                            - step:
+                                identifier: HarnessContainer
+                                spec:
+                                  image:
+                                    name: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
+                                    tag: <+pipeline.sequenceId>
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          maxConcurrency: 2
+        when:
+          condition: <+pipeline.variables.RUN_MODE> == "full"
+
+    # ══════════════════════════════════════════════════════════════════════
+    # STAGE 4: PUSH (If security gates pass)
+    # ══════════════════════════════════════════════════════════════════════
+    - stage:
+        name: Push Images
+        identifier: push_images
+        type: CI
+        when:
+          condition: <+pipeline.variables.RUN_MODE> == "full"
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - stepGroup:
+                  name: Push Images
+                  identifier: push_images_group
+                  steps:
+                    - step:
+                        type: BuildAndPushDockerRegistry
+                        name: Push Docker Image
+                        identifier: push_docker_image
+                        spec:
+                          connectorRef: DockerCristian
+                          repo: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
+                          tags:
+                            - <+pipeline.sequenceId>
+                            - latest
+                          caching: true
+                          dockerfile: platform/docker/go-service/Dockerfile
+                          context: .
+                          buildArgs:
+                            SERVICE_NAME: <+repeat.item>
+                          target: runtime-prebuilt
+                          optimize: true
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      maxConcurrency: 2
+
+  allowStageExecutions: true

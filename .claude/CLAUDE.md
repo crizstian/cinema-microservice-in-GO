@@ -74,3 +74,154 @@ Este proyecto usa Harness CI/CD. Tienes acceso al Harness MCP Server (harness-mc
   1. Formula una query clara y específica.
   2. Resume los hallazgos relevantes para la tarea actual.
   3. Referencia explícitamente si la información es reciente o puede estar sujeta a cambios.
+
+---
+
+## CI/CD Pipeline Architecture (v3.3)
+
+### Pipeline Overview
+
+El pipeline `CI-Unified-v3` está optimizado para monorepo de microservicios Go.
+
+**Flujo simplificado:**
+```
+PR Open → Validate Code (no container)
+PR Merge → Build + Scan + Conditional Push
+```
+
+### Stages
+
+| Stage | Trigger | Duración | Descripción |
+|-------|---------|----------|-------------|
+| Validate Code | `RUN_MODE=validate` | ~3-5 min | Lint, security, tests per-service |
+| Build and Release | `RUN_MODE=full` | ~5-8 min | Build, scan, push (si pasa gate) |
+
+### Security Scanners (7 total)
+
+**Code Security (Stage 1):**
+- Harness SAST (Semgrep) - vulnerabilidades de código
+- Snyk SAST - vulnerabilidades de código (segundo opinion)
+- Harness SCA - dependencias
+- Snyk SCA - dependencias (segundo opinion)  
+- Gitleaks - secretos en código
+
+**Container Security (Stage 2):**
+- Trivy - vulnerabilidades de imagen + SBOM
+- Harness Container - vulnerabilidades de imagen
+
+### Security Gate
+
+```
+Critical: 0 (bloquea)
+High: ≤5 (permite)
+```
+
+Si falla: imagen NO se publica, PR recibe comentario con detalles.
+
+### Variables de Pipeline
+
+| Variable | Valores | Descripción |
+|----------|---------|-------------|
+| `RUN_MODE` | validate, full | Modo de ejecución |
+| `SERVICES` | booking,movie,... | Servicios a procesar (CSV) |
+| `COVERAGE_THRESHOLD` | 80 | Cobertura mínima (%) |
+| `SECURITY_GATE_CRITICAL` | 0 | Vulnerabilidades critical permitidas |
+| `SECURITY_GATE_HIGH` | 5 | Vulnerabilidades high permitidas |
+
+### Semantic Versioning
+
+El pipeline determina el bump automáticamente según el prefijo del branch:
+
+| Prefijo | Bump | Ejemplo |
+|---------|------|---------|
+| `major/`, `breaking/` | major | v1.0.0 → v2.0.0 |
+| `feature/`, `feat/` | minor | v1.0.0 → v1.1.0 |
+| `fix/`, otros | patch | v1.0.0 → v1.0.1 |
+
+### Looping Strategy (Monorepo)
+
+Cada StepGroup itera sobre `SERVICES.split(",")` con concurrency controlada:
+- Code Quality: `maxConcurrency: 3`
+- Code Security: `maxConcurrency: 2`
+- Tests: `maxConcurrency: 3`
+- Build & Publish: `maxConcurrency: 2`
+
+### Archivos Clave
+
+- Pipeline: `.harness/pipelines/CI/CI-Unified-v3.yaml`
+- Dockerfile: `platform/docker/go-service/Dockerfile`
+- Strategy: `docs/operations/ci-cd-strategy.md`
+- Runbook: `docs/operations/ci-runbook.md`
+
+---
+
+## Template Architecture (Multi-Language)
+
+### Estructura de Templates
+
+```
+.harness/templates/
+├── stages/
+│   ├── security-scan-code.yaml    # Compartido (cualquier lenguaje)
+│   └── container-scan.yaml        # Compartido (cualquier imagen)
+├── steps/
+│   ├── build-go.yaml              # Go: go build, go test, golint
+│   ├── build-java.yaml            # Java: maven/gradle, junit
+│   ├── build-node.yaml            # Node: npm/yarn/pnpm, jest
+│   └── build-python.yaml          # Python: pip/poetry, pytest
+├── pipelines/
+│   └── ci-template-go.yaml        # Ejemplo de pipeline con templates
+└── policies/
+    └── require-security-scans.rego # OPA Policy para gobernanza
+```
+
+### Estrategia de Reutilización
+
+| Componente | Tipo | Reutilización |
+|------------|------|---------------|
+| Security Scan Code | Stage Template | 100% (language-agnostic) |
+| Container Scan | Stage Template | 100% (image-agnostic) |
+| Build Steps | Step Template | Por lenguaje |
+| Evaluate Gates | Inline en Stage | 100% (en stage template) |
+| Policy Enforcement | OPA Policy | 100% (forzado) |
+
+### OPA Policies Requeridas
+
+Las siguientes policies deben estar configuradas:
+
+```rego
+# require-security-scans.rego
+- Pipeline debe tener SecurityTests stage
+- Docker builds requieren container scan
+- Gitleaks es obligatorio
+- Security stages necesitan policySetRef
+- ManualIntervention en security gates
+- Solo templates aprobados
+```
+
+### Usar Templates en Pipelines
+
+```yaml
+# Referencia a Stage Template
+- stage:
+    name: Security Scan - Code
+    template:
+      templateRef: security_scan_code
+      versionLabel: "1.0.0"
+      templateInputs:
+        spec:
+          execution:
+            steps:
+              - stepGroup:
+                  identifier: SCA
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+
+# Referencia a Step Template
+- step:
+    name: Build Go
+    template:
+      templateRef: build_go
+      versionLabel: "1.0.0"
+```
