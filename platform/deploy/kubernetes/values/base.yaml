@@ -1,6 +1,11 @@
 # Base Values - Common defaults for all environments and services
 # These values are overridden by environment and service-specific values
 
+# Database credentials (from Harness Secrets Manager)
+database:
+  user: <+secrets.getValue("db_user")>
+  password: <+secrets.getValue("db_password")>
+
 # Node placement
 nodeOwner: cristian-ramirez
 nodeTaintValue: selatam_demo_space
