@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra-mongodb
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: infrastructure
+    app.kubernetes.io/part-of: cinema-microservices
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/crizstian/cinema-microservice-in-GO.git
+    targetRevision: monorepo
+    path: platform/deploy/gitops/infrastructure/mongodb/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cinema-infra
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
