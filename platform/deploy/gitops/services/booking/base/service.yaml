@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: booking-service
+  labels:
+    app.kubernetes.io/name: booking-service
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: booking-service

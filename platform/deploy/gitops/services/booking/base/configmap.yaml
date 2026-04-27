@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: booking-service-config
+  labels:
+    app.kubernetes.io/name: booking-service
+data:
+  SERVICE_NAME: booking-service
+  SERVICE_PORT: "8001"
+  DB_NAME: booking
+  LOG_LEVEL: info

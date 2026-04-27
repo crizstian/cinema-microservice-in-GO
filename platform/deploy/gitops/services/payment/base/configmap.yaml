@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payment-service-config
+  labels:
+    app.kubernetes.io/name: payment-service
+data:
+  SERVICE_NAME: payment-service
+  SERVICE_PORT: "8007"
+  DB_NAME: payment
+  LOG_LEVEL: info

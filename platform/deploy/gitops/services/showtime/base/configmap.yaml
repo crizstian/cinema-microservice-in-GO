@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: showtime-service-config
+  labels:
+    app.kubernetes.io/name: showtime-service
+data:
+  SERVICE_NAME: showtime-service
+  SERVICE_PORT: "8006"
+  DB_NAME: showtime
+  LOG_LEVEL: info

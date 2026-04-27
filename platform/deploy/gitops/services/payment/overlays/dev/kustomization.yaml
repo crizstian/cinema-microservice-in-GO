@@ -1,0 +1,47 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cinema-dev
+
+resources:
+  - ../../base
+
+commonLabels:
+  app.kubernetes.io/environment: dev
+  harness.io/envRef: dev
+
+images:
+  - name: crizstian/payment-service
+    newTag: latest
+
+patches:
+  - target:
+      kind: Deployment
+      name: payment-service
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: ConfigMap
+      name: payment-service-config
+    patch: |
+      - op: add
+        path: /data/LOG_LEVEL
+        value: debug
+      - op: add
+        path: /data/DB_SERVERS
+        value: mongodb.cinema-dev.svc.cluster.local:27017
+      - op: add
+        path: /data/NATS_URL
+        value: nats://nats.cinema-dev.svc.cluster.local:4222
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: payment-service
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2

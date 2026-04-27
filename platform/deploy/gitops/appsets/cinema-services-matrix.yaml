@@ -1,0 +1,81 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cinema-services
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: cinema-microservices
+spec:
+  goTemplate: true
+  goTemplateOptions: [ "missingkey=error" ]
+  generators:
+    - matrix:
+        generators:
+          # Git Generator: discovers clusters from config.json files
+          - git:
+              repoURL: https://github.com/crizstian/cinema-microservice-in-GO.git
+              revision: monorepo
+              files:
+                - path: "platform/deploy/gitops/cluster-config/*/config.json"
+          # List Generator: defines services to deploy
+          - list:
+              elements:
+                - service: booking
+                  port: "8001"
+                - service: cinema
+                  port: "8003"
+                - service: movie
+                  port: "8002"
+                - service: notification
+                  port: "8008"
+                - service: payment
+                  port: "8007"
+                - service: seat
+                  port: "8005"
+                - service: showtime
+                  port: "8006"
+                - service: user
+                  port: "8004"
+  template:
+    metadata:
+      name: "{{.service}}-{{.environment}}"
+      labels:
+        app.kubernetes.io/name: "{{.service}}-service"
+        app.kubernetes.io/environment: "{{.environment}}"
+        app.kubernetes.io/part-of: cinema-microservices
+        harness.io/serviceRef: "{{.service}}-service-gitops"
+        harness.io/envRef: "{{.environment}}"
+        harness.io/buildRef: "{{.image_tag}}"
+      annotations:
+        argocd.argoproj.io/manifest-generate-paths: "platform/deploy/gitops/services/{{\
+          .service}}/overlays/{{.environment}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/crizstian/cinema-microservice-in-GO.git
+        targetRevision: monorepo
+        path: "platform/deploy/gitops/services/{{.service}}/overlays/{{.environment}}"
+        kustomize:
+          images:
+            - "crizstian/{{.service}}-service:{{.image_tag}}"
+          commonLabels:
+            harness.io/buildRef: "{{.image_tag}}"
+      destination:
+        server: "{{.server_address}}"
+        namespace: "{{.namespace}}"
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: true
+        syncOptions:
+          - CreateNamespace=true
+          - ApplyOutOfSyncOnly=true
+          - PruneLast=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+      revisionHistoryLimit: 5

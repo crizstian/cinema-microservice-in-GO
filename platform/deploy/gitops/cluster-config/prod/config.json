@@ -1,0 +1,29 @@
+{
+  "cluster_name": "prod",
+  "environment": "prod",
+  "namespace": "cinema-prod",
+  "server_address": "https://35.231.43.35",
+  "harness_org": "sandbox",
+  "harness_project": "CristianRamirez",
+  "image_registry": "crizstian",
+  "image_tag": "v1.0.0",
+  "replicas": 3,
+  "resources": {
+    "cpu_request": "100m",
+    "memory_request": "256Mi",
+    "cpu_limit": "1000m",
+    "memory_limit": "1Gi"
+  },
+  "database": {
+    "servers": "mongodb.cinema-prod.svc.cluster.local:27017"
+  },
+  "nats": {
+    "url": "nats://nats.cinema-prod.svc.cluster.local:4222"
+  },
+  "ingress": {
+    "host": "cinema.prod.example.com"
+  },
+  "node_selector": {
+    "owner": "cristian-ramirez"
+  }
+}

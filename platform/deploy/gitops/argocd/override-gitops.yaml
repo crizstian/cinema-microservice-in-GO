@@ -1,0 +1,122 @@
+## Harness GitOps Agent - Overrides File
+## For default overrides, please refer to https://github.com/harness/gitops-helm/blob/main/values.yaml
+## Argo CD overrides can be found at https://github.com/argoproj/argo-helm/blob/main/charts/argo-cd/values.yaml
+
+# <---Harness configuration overrides--->
+harness:
+  identity:
+    accountIdentifier: EeRjnXTnS4GrLG5VNNJZUw
+    orgIdentifier: sandbox
+    projectIdentifier: CristianRamirez
+    agentIdentifier: selatamgke
+
+  secrets:
+    agentSecret: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFdlFJQkFEQU5CZ2txaGtpRzl3MEJBUUVGQUFTQ0JLY3dnZ1NqQWdFQUFvSUJBUURTZEpaSHZrbDdxZzRICjFJSlhjNkRKaGRZczA4SlFFeXoyUEpvM1VuYXN3K29iTE5QbGZ3UmdCd1kxazQwMDFoY2hWV1lyS3dlVEl6Y2IKaEtwaVVpcGFKbWk1NHlRZVdWVkdWalVqbWNLSHE1R1ZQOGR5emtQeWxCUkVaV3pVNm9GekVDd2lOTHdmc1VCbgpnOE1rTnF1bVBLK0dMdXNuSGxUTitmWlAzbTQ1MTlVemllL3ZMOGdDdW9oR2RvUUJUV1RsQlFIRzlwUW5hQlNhClZWMlljQ1NDT1MrbmlPNm5jb2Uzc0ZhNHhjd3czVmVIQm5GRS92V3RPbkliMnVhT2U3L0V5eFk5KytGWTI2Q1YKS3JBNG1nNDVaL3BTRk1na2dQa3pWYktpMHF1dG1yVnNQcElobUJTU1Bid0hGOFVpeSs5ZUprakd4eklkYlBJNQp2N1JaSUx4SEFnTUJBQUVDZ2dFQUt2ZlR3UFVZWXErL0twa1lQWXVsamMrT0FWd0F4Y0dNZ2Yrd2l0QUMyOVlxCkkzODlDaE9yVElIU29qaXNjVmV1cEVjZjAzdDNFZkwwS3VHa3VldEZxMTlCTFlhekZxRXRtRzA4YnpiUzhVazEKc1kreWhIMlpnTnI3NGxVRTZkbXhNVkZoZVdCajhtS0pvRGpXTER3ZlFwTU1VU3llSlQvN2w0eEwzbFd2RW83ZwpFM1NNOERHamJKZmF1YzA4RVlkZzlkY0NJNmNwcjVmY3lZVW1URWhkZ3hLOFhzb1djeEQwWWdHUTJWdWhwMVNWCko3dWdkejVybGFqb2dPRHVnaGhpZzdsMUcrMGl1TE5kMUNIc0greTN6SnpqbDJieDF6N2dDSmkwUytDSEVQSEYKVzMrMEhmdjBWWThOaXI1SVUrZFl2ZThGZ1gvSUpiUnpjUlRYVDVQYXhRS0JnUURic2hJNW5ML1hiVUtKaXUwVQpkUGhyOWl5SGM4MEdKQjJmU1c2ekFXWWd6cExsNEN1cFF5Q2NUK0ZrelJtb0pycWpKNEJYbzVKTExmZ0lNSzFGCmRuMWtRZ0JUbk41ZjViaHQ2TVNtMHIrekc3M2FsajBsbmZBc0dQTjZ2MEliekQ1eDFIdVIyMGlLUndQMHROM20KT2MydE5jc1dybnh5STZzWWhQRTZNVHZWYXdLQmdRRDFPNTluZTQwWVhYYU4xR3RRZTFmclFqNTJpd3JEckpLYgp5S2JFbFNIZ1d5RVB0akdpbnVldHd3MG9FUWRWc3NEMU5OOWJyL2Vic2x5cmMzQ2FwN29vZ0laLzFNSWVDQ05vCmFCVHk4dkovSXIyV1VlTUlkL1EzaVdUM1FpWVFKTmZjMC9YY3RENWZWMjhzeXhrTVFuMm9Zc1dRSHNxZU1xQk0Ka1FpRVlqVFBsUUtCZ0ZpWHlubXBHRU9MTDlXL1RETi9wOTRCZTV0enV5M0t5cGM5U1lLdUFiMGhFR1BhcmtDbgpiVE1iazB6TzJKWFNhRmo2eU9xT2I2UVplWGYwQ1N1RnlMTHhXcWhkRGQrbUIyVnJCRUl4b2xSYno0ZWlKaTVSCkxsVGFDdlZvd3dQcXJSUENGOEtOcHdiNzlFQnQzejNEK1lqcnRHWUZIdkg0S0RyUEFXZnlDcXJaQW9HQWVrUSsKeHBab0U0VE56Z3JoY2wvOHhyUGhkckwrSys4SHJab040NmRERzV2ejBPU1N2TFNqYUJQK3BFSlJPTjRGckh1dQovUVN2M0RYQ1ZFMGJFRkNkMVFHM2pWWmpiaHU2bzV4NURXUXBtVStWM0xONUVValZQemRHV3F6bFUxazdNc09QCktubkhPenZabHlpdmxWZzFWRlhpa0dkNXVBUWZ2ZXoxcFNOZGx6MENnWUVBenNtZ3BhT0k2d3ZQaW5tSXYzdUoKWE8rdVdBNUM2YTFqZVJTZmM4bGQraE1iZW04VzlhQ3VRcTEyMHU2cDN6U2dCM2VLUWl0VjdXSlpTSmZOSEdaYwpPdzd3SHZoMklFeW53Sktod09ENis2c25MNGhIaER2cHNPSktQUlJTMk9JckEvQkVGS1lrVDdjWjA2eG15Wkk4ClFUNVNzK01Ic3Q1QmZOOEtFK0VWcFhNPQotLS0tLUVORCBSU0EgUFJJVkFURSBLRVktLS0tLQo=
+    # <---CA data overrides--->
+    caData:
+      enabled: false
+      secret:
+    redisPassword: lAnrH9D8ANw7UA==
+
+  gitopsServerHost: https://app.harness.io/gratis/gitops
+  networkPolicy:
+    create: false
+  createClusterRoles: true
+
+  configMap:
+    logLevel: DEBUG
+
+    # <---ArgoCD service names for BYOA--->
+    argocd:
+      redis: "argocd-redis-ha-haproxy"
+      redisHa: "argocd-redis-ha"
+      redisHaProxy: "argocd-redis-ha-haproxy"
+      redisSvc: "argocd-redis-ha-haproxy"
+      redisHaProxySvc: "argocd-redis-ha-haproxy"
+
+    # <---Agent communication protocol details--->
+    http:
+      agentHttpTarget: https://app.harness.io/gitops
+      tlsEnabled: false
+      certPath: /tmp/ca.bundle
+
+    reconcile:
+      appsetReconcile: true
+
+  # <---Disaster Recovery override values--->
+  disasterRecovery:
+    enabled: false
+    identifier:
+
+      # <---Openshift override values--->
+  openshift:
+    enabled: false
+  flux:
+    enabled: false
+  argocdHarnessPlugin:
+    enabled: false
+
+argo-cd:
+  enabled: false
+
+# Redis HA configuration (BYOA with existing ArgoCD redis-ha)
+redis-ha:
+  enabled: true
+  name: "argocd-redis-ha"
+  haproxy:
+    enabled: true
+  existingSecret: argocd-redis
+
+# <---Agent overrides--->
+agent:
+  harnessName: se-latam-gke
+  image:
+    repository: docker.io/harness/gitops-agent
+    tag: v0.115.0
+
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  # Schedule on agent-nodepool
+  nodeSelector:
+    cloud.google.com/gke-nodepool: agent-nodepool
+
+  # Toleration for dedicated delegate nodepool
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "delegate"
+      effect: "NoSchedule"
+
+  fipsEnabled: false
+
+  autoscaling:
+    enabled: false
+
+  highAvailability: false
+  # <---Agent Proxy Config overrides--->
+  proxy:
+    enabled: false
+    httpProxy:
+    httpsProxy:
+
+      # <---Agent upgrader overrides--->
+upgrader:
+  enabled: true
+  image: docker.io/harness/upgrader:latest
+
+  config:
+    # -- Proxy configuration for upgrader
+    # HTTPS_PROXY=proxyScheme://proxyUser:proxyPassword@proxyHost:proxyPort
+    proxyHost:
+    proxyPort:
+    proxyScheme:
+    noProxy:
+    proxyUser:
+    proxyPassword:

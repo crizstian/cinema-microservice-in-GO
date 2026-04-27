@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cinema-service-config
+  labels:
+    app.kubernetes.io/name: cinema-service
+data:
+  SERVICE_NAME: cinema-service
+  SERVICE_PORT: "8003"
+  DB_NAME: cinema
+  LOG_LEVEL: info

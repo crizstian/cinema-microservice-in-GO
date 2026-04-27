@@ -1,0 +1,47 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cinema-prod
+
+resources:
+  - ../../base
+
+commonLabels:
+  app.kubernetes.io/environment: prod
+  harness.io/envRef: prod
+
+images:
+  - name: crizstian/seat-service
+    newTag: latest
+
+patches:
+  - target:
+      kind: Deployment
+      name: seat-service
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: ConfigMap
+      name: seat-service-config
+    patch: |
+      - op: add
+        path: /data/LOG_LEVEL
+        value: warn
+      - op: add
+        path: /data/DB_SERVERS
+        value: mongodb.cinema-prod.svc.cluster.local:27017
+      - op: add
+        path: /data/NATS_URL
+        value: nats://nats.cinema-prod.svc.cluster.local:4222
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: seat-service
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 10

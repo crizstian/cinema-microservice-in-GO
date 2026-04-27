@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: movie-service-config
+  labels:
+    app.kubernetes.io/name: movie-service
+data:
+  SERVICE_NAME: movie-service
+  SERVICE_PORT: "8002"
+  DB_NAME: movie
+  LOG_LEVEL: info

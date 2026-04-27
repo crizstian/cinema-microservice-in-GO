@@ -1,0 +1,277 @@
+pipeline:
+  name: GitOps - AppSet
+  identifier: GitOps_AppSet
+  projectIdentifier: CristianRamirez
+  orgIdentifier: sandbox
+  tags: {}
+  stages:
+    - stage:
+        name: Dev
+        identifier: Dev
+        description: ""
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          service:
+            serviceRef: <+input>
+            serviceInputs: <+input>
+          execution:
+            steps:
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Release Repo
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec:
+                    variables: []
+                    allowEmptyCommit: true
+              - step:
+                  type: HarnessApproval
+                  name: PR Approval
+                  identifier: PR_Approval
+                  spec:
+                    approvalMessage: Please review the following information and approve the
+                      pipeline progression
+                    includePipelineExecutionHistory: true
+                    isAutoRejectEnabled: false
+                    approvers:
+                      userGroups:
+                        - account.SalesEngineers
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                    approverInputs: []
+                  timeout: 1d
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  type: GitOpsSync
+                  name: GitOpsSync
+                  identifier: GitOpsSync
+                  spec:
+                    prune: true
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    retryStrategy: {}
+                    retry: false
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      respectIgnoreDifferences: false
+                      serverSideApply: false
+                    applicationRegex: <+pipeline.stages.Dev.spec.GitopsClusters.gitops.clustersData[0].clusterName>
+                    showResourceProgress: true
+                  timeout: 10m
+            rollbackSteps:
+              - step:
+                  type: RevertPR
+                  name: RevertPR
+                  identifier: RevertPR
+                  spec:
+                    commitId: <+pipeline.stages.Dev.spec.execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: Rollback
+                  timeout: 10m
+              - step:
+                  type: MergePR
+                  name: MergePR
+                  identifier: MergePR
+                  spec:
+                    deleteSourceBranch: false
+                    variables: []
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: GitOpsFetchLinkedApps
+                  identifier: GitOpsFetchLinkedApps
+                  spec: {}
+                  timeout: 10m
+              - step:
+                  type: GitOpsSync
+                  name: GitOpsSync_1
+                  identifier: GitOpsSync_1
+                  spec:
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: false
+                    retryStrategy: {}
+                    retry: false
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      respectIgnoreDifferences: false
+                      serverSideApply: false
+                    applicationRegex: <+pipeline.stages.Dev.spec.GitopsClusters.gitops.clustersData[0].clusterName>
+                  timeout: 10m
+          environment:
+            environmentRef: dev
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: incluster
+                agentIdentifier: gitops
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+    - stage:
+        name: PROD Gate
+        identifier: PROD_Gate
+        description: ""
+        type: Approval
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: PROD
+                  identifier: PROD
+                  type: HarnessApproval
+                  timeout: 1d
+                  spec:
+                    approvalMessage: |-
+                      Please review the following information
+                      and approve the pipeline progression
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                      userGroups:
+                        - account.SalesEngineers
+                    isAutoRejectEnabled: false
+                    approverInputs: []
+        tags: {}
+    - stage:
+        name: Prod
+        identifier: Prod
+        description: ""
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          execution:
+            steps:
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Release Repo
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  type: GitOpsSync
+                  name: GitOpsSync
+                  identifier: GitOpsSync
+                  spec:
+                    prune: true
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    retryStrategy: {}
+                    retry: false
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      respectIgnoreDifferences: false
+                      serverSideApply: false
+                    applicationRegex: <+pipeline.stages.Prod.spec.GitopsClusters.gitops.clustersData[0].clusterName>
+                    showResourceProgress: true
+                  timeout: 10m
+            rollbackSteps:
+              - step:
+                  type: RevertPR
+                  name: RevertPR_1
+                  identifier: RevertPR_1
+                  spec:
+                    commitId: <+pipeline.stages.Prod.spec.execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: Rollback Prod
+                  timeout: 10m
+              - step:
+                  type: MergePR
+                  name: MergePR
+                  identifier: MergePR
+                  spec:
+                    deleteSourceBranch: false
+                    variables: []
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: GitOpsFetchLinkedApps
+                  identifier: GitOpsFetchLinkedApps
+                  spec: {}
+                  timeout: 10m
+              - step:
+                  type: GitOpsSync
+                  name: GitOpsSync
+                  identifier: GitOpsSync
+                  spec:
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: false
+                    retryStrategy: {}
+                    retry: false
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      respectIgnoreDifferences: false
+                      serverSideApply: false
+                    applicationRegex: <+pipeline.stages.Prod.spec.GitopsClusters.gitops.clustersData[0].clusterName>
+                  timeout: 10m
+          service:
+            useFromStage:
+              stage: Dev
+          environment:
+            environmentRef: sandbox
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: sesandbox
+                agentIdentifier: gitops
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback

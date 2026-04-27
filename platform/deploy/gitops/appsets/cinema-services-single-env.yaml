@@ -1,0 +1,52 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cinema-services-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: cinema-microservices
+    app.kubernetes.io/environment: dev
+spec:
+  goTemplate: true
+  generators:
+    - list:
+        elements:
+          - service: booking
+            port: "8001"
+          - service: cinema
+            port: "8003"
+          - service: movie
+            port: "8002"
+          - service: notification
+            port: "8008"
+          - service: payment
+            port: "8007"
+          - service: seat
+            port: "8005"
+          - service: showtime
+            port: "8006"
+          - service: user
+            port: "8004"
+  template:
+    metadata:
+      name: '{{.service}}-dev'
+      labels:
+        app.kubernetes.io/name: '{{.service}}-service'
+        app.kubernetes.io/environment: dev
+        harness.io/serviceRef: '{{.service}}-service-gitops'
+        harness.io/envRef: dev
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/crizstian/cinema-microservice-in-GO.git
+        targetRevision: monorepo
+        path: 'platform/deploy/gitops/services/{{.service}}/overlays/dev'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: cinema-dev
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: true
+        syncOptions:
+          - CreateNamespace=true

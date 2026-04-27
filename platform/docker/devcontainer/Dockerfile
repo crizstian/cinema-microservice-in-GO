@@ -87,6 +87,12 @@ ARG KUBECTL_VERSION=v1.30.0
 RUN curl -L "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl && \
   chmod +x /usr/local/bin/kubectl
 
+# ---------- Helm ----------
+ARG HELM_VERSION=v3.15.0
+RUN curl -fsSL https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz | tar xz && \
+    mv linux-amd64/helm /usr/local/bin/helm && \
+    rm -rf linux-amd64 && \
+    chmod +x /usr/local/bin/helm
 
 # ---------- Google Cloud SDK ----------
 RUN curl -sSL https://dl.google.com/dl/cloudsdk/release/google-cloud-sdk.tar.gz -o /tmp/google-cloud-sdk.tar.gz && \
@@ -114,6 +120,12 @@ RUN git clone --depth=1 https://github.com/harness/harness-skills.git .harness-s
 
 # ---------- Workspace ----------
 RUN mkdir -p /workspace && chown -R devuser:devuser /workspace
+
+# ---------- User config directories ----------
+RUN mkdir -p /home/devuser/.config/helm \
+             /home/devuser/.cache && \
+    chown -R devuser:devuser /home/devuser/.config \
+                             /home/devuser/.cache
 
 USER devuser
 WORKDIR /workspace
