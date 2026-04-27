@@ -15,3 +15,11 @@ autoscaling:
 
 pdb:
   minAvailable: 1
+
+# Notification-specific config (Email)
+extraConfig:
+  EMAIL: notifications@cinema.local
+
+# Notification-specific secrets (Email credentials)
+extraSecrets:
+  EMAIL_PASS: <+secrets.getValue("email_password")>

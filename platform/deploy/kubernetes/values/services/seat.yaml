@@ -16,3 +16,17 @@ autoscaling:
 
 pdb:
   minAvailable: 1
+
+# Seat uses legacy MongoDB config pattern
+mongodb:
+  uri: mongodb://<+secrets.getValue("db_user")>:<+secrets.getValue("db_password")>@mongodb.cinema-dev.svc.cluster.local:27017
+  database: seat
+
+# Seat-specific config (Redis for seat holds)
+extraConfig:
+  REDIS_ADDR: redis.cinema-dev.svc.cluster.local:6379
+  HOLD_TTL_SECONDS: "300"
+
+# Seat-specific secrets (Redis)
+extraSecrets:
+  REDIS_PASS: <+secrets.getValue("redis_password")>

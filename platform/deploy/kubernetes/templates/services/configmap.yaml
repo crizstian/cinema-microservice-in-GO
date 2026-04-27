@@ -39,6 +39,11 @@ data:
   NOTIFICATION_URL: {{ quote .Values.services.notification }}
   {{- end }}
 
+  # NATS messaging
+  {{- if .Values.nats }}
+  NATS_URL: {{ quote .Values.nats.url }}
+  {{- end }}
+
   # Service-specific extra config
   {{- range $key, $value := .Values.extraConfig }}
   {{ $key }}: {{ quote $value }}

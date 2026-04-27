@@ -19,3 +19,8 @@ autoscaling:
 
 pdb:
   minAvailable: 1
+
+# Booking-specific config (service URLs)
+extraConfig:
+  SEAT_SERVICE_URL: http://seat-service.cinema-dev.svc.cluster.local:8005
+  SHOWTIME_SERVICE_URL: http://showtime-service.cinema-dev.svc.cluster.local:8006
