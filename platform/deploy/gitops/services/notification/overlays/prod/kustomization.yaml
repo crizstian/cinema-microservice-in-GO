@@ -1,14 +1,14 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: cinema-<+env.identifier>
+namespace: cinema-prod
 
 resources:
   - ../../base
 
 commonLabels:
-  app.kubernetes.io/environment: <+env.identifier>
-  harness.io/envRef: <+env.identifier>
+  app.kubernetes.io/environment: prod
+  harness.io/envRef: prod
   harness.io/serviceRef: notification-service
 
 images:
