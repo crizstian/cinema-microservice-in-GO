@@ -1199,16 +1199,16 @@ pipeline:
                   type: Verify
                   name: Continuous Verification
                   identifier: continuous_verification
-                  timeout: 2h
+                  timeout: 30m
                   spec:
                     isMultiServicesOrEnvs: false
-                    type: Auto
+                    type: Canary
                     monitoredService:
                       type: Default
                       spec: {}
-                    spec:
-                      sensitivity: LOW
-                      duration: 5m
+                    sensitivity: LOW
+                    duration: 10m
+                    deploymentTag: <+serviceConfig.artifacts.primary.tag>
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -1440,9 +1440,9 @@ pipeline:
     # PROD GATE - JIRA APPROVAL
     # ============================================================
     - stage:
-        name: Prod Gate
-        identifier: prod_gate
-        description: Jira-based approval gate for production deployment
+        name: Staging Gate
+        identifier: staging_gate
+        description: Jira-based approval gate for staging deployment
         type: Approval
         when:
           pipelineStatus: Success
@@ -1493,9 +1493,9 @@ pipeline:
     # ============================================================
     - parallel:
         - stage:
-            name: GitOps Prod1
-            identifier: gitops_prod1
-            description: Deploy to Prod1 with Argo Rollouts
+            name: GitOps Staging
+            identifier: gitops_staging
+            description: Deploy to Staging with Argo Rollouts
             type: Deployment
             when:
               pipelineStatus: Success
@@ -1525,7 +1525,7 @@ pipeline:
                             value: "2"
                           - name: environment
                             type: String
-                            value: prod1
+                            value: staging
                         allowEmptyCommit: true
                   - step:
                       type: HarnessApproval
@@ -1534,7 +1534,7 @@ pipeline:
                       spec:
                         approvalMessage: |
                           Review GitOps PR for <+repeat.item>
-                          Environment: Prod1
+                          Environment: Staging
                           Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.stages.gitops_dev.variables.RESOLVED_TAG>
                         includePipelineExecutionHistory: true
                         isAutoRejectEnabled: false
@@ -1568,7 +1568,7 @@ pipeline:
                         dryRun: false
                         applyOnly: false
                         forceApply: false
-                        applicationRegex: <+repeat.item>servicegitops-prod1
+                        applicationRegex: <+repeat.item>servicegitops-staging
                         syncOptions:
                           skipSchemaValidation: false
                           autoCreateNamespace: true
@@ -1611,9 +1611,9 @@ pipeline:
                               set -euo pipefail
 
                               SERVICE="<+repeat.item>"
-                              NAMESPACE="cinema-prod1"
+                              NAMESPACE="cinema-staging"
 
-                              echo "Promoting ${SERVICE} canary in Prod1..."
+                              echo "Promoting ${SERVICE} canary in Staging..."
                               kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE}
                         environmentVariables: []
                         outputVariables: []
@@ -1624,7 +1624,7 @@ pipeline:
                       timeout: 4h
                       spec:
                         approvalMessage: |
-                          Canary at <+pipeline.variables.CANARY_WEIGHT>% for <+repeat.item> in Prod1
+                          Canary at <+pipeline.variables.CANARY_WEIGHT>% for <+repeat.item> in Staging
                           Approve full promotion?
                         includePipelineExecutionHistory: true
                         isAutoRejectEnabled: false
@@ -1637,16 +1637,16 @@ pipeline:
                       type: Verify
                       name: Continuous Verification
                       identifier: continuous_verification
-                      timeout: 2h
+                      timeout: 30m
                       spec:
                         isMultiServicesOrEnvs: false
-                        type: Auto
+                        type: Canary
                         monitoredService:
                           type: Default
                           spec: {}
-                        spec:
-                          sensitivity: MEDIUM
-                          duration: 10m
+                        sensitivity: MEDIUM
+                        duration: 10m
+                        deploymentTag: <+serviceConfig.artifacts.primary.tag>
                       failureStrategies:
                         - onFailure:
                             errors:
@@ -1669,18 +1669,18 @@ pipeline:
                               set -euo pipefail
 
                               SERVICE="<+repeat.item>"
-                              NAMESPACE="cinema-prod1"
+                              NAMESPACE="cinema-staging"
 
                               kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE} --full
                               kubectl argo rollouts status ${SERVICE} -n ${NAMESPACE} --timeout 300s
 
-                              echo "Full promotion completed for ${SERVICE} in Prod1"
+                              echo "Full promotion completed for ${SERVICE} in Staging"
                         environmentVariables: []
                         outputVariables: []
                   - step:
                       type: JiraUpdate
-                      name: Jira Update - Prod1 Complete
-                      identifier: jira_update_prod1
+                      name: Jira Update - Staging Complete
+                      identifier: jira_update_staging
                       timeout: 10m
                       spec:
                         connectorRef: account.Harness_JIRA
@@ -1691,7 +1691,7 @@ pipeline:
                               PROD1 DEPLOYMENT COMPLETE
 
                               Service: <+repeat.item>
-                              Environment: Prod1
+                              Environment: Staging
                               Status: DEPLOYED
                 rollbackSteps:
                   - step:
@@ -1706,7 +1706,7 @@ pipeline:
                           type: Inline
                           spec:
                             script: |
-                              kubectl argo rollouts abort <+repeat.item> -n cinema-prod1 || true
+                              kubectl argo rollouts abort <+repeat.item> -n cinema-staging || true
                         environmentVariables: []
                         outputVariables: []
                   - step:
@@ -1715,7 +1715,7 @@ pipeline:
                       identifier: RevertPR
                       spec:
                         commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
-                        prTitle: "Rollback: <+repeat.item> prod1"
+                        prTitle: "Rollback: <+repeat.item> staging"
                       timeout: 10m
                   - step:
                       type: MergePR
@@ -1740,7 +1740,7 @@ pipeline:
                         dryRun: false
                         applyOnly: false
                         forceApply: true
-                        applicationRegex: <+repeat.item>servicegitops-prod1
+                        applicationRegex: <+repeat.item>servicegitops-staging
                         syncOptions:
                           skipSchemaValidation: false
                           autoCreateNamespace: false
@@ -1750,10 +1750,10 @@ pipeline:
                           prunePropagationPolicy: foreground
                           serverSideApply: true
               environment:
-                environmentRef: prod1
+                environmentRef: staging
                 deployToAll: false
                 gitOpsClusters:
-                  - identifier: prod1cluster
+                  - identifier: stagingcluster
                     agentIdentifier: selatamgke
             tags: {}
             failureStrategies:
@@ -1770,9 +1770,9 @@ pipeline:
             delegateSelectors:
               - helm-delegate
         - stage:
-            name: GitOps Prod2
-            identifier: gitops_prod2
-            description: Deploy to Prod2 with Argo Rollouts
+            name: GitOps Prod
+            identifier: gitops_prod
+            description: Deploy to Prod with Argo Rollouts
             type: Deployment
             when:
               pipelineStatus: Success
@@ -1802,7 +1802,7 @@ pipeline:
                             value: "2"
                           - name: environment
                             type: String
-                            value: prod2
+                            value: prod
                         allowEmptyCommit: true
                   - step:
                       type: HarnessApproval
@@ -1811,7 +1811,7 @@ pipeline:
                       spec:
                         approvalMessage: |
                           Review GitOps PR for <+repeat.item>
-                          Environment: Prod2
+                          Environment: Prod
                           Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.stages.gitops_dev.variables.RESOLVED_TAG>
                         includePipelineExecutionHistory: true
                         isAutoRejectEnabled: false
@@ -1845,7 +1845,7 @@ pipeline:
                         dryRun: false
                         applyOnly: false
                         forceApply: false
-                        applicationRegex: <+repeat.item>servicegitops-prod2
+                        applicationRegex: <+repeat.item>servicegitops-prod
                         syncOptions:
                           skipSchemaValidation: false
                           autoCreateNamespace: true
@@ -1888,9 +1888,9 @@ pipeline:
                               set -euo pipefail
 
                               SERVICE="<+repeat.item>"
-                              NAMESPACE="cinema-prod2"
+                              NAMESPACE="cinema-prod"
 
-                              echo "Promoting ${SERVICE} canary in Prod2..."
+                              echo "Promoting ${SERVICE} canary in Prod..."
                               kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE}
                         environmentVariables: []
                         outputVariables: []
@@ -1901,7 +1901,7 @@ pipeline:
                       timeout: 4h
                       spec:
                         approvalMessage: |
-                          Canary at <+pipeline.variables.CANARY_WEIGHT>% for <+repeat.item> in Prod2
+                          Canary at <+pipeline.variables.CANARY_WEIGHT>% for <+repeat.item> in Prod
                           Approve full promotion?
                         includePipelineExecutionHistory: true
                         isAutoRejectEnabled: false
@@ -1914,16 +1914,16 @@ pipeline:
                       type: Verify
                       name: Continuous Verification
                       identifier: continuous_verification
-                      timeout: 2h
+                      timeout: 30m
                       spec:
                         isMultiServicesOrEnvs: false
-                        type: Auto
+                        type: Canary
                         monitoredService:
                           type: Default
                           spec: {}
-                        spec:
-                          sensitivity: MEDIUM
-                          duration: 10m
+                        sensitivity: MEDIUM
+                        duration: 10m
+                        deploymentTag: <+serviceConfig.artifacts.primary.tag>
                       failureStrategies:
                         - onFailure:
                             errors:
@@ -1946,18 +1946,18 @@ pipeline:
                               set -euo pipefail
 
                               SERVICE="<+repeat.item>"
-                              NAMESPACE="cinema-prod2"
+                              NAMESPACE="cinema-prod"
 
                               kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE} --full
                               kubectl argo rollouts status ${SERVICE} -n ${NAMESPACE} --timeout 300s
 
-                              echo "Full promotion completed for ${SERVICE} in Prod2"
+                              echo "Full promotion completed for ${SERVICE} in Prod"
                         environmentVariables: []
                         outputVariables: []
                   - step:
                       type: JiraUpdate
-                      name: Jira Update - Prod2 Complete
-                      identifier: jira_update_prod2
+                      name: Jira Update - Prod Complete
+                      identifier: jira_update_prod
                       timeout: 10m
                       spec:
                         connectorRef: account.Harness_JIRA
@@ -1968,7 +1968,7 @@ pipeline:
                               PROD2 DEPLOYMENT COMPLETE
 
                               Service: <+repeat.item>
-                              Environment: Prod2
+                              Environment: Prod
                               Status: DEPLOYED
                 rollbackSteps:
                   - step:
@@ -1983,7 +1983,7 @@ pipeline:
                           type: Inline
                           spec:
                             script: |
-                              kubectl argo rollouts abort <+repeat.item> -n cinema-prod2 || true
+                              kubectl argo rollouts abort <+repeat.item> -n cinema-prod || true
                         environmentVariables: []
                         outputVariables: []
                   - step:
@@ -1992,7 +1992,7 @@ pipeline:
                       identifier: RevertPR
                       spec:
                         commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
-                        prTitle: "Rollback: <+repeat.item> prod2"
+                        prTitle: "Rollback: <+repeat.item> prod"
                       timeout: 10m
                   - step:
                       type: MergePR
@@ -2017,7 +2017,7 @@ pipeline:
                         dryRun: false
                         applyOnly: false
                         forceApply: true
-                        applicationRegex: <+repeat.item>servicegitops-prod2
+                        applicationRegex: <+repeat.item>servicegitops-prod
                         syncOptions:
                           skipSchemaValidation: false
                           autoCreateNamespace: false
@@ -2027,10 +2027,10 @@ pipeline:
                           prunePropagationPolicy: foreground
                           serverSideApply: true
               environment:
-                environmentRef: prod2
+                environmentRef: prod
                 deployToAll: false
                 gitOpsClusters:
-                  - identifier: prod2cluster
+                  - identifier: prodcluster
                     agentIdentifier: selatamgke
             tags: {}
             failureStrategies:
@@ -2046,346 +2046,6 @@ pipeline:
                 maxConcurrency: 1
             delegateSelectors:
               - helm-delegate
-    # ============================================================
-    # PROD3 GATE - FINAL APPROVAL
-    # ============================================================
-    - stage:
-        name: Prod3 Gate
-        identifier: prod3_gate
-        description: Final Jira approval gate for Prod3
-        type: Approval
-        when:
-          pipelineStatus: Success
-        spec:
-          execution:
-            steps:
-              - step:
-                  type: JiraApproval
-                  name: Jira Approval
-                  identifier: jira_approval_prod3
-                  timeout: 1d
-                  spec:
-                    connectorRef: account.Harness_JIRA
-                    issueKey: <+pipeline.stages.gitops_dev.spec.execution.steps.jira_create_ticket.issue.key>
-                    approvalCriteria:
-                      type: KeyValues
-                      spec:
-                        matchAnyCondition: true
-                        conditions:
-                          - key: Status
-                            operator: equals
-                            value: Approved
-                    rejectionCriteria:
-                      type: KeyValues
-                      spec:
-                        matchAnyCondition: true
-                        conditions:
-                          - key: Status
-                            operator: equals
-                            value: Rejected
-                    retryInterval: 1m
-        tags: {}
-    # ============================================================
-    # GITOPS PROD3 - FINAL PRODUCTION DEPLOYMENT
-    # ============================================================
-    - stage:
-        name: GitOps Prod3
-        identifier: gitops_prod3
-        description: Deploy to Prod3 (final region)
-        type: Deployment
-        when:
-          pipelineStatus: Success
-        spec:
-          deploymentType: Kubernetes
-          gitOpsEnabled: true
-          service:
-            useFromStage:
-              stage: gitops_dev
-          execution:
-            steps:
-              - step:
-                  type: GitOpsUpdateReleaseRepo
-                  name: Update Release Repo
-                  identifier: updateReleaseRepo
-                  timeout: 10m
-                  spec:
-                    variables:
-                      - name: image_tag
-                        type: String
-                        value: <+pipeline.stages.gitops_dev.variables.RESOLVED_TAG>
-                      - name: service_name
-                        type: String
-                        value: <+repeat.item>
-                      - name: replicas
-                        type: String
-                        value: "3"
-                      - name: environment
-                        type: String
-                        value: prod3
-                    allowEmptyCommit: true
-              - step:
-                  type: HarnessApproval
-                  name: PR Review
-                  identifier: PR_Review
-                  spec:
-                    approvalMessage: |
-                      Review GitOps PR for <+repeat.item>
-                      Environment: Prod3 (Final)
-                      Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.stages.gitops_dev.variables.RESOLVED_TAG>
-                    includePipelineExecutionHistory: true
-                    isAutoRejectEnabled: false
-                    approvers:
-                      userGroups:
-                        - account.SalesEngineers
-                      minimumCount: 1
-                      disallowPipelineExecutor: false
-                  timeout: 1d
-              - step:
-                  type: MergePR
-                  name: Merge PR
-                  identifier: mergePR
-                  spec:
-                    deleteSourceBranch: true
-                    mergeStrategy: merge
-                  timeout: 10m
-              - step:
-                  type: GitOpsFetchLinkedApps
-                  name: Fetch Linked Apps
-                  identifier: fetchLinkedApps
-                  timeout: 10m
-                  spec: {}
-              - step:
-                  type: GitOpsSync
-                  name: Begin Argo Rollout
-                  identifier: begin_argo_rollout
-                  timeout: 10m
-                  spec:
-                    prune: false
-                    dryRun: false
-                    applyOnly: false
-                    forceApply: false
-                    applicationRegex: <+repeat.item>servicegitops-prod3
-                    syncOptions:
-                      skipSchemaValidation: false
-                      autoCreateNamespace: true
-                      pruneResourcesAtLast: true
-                      applyOutOfSyncOnly: true
-                      replaceResources: false
-                      prunePropagationPolicy: foreground
-                      serverSideApply: true
-                    waitTillHealthy: false
-                    failOnTimeout: false
-              - step:
-                  type: ShellScript
-                  name: Wait for ArgoCD Sync
-                  identifier: wait_for_argocd
-                  timeout: 5m
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          echo "Waiting for ArgoCD agent to sync (90s)..."
-                          sleep 90
-                    environmentVariables: []
-                    outputVariables: []
-              - step:
-                  type: ShellScript
-                  name: Argo Rollouts Promote Canary
-                  identifier: promote_canary
-                  timeout: 5m
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          #!/bin/bash
-                          set -euo pipefail
-
-                          SERVICE="<+repeat.item>"
-                          NAMESPACE="cinema-prod3"
-
-                          echo "Promoting ${SERVICE} canary in Prod3..."
-                          kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE}
-                    environmentVariables: []
-                    outputVariables: []
-              - step:
-                  type: HarnessApproval
-                  name: Canary Promotion Approval
-                  identifier: canary_approval
-                  timeout: 4h
-                  spec:
-                    approvalMessage: |
-                      Canary at <+pipeline.variables.CANARY_WEIGHT>% for <+repeat.item> in Prod3
-                      This is the FINAL production region.
-                      Approve full promotion?
-                    includePipelineExecutionHistory: true
-                    isAutoRejectEnabled: false
-                    approvers:
-                      userGroups:
-                        - account.SalesEngineers
-                      minimumCount: 1
-                      disallowPipelineExecutor: false
-              - step:
-                  type: Verify
-                  name: Continuous Verification
-                  identifier: continuous_verification
-                  timeout: 2h
-                  spec:
-                    isMultiServicesOrEnvs: false
-                    type: Auto
-                    monitoredService:
-                      type: Default
-                      spec: {}
-                    spec:
-                      sensitivity: HIGH
-                      duration: 15m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - Verification
-                        action:
-                          type: StageRollback
-              - step:
-                  type: ShellScript
-                  name: Argo Rollouts Promote Full
-                  identifier: promote_full
-                  timeout: 5m
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          #!/bin/bash
-                          set -euo pipefail
-
-                          SERVICE="<+repeat.item>"
-                          NAMESPACE="cinema-prod3"
-
-                          kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE} --full
-                          kubectl argo rollouts status ${SERVICE} -n ${NAMESPACE} --timeout 300s
-
-                          echo "Full promotion completed for ${SERVICE} in Prod3"
-                    environmentVariables: []
-                    outputVariables: []
-              - step:
-                  type: JiraUpdate
-                  name: Jira Update - Deployment Complete
-                  identifier: jira_update_complete
-                  timeout: 10m
-                  spec:
-                    connectorRef: account.Harness_JIRA
-                    issueKey: <+pipeline.stages.gitops_dev.spec.execution.steps.jira_create_ticket.issue.key>
-                    transitionTo:
-                      transitionName: Done
-                      status: Done
-                    fields:
-                      - name: Comment
-                        value: |
-                          ALL DEPLOYMENTS COMPLETE
-
-                          Service: <+repeat.item>
-                          Environments: Dev, Prod1, Prod2, Prod3
-                          Artifact: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.stages.gitops_dev.variables.RESOLVED_TAG>
-                          Status: FULLY DEPLOYED
-            rollbackSteps:
-              - step:
-                  type: ShellScript
-                  name: Abort Argo Rollout
-                  identifier: abort_rollout
-                  timeout: 5m
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          kubectl argo rollouts abort <+repeat.item> -n cinema-prod3 || true
-                    environmentVariables: []
-                    outputVariables: []
-              - step:
-                  type: RevertPR
-                  name: Revert PR
-                  identifier: RevertPR
-                  spec:
-                    commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
-                    prTitle: "Rollback: <+repeat.item> prod3"
-                  timeout: 10m
-              - step:
-                  type: MergePR
-                  name: Merge Rollback PR
-                  identifier: MergeRollback
-                  spec:
-                    deleteSourceBranch: true
-                  timeout: 10m
-              - step:
-                  type: GitOpsFetchLinkedApps
-                  name: Fetch Apps
-                  identifier: FetchApps
-                  spec: {}
-                  timeout: 10m
-              - step:
-                  type: GitOpsSync
-                  name: Sync Rollback
-                  identifier: SyncRollback
-                  timeout: 10m
-                  spec:
-                    prune: false
-                    dryRun: false
-                    applyOnly: false
-                    forceApply: true
-                    applicationRegex: <+repeat.item>servicegitops-prod3
-                    syncOptions:
-                      skipSchemaValidation: false
-                      autoCreateNamespace: false
-                      pruneResourcesAtLast: false
-                      applyOutOfSyncOnly: false
-                      replaceResources: false
-                      prunePropagationPolicy: foreground
-                      serverSideApply: true
-              - step:
-                  type: JiraUpdate
-                  name: Jira Update - Rollback
-                  identifier: jira_update_rollback
-                  timeout: 10m
-                  spec:
-                    connectorRef: account.Harness_JIRA
-                    issueKey: <+pipeline.stages.gitops_dev.spec.execution.steps.jira_create_ticket.issue.key>
-                    fields:
-                      - name: Comment
-                        value: |
-                          PROD3 ROLLBACK EXECUTED
-
-                          Service: <+repeat.item>
-                          Environment: Prod3
-                          Reason: Deployment failed or verification failed
-          environment:
-            environmentRef: prod3
-            deployToAll: false
-            gitOpsClusters:
-              - identifier: prod3cluster
-                agentIdentifier: selatamgke
-        tags: {}
-        failureStrategies:
-          - onFailure:
-              errors:
-                - AllErrors
-              action:
-                type: StageRollback
-        strategy:
-          repeat:
-            items: <+pipeline.variables.SERVICES.split(",")>
-            nodeName: <+repeat.item>
-            maxConcurrency: 1
-        delegateSelectors:
-          - helm-delegate
   delegateSelectors:
     - helm-delegate
   allowStageExecutions: true

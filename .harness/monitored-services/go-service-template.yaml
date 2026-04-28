@@ -1,0 +1,187 @@
+monitoredService:
+  name: <+service.name>_<+env.name>
+  identifier: <+service.name>_<+env.name>
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  type: Application
+  description: Auto-configured monitored service for <+service.name> in <+env.name>
+  serviceRef: <+service.identifier>
+  environmentRef: <+env.identifier>
+  sources:
+    healthSources:
+      - name: Prometheus Metrics
+        identifier: prometheus_metrics
+        type: Prometheus
+        spec:
+          connectorRef: prometheus_connector
+          feature: apm
+          metricDefinitions:
+            # Performance Metrics
+            - identifier: response_time_p99
+              metricName: Response Time P99
+              riskProfile:
+                category: Performance
+                metricType: RESP_TIME
+                thresholdTypes:
+                  - ACT_WHEN_HIGHER
+              analysis:
+                deploymentVerification:
+                  enabled: true
+                  serviceInstanceFieldName: pod
+                liveMonitoring:
+                  enabled: true
+                riskProfile:
+                  category: Performance
+                  metricType: RESP_TIME
+                  thresholdTypes:
+                    - ACT_WHEN_HIGHER
+              spiQueryConfig:
+                prometheusMetricInfo:
+                  metricName: http_request_duration_seconds
+                  metricType: INFRA
+                  environmentFilter:
+                    - labelName: namespace
+                      labelValue: <+env.name>
+                  serviceFilter:
+                    - labelName: pod
+                      labelValue: <+service.name>.*
+                  prometheusQuery: |
+                    histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{namespace="$namespace", pod=~"$serviceIdentifier.*"}[5m])) by (le, pod))
+              groupName: Performance
+
+            - identifier: response_time_p50
+              metricName: Response Time P50
+              riskProfile:
+                category: Performance
+                metricType: RESP_TIME
+                thresholdTypes:
+                  - ACT_WHEN_HIGHER
+              analysis:
+                deploymentVerification:
+                  enabled: true
+                  serviceInstanceFieldName: pod
+                liveMonitoring:
+                  enabled: true
+              spiQueryConfig:
+                prometheusMetricInfo:
+                  prometheusQuery: |
+                    histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{namespace="$namespace", pod=~"$serviceIdentifier.*"}[5m])) by (le, pod))
+              groupName: Performance
+
+            # Error Metrics
+            - identifier: error_rate_5xx
+              metricName: 5xx Error Rate
+              riskProfile:
+                category: Errors
+                metricType: ERROR
+                thresholdTypes:
+                  - ACT_WHEN_HIGHER
+              analysis:
+                deploymentVerification:
+                  enabled: true
+                  serviceInstanceFieldName: pod
+                liveMonitoring:
+                  enabled: true
+              spiQueryConfig:
+                prometheusMetricInfo:
+                  prometheusQuery: |
+                    sum(rate(http_requests_total{namespace="$namespace", pod=~"$serviceIdentifier.*", status=~"5.."}[5m])) by (pod)
+              groupName: Errors
+
+            - identifier: error_rate_4xx
+              metricName: 4xx Error Rate
+              riskProfile:
+                category: Errors
+                metricType: ERROR
+                thresholdTypes:
+                  - ACT_WHEN_HIGHER
+              analysis:
+                deploymentVerification:
+                  enabled: true
+                  serviceInstanceFieldName: pod
+                liveMonitoring:
+                  enabled: true
+              spiQueryConfig:
+                prometheusMetricInfo:
+                  prometheusQuery: |
+                    sum(rate(http_requests_total{namespace="$namespace", pod=~"$serviceIdentifier.*", status=~"4.."}[5m])) by (pod)
+              groupName: Errors
+
+            # Throughput Metrics
+            - identifier: requests_per_second
+              metricName: Requests per Second
+              riskProfile:
+                category: Performance
+                metricType: THROUGHPUT
+                thresholdTypes:
+                  - ACT_WHEN_LOWER
+              analysis:
+                deploymentVerification:
+                  enabled: true
+                  serviceInstanceFieldName: pod
+                liveMonitoring:
+                  enabled: true
+              spiQueryConfig:
+                prometheusMetricInfo:
+                  prometheusQuery: |
+                    sum(rate(http_requests_total{namespace="$namespace", pod=~"$serviceIdentifier.*"}[5m])) by (pod)
+              groupName: Throughput
+
+            # Infrastructure Metrics
+            - identifier: cpu_usage
+              metricName: CPU Usage
+              riskProfile:
+                category: Infrastructure
+                metricType: INFRA
+                thresholdTypes:
+                  - ACT_WHEN_HIGHER
+              analysis:
+                deploymentVerification:
+                  enabled: true
+                  serviceInstanceFieldName: pod
+                liveMonitoring:
+                  enabled: true
+              spiQueryConfig:
+                prometheusMetricInfo:
+                  prometheusQuery: |
+                    sum(rate(container_cpu_usage_seconds_total{namespace="$namespace", pod=~"$serviceIdentifier.*", container!="POD", container!=""}[5m])) by (pod) * 100
+              groupName: Infrastructure
+
+            - identifier: memory_usage
+              metricName: Memory Usage (MB)
+              riskProfile:
+                category: Infrastructure
+                metricType: INFRA
+                thresholdTypes:
+                  - ACT_WHEN_HIGHER
+              analysis:
+                deploymentVerification:
+                  enabled: true
+                  serviceInstanceFieldName: pod
+                liveMonitoring:
+                  enabled: true
+              spiQueryConfig:
+                prometheusMetricInfo:
+                  prometheusQuery: |
+                    sum(container_memory_usage_bytes{namespace="$namespace", pod=~"$serviceIdentifier.*", container!="POD", container!=""}) by (pod) / 1024 / 1024
+              groupName: Infrastructure
+
+            # Kubernetes Health Metrics
+            - identifier: pod_restarts
+              metricName: Pod Restarts
+              riskProfile:
+                category: Infrastructure
+                metricType: INFRA
+                thresholdTypes:
+                  - ACT_WHEN_HIGHER
+              analysis:
+                deploymentVerification:
+                  enabled: true
+                  serviceInstanceFieldName: pod
+                liveMonitoring:
+                  enabled: true
+              spiQueryConfig:
+                prometheusMetricInfo:
+                  prometheusQuery: |
+                    sum(kube_pod_container_status_restarts_total{namespace="$namespace", pod=~"$serviceIdentifier.*"}) by (pod)
+              groupName: Infrastructure
