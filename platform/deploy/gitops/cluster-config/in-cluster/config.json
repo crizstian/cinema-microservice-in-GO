@@ -5,5 +5,5 @@
   "service_name" : "booking",
   "replicas" : "1",
   "namespace" : "cinema-dev",
-  "image_tag" : "0.0.7"
+  "image_tag" : "0.0.8"
 }
