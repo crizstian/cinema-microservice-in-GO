@@ -1,8 +1,8 @@
 {
-  "harness_service" : "seatservicegitops",
+  "harness_service" : "showtimeservicegitops",
   "environment" : "dev",
-  "port" : "8005",
-  "service_name" : "seat",
+  "port" : "8006",
+  "service_name" : "showtime",
   "replicas" : "1",
   "namespace" : "cinema-dev",
   "image_tag" : "0.0.4"
