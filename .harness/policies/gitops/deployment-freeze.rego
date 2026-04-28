@@ -1,12 +1,12 @@
 # Policy: GitOps Deployment Freeze
-# Blocks sync operations during off-hours
+# Blocks sync operations during business hours
 #
-# Blocked: 11:00 PM - 8:00 AM Mexico Central Time
-# Allowed: 8:00 AM - 11:00 PM Mexico Central Time
+# Blocked: 9:00 AM - 6:00 PM Mexico Central Time
+# Allowed: 6:00 PM - 9:00 AM Mexico Central Time
 #
 # In UTC (Mexico CST = UTC-6):
-# Blocked: 05:00 - 14:00 UTC
-# Allowed: 14:00 - 05:00 UTC (crosses midnight)
+# Blocked: 15:00 - 00:00 UTC
+# Allowed: 00:00 - 15:00 UTC
 #
 # Event: On Sync
 # Severity: Error and Exit
@@ -22,12 +22,12 @@ import future.keywords.in
 
 # Deployment window configuration
 # Mexico Central Time (CST) = UTC-6
-# 8 AM Mexico = 14:00 UTC
-# 11 PM Mexico = 05:00 UTC (next day)
+# 9 AM Mexico = 15:00 UTC
+# 6 PM Mexico = 00:00 UTC (next day)
 #
-# Since the allowed window crosses midnight UTC, we define the BLOCKED window instead
-blocked_start_hour := 5   # 11 PM Mexico = 05:00 UTC
-blocked_end_hour := 14    # 8 AM Mexico = 14:00 UTC
+# Block during business hours (9AM - 6PM Mexico)
+blocked_start_hour := 15  # 9 AM Mexico = 15:00 UTC
+blocked_end_hour := 24    # 6 PM Mexico = 00:00 UTC (end of day)
 
 # Allowed days (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
 allowed_days := [1, 2, 3, 4, 5]  # Monday to Friday
@@ -47,10 +47,9 @@ current_day := day if {
     day := (days_since_epoch + 4) % 7
 }
 
-# Check if current time is in BLOCKED window (05:00 - 14:00 UTC)
+# Check if current time is in BLOCKED window (15:00 - 00:00 UTC)
 is_blocked_hour if {
     current_hour >= blocked_start_hour
-    current_hour < blocked_end_hour
 }
 
 # Allowed = NOT in blocked window
@@ -80,7 +79,7 @@ deny[msg] if {
     not is_bypass_environment
     mexico_hour := (current_hour + 18) % 24  # UTC to Mexico (UTC-6)
     msg := sprintf(
-        "Deployment blocked: Sync operations for '%s' are not allowed between 11:00 PM and 8:00 AM Mexico Central Time. Current time: %d:00 Mexico / %d:00 UTC. Deployments resume at 8:00 AM Mexico. For emergency deployments, use the 'hotfix' environment.",
+        "Deployment blocked: Sync operations for '%s' are not allowed between 9:00 AM and 6:00 PM Mexico Central Time (business hours). Current time: %d:00 Mexico / %d:00 UTC. Deployments resume at 6:00 PM Mexico. For emergency deployments, use the 'hotfix' environment.",
         [input.gitopsApplication.name, mexico_hour, current_hour]
     )
 }
@@ -107,14 +106,14 @@ day_names := {
     6: "Saturday"
 }
 
-# Warn if deploying close to freeze window (10 PM - 11 PM Mexico = 04:00 - 05:00 UTC)
+# Warn if deploying close to freeze window (8 AM - 9 AM Mexico = 14:00 - 15:00 UTC)
 warn[msg] if {
     is_allowed_hour
     is_allowed_day
-    current_hour >= 4
-    current_hour < 5
+    current_hour >= 14
+    current_hour < 15
     msg := sprintf(
-        "Warning: Deploying '%s' close to freeze window. Deployments will be blocked at 11:00 PM Mexico (05:00 UTC). Current time: 10:00 PM Mexico. Ensure deployment completes soon.",
+        "Warning: Deploying '%s' close to freeze window. Deployments will be blocked at 9:00 AM Mexico (15:00 UTC). Current time: 8:00 AM Mexico. Ensure deployment completes soon.",
         [input.gitopsApplication.name]
     )
 }
