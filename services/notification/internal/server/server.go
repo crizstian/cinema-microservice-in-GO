@@ -2,6 +2,7 @@ package server
 
 import (
 	"cinemas/services/notification/internal/api"
+	"cinemas/services/notification/internal/metrics"
 	"cinemas/services/notification/internal/routes"
 	"context"
 	"os"
@@ -36,6 +37,11 @@ func Start(r map[string]interface{}, se chan error) {
 		Format: "method=${method}, uri=${uri}, status=${status}\n",
 	}))
 	e.Use(middleware.Recover())
+
+	// Prometheus metrics middleware and endpoint
+	e.Use(metrics.Middleware())
+	e.GET("/metrics", metrics.Handler())
+
 	app := e.Group("/notification")
 
 	routes.API(app, r["repo"].(api.Repository))

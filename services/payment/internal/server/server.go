@@ -2,6 +2,7 @@ package server
 
 import (
 	"cinemas/services/payment/internal/api"
+	"cinemas/services/payment/internal/metrics"
 	"cinemas/services/payment/internal/routes"
 	"context"
 	"os"
@@ -38,6 +39,11 @@ func Start(r map[string]interface{}, se chan error) {
 		Format: "method=${method}, uri=${uri}, status=${status}\n",
 	}))
 	e.Use(middleware.Recover())
+
+	// Prometheus metrics middleware and endpoint
+	e.Use(metrics.Middleware())
+	e.GET("/metrics", metrics.Handler())
+
 	app := e.Group("/payment")
 
 	routes.API(app, r["repo"].(api.Repository))

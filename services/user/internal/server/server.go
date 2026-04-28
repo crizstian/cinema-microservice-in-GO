@@ -5,6 +5,7 @@ import (
 
 	"cinemas/services/user/internal/api"
 	errs "cinemas/services/user/internal/errors"
+	"cinemas/services/user/internal/metrics"
 	"cinemas/services/user/internal/middleware"
 	"cinemas/services/user/internal/routes"
 
@@ -22,6 +23,10 @@ func Start(config map[string]interface{}) error {
 	e.Use(mw.Logger())
 	e.Use(mw.Recover())
 	e.Use(mw.CORS())
+
+	// Prometheus metrics middleware and endpoint
+	e.Use(metrics.Middleware())
+	e.GET("/metrics", metrics.Handler())
 
 	// Health check
 	routes.HealthyAPI(e)

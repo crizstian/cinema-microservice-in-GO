@@ -2,6 +2,7 @@ package server
 
 import (
 	"cinemas/services/movie/internal/api"
+	"cinemas/services/movie/internal/metrics"
 	"cinemas/services/movie/internal/routes"
 	"context"
 	"fmt"
@@ -39,6 +40,10 @@ func Start(r map[string]interface{}) error {
 		Format: "method=${method}, uri=${uri}, status=${status}\n",
 	}))
 	e.Use(middleware.Recover())
+
+	// Prometheus metrics middleware and endpoint
+	e.Use(metrics.Middleware())
+	e.GET("/metrics", metrics.Handler())
 
 	// Grupo de rutas para /movies
 	app := e.Group("/movies")
