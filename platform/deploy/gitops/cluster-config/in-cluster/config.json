@@ -1,9 +1,9 @@
 {
-  "harness_service" : "movieservicegitops",
+  "harness_service" : "notificationservicegitops",
   "environment" : "dev",
-  "port" : "8002",
-  "service_name" : "movie",
+  "port" : "8008",
+  "service_name" : "notification",
   "replicas" : "1",
   "namespace" : "cinema-dev",
-  "image_tag" : "0.2.8"
+  "image_tag" : "0.0.4"
 }
