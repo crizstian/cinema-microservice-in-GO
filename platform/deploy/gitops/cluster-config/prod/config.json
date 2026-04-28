@@ -1,26 +1,6 @@
 {
-  "cluster_name": "incluster",
+  "server_address": "https://kubernetes.default.svc",
   "environment": "prod",
   "namespace": "cinema-prod",
-  "server_address": "https://kubernetes.default.svc",
-  "harness_org": "sandbox",
-  "harness_project": "CristianRamirez",
-  "image_registry": "crizstian",
-  "image_tag": "v1.0.0",
-  "replicas": 3,
-  "resources": {
-    "cpu_request": "100m",
-    "memory_request": "256Mi",
-    "cpu_limit": "1000m",
-    "memory_limit": "1Gi"
-  },
-  "database": {
-    "servers": "mongodb.cinema-infra.svc.cluster.local:27017"
-  },
-  "nats": {
-    "url": "nats://nats.cinema-infra.svc.cluster.local:4222"
-  },
-  "ingress": {
-    "host": "cinema.prod.local"
-  }
+  "image_tag": "latest"
 }
