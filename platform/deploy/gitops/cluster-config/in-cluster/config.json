@@ -1,9 +1,9 @@
 {
-  "harness_service" : "notificationservicegitops",
+  "harness_service" : "paymentservicegitops",
   "environment" : "dev",
-  "port" : "8008",
-  "service_name" : "notification",
+  "port" : "8007",
+  "service_name" : "payment",
   "replicas" : "1",
   "namespace" : "cinema-dev",
-  "image_tag" : "0.0.4"
+  "image_tag" : "0.0.11"
 }
