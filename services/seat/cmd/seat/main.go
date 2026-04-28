@@ -9,6 +9,7 @@ import (
 	"cinemas/services/seat/internal/api"
 	"cinemas/services/seat/internal/config"
 	"cinemas/services/seat/internal/db"
+	"cinemas/services/seat/internal/metrics"
 	"cinemas/services/seat/internal/routes"
 
 	"github.com/labstack/echo"
@@ -42,6 +43,10 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
+
+	// Prometheus metrics middleware and endpoint
+	e.Use(metrics.Middleware())
+	e.GET("/metrics", metrics.Handler())
 
 	// Initialize API
 	seatAPI := api.NewAPI(redisClient, mongoClient)

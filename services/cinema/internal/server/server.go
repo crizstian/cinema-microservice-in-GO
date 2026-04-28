@@ -2,6 +2,7 @@ package server
 
 import (
 	"cinemas/services/cinema/internal/api"
+	"cinemas/services/cinema/internal/metrics"
 	"cinemas/services/cinema/internal/routes"
 
 	"github.com/labstack/echo/v4"
@@ -17,6 +18,10 @@ func New(db *mongo.Database) *echo.Echo {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
+
+	// Prometheus metrics middleware and endpoint
+	e.Use(metrics.Middleware())
+	e.GET("/metrics", metrics.Handler())
 
 	handler := api.NewHandler(db)
 	routes.Setup(e, handler)

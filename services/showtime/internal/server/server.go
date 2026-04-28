@@ -7,6 +7,8 @@ import (
 	"syscall"
 	"time"
 
+	"cinemas/services/showtime/internal/metrics"
+
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/sirupsen/logrus"
@@ -37,6 +39,10 @@ func New(cfg Config) *Server {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
+
+	// Prometheus metrics middleware and endpoint
+	e.Use(metrics.Middleware())
+	e.GET("/metrics", metrics.Handler())
 
 	port := cfg.Port
 	if port == "" {

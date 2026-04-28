@@ -2,6 +2,7 @@ package server
 
 import (
 	"cinemas/services/booking/internal/api"
+	"cinemas/services/booking/internal/metrics"
 	"cinemas/services/booking/internal/routes"
 	"cinemas/services/booking/internal/tracing"
 	"context"
@@ -41,6 +42,10 @@ func Start(r map[string]interface{}, se chan error) {
 	}))
 
 	e.Use(middleware.Recover())
+
+	// Prometheus metrics middleware and endpoint
+	e.Use(metrics.Middleware())
+	e.GET("/metrics", metrics.Handler())
 
 	span := r["tracer"].(opentracing.Tracer).StartSpan("booking-service")
 	span.SetTag("booking-service", "Tracer started")
