@@ -1,8 +1,8 @@
 {
-  "harness_service" : "showtimeservicegitops",
+  "harness_service" : "userservicegitops",
   "environment" : "dev",
-  "port" : "8006",
-  "service_name" : "showtime",
+  "port" : "8004",
+  "service_name" : "user",
   "replicas" : "1",
   "namespace" : "cinema-dev",
   "image_tag" : "0.0.4"
