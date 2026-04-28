@@ -944,53 +944,11 @@ pipeline:
                             GITHUB_REPO: crizstian/cinema-microservice-in-GO
                             GITHUB_TOKEN: <+secrets.getValue("CristianGithub")>
                             COMMIT_SHA: <+codebase.commitSha>
-                    - step:
-                        name: Store Service Tag
-                        identifier: store_service_tag
-                        type: Run
-                        spec:
-                          connectorRef: account.harnessImage
-                          image: alpine:3.19
-                          shell: Sh
-                          command: |
-                            mkdir -p /harness/service-tags
-                            echo "<+repeat.item>:<+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>" >> /harness/service-tags/tags.txt
-                            echo "SERVICE_TAG=<+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>" >> $HARNESS_OUTPUT_FILE
-                          outputVariables:
-                            - name: SERVICE_TAG
                   strategy:
                     repeat:
                       items: <+pipeline.variables.SERVICES.split(",")>
                       nodeName: <+repeat.item>
                       maxConcurrency: 2
-              - step:
-                  name: Aggregate Service Tags
-                  identifier: aggregate_tags
-                  type: Run
-                  when:
-                    stageStatus: Success
-                  spec:
-                    connectorRef: account.harnessImage
-                    image: alpine:3.19
-                    shell: Sh
-                    command: |
-                      # Build SERVICE_TAGS in format: service1:tag1,service2:tag2
-                      if [ -f /harness/service-tags/tags.txt ]; then
-                        SERVICE_TAGS=$(cat /harness/service-tags/tags.txt | tr '\n' ',' | sed 's/,$//')
-                        echo "SERVICE_TAGS=$SERVICE_TAGS" >> $HARNESS_OUTPUT_FILE
-
-                        echo "╔══════════════════════════════════════════════════════════════╗"
-                        echo "║              RELEASE SUMMARY                                 ║"
-                        echo "╠══════════════════════════════════════════════════════════════╣"
-                        while IFS=: read -r svc tag; do
-                          printf "║  %s: %s\n" "$svc" "$tag"
-                        done < /harness/service-tags/tags.txt
-                        echo "╚══════════════════════════════════════════════════════════════╝"
-                      else
-                        echo "SERVICE_TAGS=" >> $HARNESS_OUTPUT_FILE
-                      fi
-                    outputVariables:
-                      - name: SERVICE_TAGS
         policySetRef:
           - security_gate_container
 
@@ -1006,14 +964,14 @@ pipeline:
           pipelineStatus: Success
           condition: (<+pipeline.variables.RUN_MODE> == "pr_merge" ||
             <+pipeline.variables.RUN_MODE> == "full") &&
-            "<+pipeline.stages.build_and_release.spec.execution.steps.aggregate_tags.output.outputVariables.SERVICE_TAGS>"
-            != ""
+            <+pipeline.variables.SERVICES> != "" &&
+            <+pipeline.variables.SERVICES> != "null"
         variables:
           - name: ARTIFACT_TAG
             type: String
             description: Docker image tag to deploy (auto-resolved from CI)
             required: true
-            value: <+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.store_service_tag.output.outputVariables.SERVICE_TAG>
+            value: <+pipeline.stages.build_and_release.spec.execution.steps.release_<+repeat.item>.steps.push_docker_image.artifact_release_<+repeat.item>_push_docker_image.stepArtifacts.publishedImageArtifacts[0].tag>
         spec:
           deploymentType: Kubernetes
           gitOpsEnabled: true
