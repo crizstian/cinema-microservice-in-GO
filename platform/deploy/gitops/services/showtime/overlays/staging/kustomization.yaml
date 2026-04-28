@@ -6,10 +6,13 @@ namespace: cinema-staging
 resources:
   - ../../base
 
-commonLabels:
-  app.kubernetes.io/environment: staging
-  harness.io/envRef: staging
-  harness.io/serviceRef: showtimeservicegitops
+labels:
+  - pairs:
+      app.kubernetes.io/environment: staging
+      harness.io/envRef: staging
+      harness.io/serviceRef: showtimeservicegitops
+    includeSelectors: false
+
 
 images:
   - name: crizstian/showtime-service

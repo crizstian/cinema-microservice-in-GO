@@ -6,10 +6,13 @@ namespace: cinema-dev
 resources:
   - ../../base
 
-commonLabels:
-  app.kubernetes.io/environment: dev
-  harness.io/envRef: dev
-  harness.io/serviceRef: showtimeservicegitops
+labels:
+  - pairs:
+      app.kubernetes.io/environment: dev
+      harness.io/envRef: dev
+      harness.io/serviceRef: showtimeservicegitops
+    includeSelectors: false
+
 
 images:
   - name: crizstian/showtime-service

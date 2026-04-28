@@ -6,10 +6,13 @@ namespace: cinema-staging
 resources:
   - ../../base
 
-commonLabels:
-  app.kubernetes.io/environment: staging
-  harness.io/envRef: staging
-  harness.io/serviceRef: notificationservicegitops
+labels:
+  - pairs:
+      app.kubernetes.io/environment: staging
+      harness.io/envRef: staging
+      harness.io/serviceRef: notificationservicegitops
+    includeSelectors: false
+
 
 images:
   - name: crizstian/notification-service

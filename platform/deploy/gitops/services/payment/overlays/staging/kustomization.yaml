@@ -6,10 +6,13 @@ namespace: cinema-staging
 resources:
   - ../../base
 
-commonLabels:
-  app.kubernetes.io/environment: staging
-  harness.io/envRef: staging
-  harness.io/serviceRef: paymentservicegitops
+labels:
+  - pairs:
+      app.kubernetes.io/environment: staging
+      harness.io/envRef: staging
+      harness.io/serviceRef: paymentservicegitops
+    includeSelectors: false
+
 
 images:
   - name: crizstian/payment-service
