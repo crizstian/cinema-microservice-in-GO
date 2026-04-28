@@ -1088,7 +1088,7 @@ pipeline:
                     dryRun: false
                     applyOnly: false
                     forceApply: false
-                    applicationRegex: <+repeat.item>-dev
+                    applicationRegex: <+repeat.item>servicegitops-dev
                     syncOptions:
                       skipSchemaValidation: false
                       autoCreateNamespace: true
@@ -1389,7 +1389,7 @@ pipeline:
                     dryRun: false
                     applyOnly: false
                     forceApply: true
-                    applicationRegex: <+repeat.item>-dev
+                    applicationRegex: <+repeat.item>servicegitops-dev
                     syncOptions:
                       skipSchemaValidation: false
                       autoCreateNamespace: false
@@ -1568,7 +1568,7 @@ pipeline:
                         dryRun: false
                         applyOnly: false
                         forceApply: false
-                        applicationRegex: <+repeat.item>-prod1
+                        applicationRegex: <+repeat.item>servicegitops-prod1
                         syncOptions:
                           skipSchemaValidation: false
                           autoCreateNamespace: true
@@ -1740,7 +1740,7 @@ pipeline:
                         dryRun: false
                         applyOnly: false
                         forceApply: true
-                        applicationRegex: <+repeat.item>-prod1
+                        applicationRegex: <+repeat.item>servicegitops-prod1
                         syncOptions:
                           skipSchemaValidation: false
                           autoCreateNamespace: false
@@ -1845,7 +1845,7 @@ pipeline:
                         dryRun: false
                         applyOnly: false
                         forceApply: false
-                        applicationRegex: <+repeat.item>-prod2
+                        applicationRegex: <+repeat.item>servicegitops-prod2
                         syncOptions:
                           skipSchemaValidation: false
                           autoCreateNamespace: true
@@ -2017,7 +2017,7 @@ pipeline:
                         dryRun: false
                         applyOnly: false
                         forceApply: true
-                        applicationRegex: <+repeat.item>-prod2
+                        applicationRegex: <+repeat.item>servicegitops-prod2
                         syncOptions:
                           skipSchemaValidation: false
                           autoCreateNamespace: false
@@ -2164,7 +2164,7 @@ pipeline:
                     dryRun: false
                     applyOnly: false
                     forceApply: false
-                    applicationRegex: <+repeat.item>-prod3
+                    applicationRegex: <+repeat.item>servicegitops-prod3
                     syncOptions:
                       skipSchemaValidation: false
                       autoCreateNamespace: true
@@ -2341,7 +2341,7 @@ pipeline:
                     dryRun: false
                     applyOnly: false
                     forceApply: true
-                    applicationRegex: <+repeat.item>-prod3
+                    applicationRegex: <+repeat.item>servicegitops-prod3
                     syncOptions:
                       skipSchemaValidation: false
                       autoCreateNamespace: false
