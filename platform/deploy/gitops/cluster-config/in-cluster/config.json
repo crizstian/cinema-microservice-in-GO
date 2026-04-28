@@ -1,0 +1,9 @@
+{
+  "harness_service" : "movieservicegitops",
+  "environment" : "dev",
+  "port" : "8002",
+  "service_name" : "movie",
+  "replicas" : "1",
+  "namespace" : "cinema-dev",
+  "image_tag" : "0.2.6"
+}
