@@ -38,7 +38,7 @@ spec:
                   port: "8004"
   template:
     metadata:
-      name: "{{.service}}-{{.environment}}"
+      name: "{{.service}}servicegitops-{{.environment}}"
       labels:
         app.kubernetes.io/name: "{{.service}}-service"
         app.kubernetes.io/environment: "{{.environment}}"

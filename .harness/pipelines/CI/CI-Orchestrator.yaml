@@ -300,9 +300,9 @@ pipeline:
             enabled: false
     - parallel:
         - stage:
-            name: Trigger Golang
-            identifier: trigger_go_cicd
-            description: Trigger unified CICD pipeline for Go services (CI + CD)
+            name: Trigger Golang CI
+            identifier: trigger_go_ci
+            description: Trigger CI pipeline for Go services (Security + Tests + Build)
             type: Pipeline
             when:
               pipelineStatus: Success
@@ -314,6 +314,42 @@ pipeline:
               project: CristianRamirez
               inputs:
                 identifier: CICD_Go_ShiftLeft
+                properties:
+                  ci:
+                    codebase:
+                      build:
+                        type: PR
+                        spec:
+                          number: <+pipeline.stages.detect_classify.spec.execution.steps.determine_run_mode.output.outputVariables.PR_NUMBER>
+                variables:
+                  - name: RUN_MODE
+                    type: String
+                    value: <+pipeline.stages.detect_classify.spec.execution.steps.determine_run_mode.output.outputVariables.RUN_MODE>
+                  - name: SERVICES
+                    type: String
+                    value: <+pipeline.stages.detect_classify.spec.execution.steps.classify_language.output.outputVariables.GO_SERVICES>
+            failureStrategies:
+              - onFailure:
+                  errors:
+                    - AllErrors
+                  action:
+                    type: MarkAsFailure
+            tags: {}
+        - stage:
+            name: Trigger Golang GitOps
+            identifier: trigger_go_gitops
+            description: Trigger CI + GitOps pipeline for Go services (CI + GitOps Deploy)
+            type: Pipeline
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.stages.detect_classify.spec.execution.steps.classify_language.output.outputVariables.HAS_GO>
+                == "true"
+            spec:
+              org: sandbox
+              pipeline: CICD_Go_GitOps
+              project: CristianRamirez
+              inputs:
+                identifier: CICD_Go_GitOps
                 properties:
                   ci:
                     codebase:

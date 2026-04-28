@@ -1,0 +1,2391 @@
+pipeline:
+  name: CICD - Go GitOps with Argo Rollouts
+  identifier: CICD_Go_GitOps_Rollouts
+  orgIdentifier: sandbox
+  projectIdentifier: CristianRamirez
+  tags:
+    version: "1.0"
+    language: go
+    type: gitops-rollouts
+  description: |
+    Full CI/CD pipeline for Go monorepo with GitOps + Argo Rollouts:
+    - PR Open: Security + Test stages
+    - PR Merge: Build + Release + Canary Deploy (Dev → Prod)
+    Features: Canary promotion, Jira tracking, Continuous Verification
+  properties:
+    ci:
+      codebase:
+        connectorRef: CristianConnector
+        repoName: cinema-microservice-in-GO
+        build: <+input>
+        prCloneStrategy: SourceBranch
+        sparseCheckout: []
+        depth: 50
+  variables:
+    - name: RUN_MODE
+      type: String
+      description: "pr_open: Security + Tests | pr_merge: Full CI/CD | deploy_only: Skip CI, deploy specific tag"
+      required: true
+      value: <+input>.allowedValues(pr_open,pr_merge,full,deploy_only)
+    - name: SERVICES
+      type: String
+      description: Comma-separated list of services to process (e.g., booking,movie)
+      required: true
+      value: <+input>
+    - name: ARTIFACT_TAG
+      type: String
+      description: "Tag to deploy (required for deploy_only mode, optional otherwise)"
+      required: false
+      value: <+input>
+    - name: GOLANGCI_LINT_VERSION
+      type: String
+      description: golangci-lint version
+      value: v2.1.6
+    - name: DOCKER_REGISTRY
+      type: String
+      description: Docker registry prefix
+      value: crizstian
+    - name: DOCKERFILE_PATH
+      type: String
+      description: Path to Dockerfile
+      value: platform/docker/go-service/Dockerfile
+    - name: COVERAGE_THRESHOLD
+      type: Number
+      description: Minimum code coverage percentage
+      value: 80
+    - name: COMPLEXITY_THRESHOLD
+      type: Number
+      description: Max cyclomatic complexity per function
+      value: 15
+    - name: SECURITY_GATE_CRITICAL
+      type: Number
+      description: Max critical vulnerabilities allowed (code)
+      value: 0
+    - name: SECURITY_GATE_HIGH
+      type: Number
+      description: Max high vulnerabilities allowed (code)
+      value: 5
+    - name: SECURITY_GATE_SECRETS
+      type: Number
+      description: Max secrets allowed
+      value: 0
+    - name: CONTAINER_GATE_CRITICAL
+      type: Number
+      description: Max critical container vulnerabilities
+      value: 0
+    - name: CONTAINER_GATE_HIGH
+      type: Number
+      description: Max high container vulnerabilities
+      value: 3
+    - name: CANARY_WEIGHT
+      type: Number
+      description: Initial canary traffic percentage
+      value: 40
+    - name: JIRA_PROJECT_KEY
+      type: String
+      description: Jira project key for deployment tickets
+      value: CINEMA
+  stages:
+    # ============================================================
+    # CI STAGES (from original pipeline)
+    # ============================================================
+    - parallel:
+        - stage:
+            name: Security Code
+            identifier: security_code
+            description: Code quality and security analysis with policy enforcement
+            type: SecurityTests
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.variables.RUN_MODE> == "pr_open" ||
+                <+pipeline.variables.RUN_MODE> == "full"
+            spec:
+              cloneCodebase: true
+              caching:
+                enabled: true
+                key: go-security-<+hashFiles("**/go.sum")>
+                paths:
+                  - /harness/.go
+              buildIntelligence:
+                enabled: true
+              platform:
+                os: Linux
+                arch: Amd64
+              runtime:
+                type: Cloud
+                spec: {}
+              execution:
+                steps:
+                  - stepGroup:
+                      name: Linting
+                      identifier: linting
+                      steps:
+                        - parallel:
+                            - step:
+                                name: golangci-lint
+                                identifier: golangci_lint
+                                type: Run
+                                spec:
+                                  connectorRef: account.harnessImage
+                                  image: golangci/golangci-lint:<+pipeline.variables.GOLANGCI_LINT_VERSION>
+                                  shell: Sh
+                                  command: |
+                                    set -e
+                                    cd services/<+repeat.item>
+                                    echo "=== Running golangci-lint (warnings only, non-blocking) ==="
+                                    golangci-lint run --timeout 3m --output.formats=json > lint-report.json 2>&1 || true
+                                    golangci-lint run --timeout 3m || echo "Lint issues found - review lint-report.json"
+                            - step:
+                                type: Gitleaks
+                                name: Gitleaks
+                                identifier: Gitleaks
+                                spec:
+                                  mode: orchestration
+                                  config: default
+                                  target:
+                                    type: repository
+                                    workspace: services/<+repeat.item>
+                                    detection: auto
+                                  advanced:
+                                    log:
+                                      level: info
+                                    fail_on_severity: none
+                                enforce:
+                                  policySets:
+                                    - security_secrets
+                        - step:
+                            name: Store Gitleaks Results
+                            identifier: store_gitleaks
+                            type: Run
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: alpine:3.19
+                              shell: Sh
+                              envVariables:
+                                GITLEAKS_TOTAL: <+execution.steps.linting.steps.Gitleaks.output.outputVariables.TOTAL>
+                              command: |
+                                mkdir -p /harness/security-results
+                                SECRETS="${GITLEAKS_TOTAL:-0}"
+                                [ "$SECRETS" = "null" ] || [ "$SECRETS" = "<+null>" ] && SECRETS=0
+                                echo "$SECRETS" >> /harness/security-results/gitleaks.txt
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          nodeName: <+repeat.item>
+                          maxConcurrency: 4
+                  - stepGroup:
+                      name: SCA Scans
+                      identifier: sca_scans
+                      steps:
+                        - parallel:
+                            - step:
+                                type: HarnessSAST
+                                name: HarnessSCA
+                                identifier: HarnessSCA
+                                spec:
+                                  mode: orchestration
+                                  config: sca
+                                  target:
+                                    type: repository
+                                    workspace: services/<+repeat.item>
+                                    detection: auto
+                                  advanced:
+                                    log:
+                                      level: info
+                                    fail_on_severity: none
+                                  tool:
+                                    app_name: <+repeat.item>
+                                enforce:
+                                  policySets:
+                                    - STO_Policy
+                                timeout: 3m
+                                failureStrategies:
+                                  - onFailure:
+                                      errors:
+                                        - Timeout
+                                      action:
+                                        type: Retry
+                                        spec:
+                                          retryCount: 3
+                                          retryIntervals:
+                                            - 5s
+                                          onRetryFailure:
+                                            action:
+                                              type: Ignore
+                            - step:
+                                type: Snyk
+                                name: Snyk SCA
+                                identifier: Snyk_SCA
+                                spec:
+                                  mode: orchestration
+                                  config: default
+                                  target:
+                                    type: repository
+                                    workspace: services/<+repeat.item>
+                                    detection: manual
+                                    name: <+repeat.item>
+                                    variant: <+codebase.branch>
+                                  advanced:
+                                    log:
+                                      level: info
+                                    fail_on_severity: none
+                                    args:
+                                      cli: "--skip-unresolved"
+                                  privileged: true
+                                  auth:
+                                    access_token: <+secrets.getValue("snyk_token")>
+                                  sbom:
+                                    format: spdx-json
+                                  tool:
+                                    ingest_tool_severity: false
+                                enforce:
+                                  policySets:
+                                    - STO_Policy
+                        - step:
+                            name: Store SCA Results
+                            identifier: store_sca
+                            type: Run
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: alpine:3.19
+                              shell: Sh
+                              envVariables:
+                                HARNESS_SCA_CRITICAL: <+execution.steps.sca_scans.steps.HarnessSCA.output.outputVariables.CRITICAL>
+                                HARNESS_SCA_HIGH: <+execution.steps.sca_scans.steps.HarnessSCA.output.outputVariables.HIGH>
+                                SNYK_SCA_CRITICAL: <+execution.steps.sca_scans.steps.Snyk_SCA.output.outputVariables.CRITICAL>
+                                SNYK_SCA_HIGH: <+execution.steps.sca_scans.steps.Snyk_SCA.output.outputVariables.HIGH>
+                              command: |
+                                mkdir -p /harness/security-results
+                                H_C="${HARNESS_SCA_CRITICAL:-0}"; [ "$H_C" = "null" ] && H_C=0
+                                H_H="${HARNESS_SCA_HIGH:-0}"; [ "$H_H" = "null" ] && H_H=0
+                                S_C="${SNYK_SCA_CRITICAL:-0}"; [ "$S_C" = "null" ] && S_C=0
+                                S_H="${SNYK_SCA_HIGH:-0}"; [ "$S_H" = "null" ] && S_H=0
+                                echo "$H_C $H_H $S_C $S_H" >> /harness/security-results/sca.txt
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          nodeName: <+repeat.item>
+                          maxConcurrency: 3
+                  - stepGroup:
+                      name: SAST Scans
+                      identifier: sast_scans
+                      steps:
+                        - parallel:
+                            - step:
+                                type: HarnessSAST
+                                name: HarnessSAST
+                                identifier: HarnessSAST
+                                spec:
+                                  mode: orchestration
+                                  config: sast
+                                  target:
+                                    type: repository
+                                    workspace: services/<+repeat.item>
+                                    detection: auto
+                                  advanced:
+                                    log:
+                                      level: info
+                                    fail_on_severity: none
+                                  tool:
+                                    app_name: <+repeat.item>
+                                enforce:
+                                  policySets:
+                                    - STO_Policy
+                                timeout: 3m
+                                failureStrategies:
+                                  - onFailure:
+                                      errors:
+                                        - Timeout
+                                      action:
+                                        type: Retry
+                                        spec:
+                                          retryCount: 3
+                                          retryIntervals:
+                                            - 5s
+                                          onRetryFailure:
+                                            action:
+                                              type: Ignore
+                            - step:
+                                type: Snyk
+                                name: Snyk SAST
+                                identifier: Snyk_SAST
+                                spec:
+                                  mode: orchestration
+                                  config: default
+                                  target:
+                                    type: repository
+                                    workspace: services/<+repeat.item>
+                                    name: <+repeat.item>
+                                    variant: <+codebase.branch>
+                                  advanced:
+                                    log:
+                                      level: info
+                                    fail_on_severity: none
+                                    args:
+                                      cli: "--skip-unresolved"
+                                  privileged: true
+                                  auth:
+                                    access_token: <+secrets.getValue("snyk_token")>
+                                  sbom:
+                                    format: spdx-json
+                                  tool:
+                                    ingest_tool_severity: true
+                                enforce:
+                                  policySets:
+                                    - STO_Policy
+                        - step:
+                            name: Store SAST Results
+                            identifier: store_sast
+                            type: Run
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: alpine:3.19
+                              shell: Sh
+                              envVariables:
+                                HARNESS_SAST_CRITICAL: <+execution.steps.sast_scans.steps.HarnessSAST.output.outputVariables.CRITICAL>
+                                HARNESS_SAST_HIGH: <+execution.steps.sast_scans.steps.HarnessSAST.output.outputVariables.HIGH>
+                                SNYK_SAST_CRITICAL: <+execution.steps.sast_scans.steps.Snyk_SAST.output.outputVariables.CRITICAL>
+                                SNYK_SAST_HIGH: <+execution.steps.sast_scans.steps.Snyk_SAST.output.outputVariables.HIGH>
+                              command: |
+                                mkdir -p /harness/security-results
+                                H_C="${HARNESS_SAST_CRITICAL:-0}"; [ "$H_C" = "null" ] && H_C=0
+                                H_H="${HARNESS_SAST_HIGH:-0}"; [ "$H_H" = "null" ] && H_H=0
+                                S_C="${SNYK_SAST_CRITICAL:-0}"; [ "$S_C" = "null" ] && S_C=0
+                                S_H="${SNYK_SAST_HIGH:-0}"; [ "$S_H" = "null" ] && S_H=0
+                                echo "$H_C $H_H $S_C $S_H" >> /harness/security-results/sast.txt
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          nodeName: <+repeat.item>
+                          maxConcurrency: 3
+                  - step:
+                      type: Run
+                      name: Evaluate Code Gate
+                      identifier: evaluate_code_gate
+                      spec:
+                        connectorRef: account.harnessImage
+                        image: alpine:3.19
+                        shell: Sh
+                        command: |
+                          #!/bin/sh
+                          set -e
+
+                          MAX_CRITICAL=$GATE_CRITICAL
+                          MAX_HIGH=$GATE_HIGH
+                          MAX_SECRETS=$GATE_SECRETS
+
+                          RESULTS_DIR="/harness/security-results"
+
+                          TOTAL_SECRETS=0
+                          if [ -f "$RESULTS_DIR/gitleaks.txt" ]; then
+                            while read -r line; do
+                              [ -n "$line" ] && TOTAL_SECRETS=$((TOTAL_SECRETS + line))
+                            done < "$RESULTS_DIR/gitleaks.txt"
+                          fi
+
+                          SCA_CRITICAL=0; SCA_HIGH=0
+                          if [ -f "$RESULTS_DIR/sca.txt" ]; then
+                            while read -r h_c h_h s_c s_h; do
+                              [ -n "$h_c" ] && SCA_CRITICAL=$((SCA_CRITICAL + h_c + s_c))
+                              [ -n "$h_h" ] && SCA_HIGH=$((SCA_HIGH + h_h + s_h))
+                            done < "$RESULTS_DIR/sca.txt"
+                          fi
+
+                          SAST_CRITICAL=0; SAST_HIGH=0
+                          if [ -f "$RESULTS_DIR/sast.txt" ]; then
+                            while read -r h_c h_h s_c s_h; do
+                              [ -n "$h_c" ] && SAST_CRITICAL=$((SAST_CRITICAL + h_c + s_c))
+                              [ -n "$h_h" ] && SAST_HIGH=$((SAST_HIGH + h_h + s_h))
+                            done < "$RESULTS_DIR/sast.txt"
+                          fi
+
+                          TOTAL_CRITICAL=$((SCA_CRITICAL + SAST_CRITICAL))
+                          TOTAL_HIGH=$((SCA_HIGH + SAST_HIGH))
+
+                          GATE_PASSED=true
+                          VIOLATIONS=""
+                          [ "$TOTAL_CRITICAL" -gt "$MAX_CRITICAL" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}CRITICAL:${TOTAL_CRITICAL}(max:${MAX_CRITICAL}) "
+                          [ "$TOTAL_HIGH" -gt "$MAX_HIGH" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}HIGH:${TOTAL_HIGH}(max:${MAX_HIGH}) "
+                          [ "$TOTAL_SECRETS" -gt "$MAX_SECRETS" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}SECRETS:${TOTAL_SECRETS}(max:${MAX_SECRETS})"
+
+                          echo ""
+                          echo "CODE SECURITY GATE - EVALUATION"
+                          echo "================================"
+                          printf "Critical: %-3s (max: %-3s)\n" "$TOTAL_CRITICAL" "$MAX_CRITICAL"
+                          printf "High:     %-3s (max: %-3s)\n" "$TOTAL_HIGH" "$MAX_HIGH"
+                          printf "Secrets:  %-3s (max: %-3s)\n" "$TOTAL_SECRETS" "$MAX_SECRETS"
+                          if [ "$GATE_PASSED" = "true" ]; then
+                            echo "GATE PASSED - All thresholds met"
+                          else
+                            echo "GATE FAILED - Violations: $VIOLATIONS"
+                          fi
+
+                          {
+                            echo "TOTAL_CRITICAL=$TOTAL_CRITICAL"
+                            echo "TOTAL_HIGH=$TOTAL_HIGH"
+                            echo "TOTAL_SECRETS=$TOTAL_SECRETS"
+                            echo "CODE_GATE_PASSED=$GATE_PASSED"
+                          } >> $HARNESS_OUTPUT_FILE
+
+                          [ "$GATE_PASSED" = "false" ] && exit 1 || exit 0
+                        envVariables:
+                          GATE_CRITICAL: <+pipeline.variables.SECURITY_GATE_CRITICAL>
+                          GATE_HIGH: <+pipeline.variables.SECURITY_GATE_HIGH>
+                          GATE_SECRETS: <+pipeline.variables.SECURITY_GATE_SECRETS>
+                        outputVariables:
+                          - name: TOTAL_CRITICAL
+                          - name: TOTAL_HIGH
+                          - name: TOTAL_SECRETS
+                          - name: CODE_GATE_PASSED
+                      enforce:
+                        policySets:
+                          - security_gate_code
+                      failureStrategies:
+                        - onFailure:
+                            errors:
+                              - AllErrors
+                            action:
+                              type: ManualIntervention
+                              spec:
+                                timeout: 4h
+                                onTimeout:
+                                  action:
+                                    type: Abort
+            policySetRef:
+              - security_gate_code
+        - stage:
+            name: Test Code
+            identifier: test_code
+            description: Code complexity analysis and test execution
+            type: CI
+            when:
+              pipelineStatus: Success
+              condition: <+pipeline.variables.RUN_MODE> == "pr_open" ||
+                <+pipeline.variables.RUN_MODE> == "full"
+            spec:
+              cloneCodebase: true
+              caching:
+                enabled: true
+                key: go-test-<+hashFiles("**/go.sum")>
+                paths:
+                  - /harness/.go
+              buildIntelligence:
+                enabled: true
+              platform:
+                os: Linux
+                arch: Amd64
+              runtime:
+                type: Cloud
+                spec: {}
+              execution:
+                steps:
+                  - stepGroup:
+                      name: Detect Go Versions
+                      identifier: detect_versions
+                      steps:
+                        - step:
+                            name: Detect Go Version
+                            identifier: detect_go_version
+                            type: Run
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: alpine:3.19
+                              shell: Sh
+                              command: |
+                                cd services/<+repeat.item>
+                                GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
+                                echo "Detected Go version for <+repeat.item>: $GO_VERSION"
+                                echo "GO_VERSION=$GO_VERSION" >> $HARNESS_OUTPUT_FILE
+                              outputVariables:
+                                - name: GO_VERSION
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          nodeName: <+repeat.item>
+                          maxConcurrency: 4
+                  - stepGroup:
+                      name: Tests
+                      identifier: tests
+                      steps:
+                        - step:
+                            name: gocyclo
+                            identifier: gocyclo
+                            type: Run
+                            spec:
+                              connectorRef: account.harnessImage
+                              image: golang:<+execution.steps.detect_versions_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
+                              shell: Sh
+                              envVariables:
+                                GOWORK: "off"
+                                THRESHOLD: <+pipeline.variables.COMPLEXITY_THRESHOLD>
+                              command: |
+                                cd services/<+repeat.item>
+                                echo "=== Complexity Report for <+repeat.item> ==="
+                                go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+                                export PATH=$(go env GOPATH)/bin:$PATH
+                                gocyclo -top 10 . || true
+                                COMPLEX=$(gocyclo -over $THRESHOLD . 2>/dev/null | wc -l)
+                                if [ "$COMPLEX" -gt 0 ]; then
+                                  echo "Warning: $COMPLEX functions exceed complexity threshold of $THRESHOLD"
+                                fi
+                          contextType: Pipeline
+                        - parallel:
+                            - step:
+                                type: Test
+                                name: Unit Tests
+                                identifier: unit_tests
+                                spec:
+                                  connectorRef: account.harnessImage
+                                  image: golang:<+execution.steps.detect_versions_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
+                                  shell: Sh
+                                  envVariables:
+                                    GOWORK: "off"
+                                    COVERAGE_THRESHOLD: <+pipeline.variables.COVERAGE_THRESHOLD>
+                                  command: |
+                                    cd services/<+repeat.item>
+                                    echo "=== Running unit tests for <+repeat.item> ==="
+
+                                    go install github.com/jstemmer/go-junit-report/v2@latest
+                                    export PATH=$(go env GOPATH)/bin:$PATH
+
+                                    PACKAGES=$(go list ./... | grep -v -E '(integration_tests|contracts)')
+
+                                    set -o pipefail
+                                    go test -v -short -coverprofile=coverage.out $PACKAGES 2>&1 | tee test-output.txt
+                                    TEST_EXIT=$?
+
+                                    COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | sed 's/%//')
+                                    echo "Coverage: ${COVERAGE}%"
+
+                                    COVERAGE_INT=${COVERAGE%.*}
+                                    if [ "$COVERAGE_INT" -lt "$COVERAGE_THRESHOLD" ]; then
+                                      echo "Coverage ${COVERAGE}% is below threshold ${COVERAGE_THRESHOLD}%"
+                                      TEST_EXIT=1
+                                    fi
+
+                                    go-junit-report -set-exit-code < test-output.txt > report.xml
+                                    exit $TEST_EXIT
+                                  reports:
+                                    type: JUnit
+                                    spec:
+                                      paths:
+                                        - services/**/report.xml
+                                  intelligenceMode: true
+                            - step:
+                                name: Contract Tests
+                                identifier: contract_tests
+                                type: Run
+                                spec:
+                                  connectorRef: account.harnessImage
+                                  image: golang:<+execution.steps.detect_versions_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
+                                  shell: Sh
+                                  envVariables:
+                                    GOWORK: "off"
+                                  command: |
+                                    cd services/<+repeat.item>
+                                    if ls *_contract_test.go 1> /dev/null 2>&1 || [ -d "contracts" ]; then
+                                      echo "=== Running Contract Tests for <+repeat.item> ==="
+                                      go test -v -tags=contract ./... 2>&1 || true
+                                    else
+                                      echo "No contract tests found for <+repeat.item>"
+                                    fi
+                      strategy:
+                        repeat:
+                          items: <+pipeline.variables.SERVICES.split(",")>
+                          nodeName: <+repeat.item>
+                          maxConcurrency: 3
+    # ============================================================
+    # BUILD AND RELEASE STAGE
+    # ============================================================
+    - stage:
+        name: Build and Release
+        identifier: build_and_release
+        description: Build, scan containers, and release
+        type: CI
+        when:
+          pipelineStatus: Success
+          condition: (<+pipeline.variables.RUN_MODE> == "pr_merge" ||
+            <+pipeline.variables.RUN_MODE> == "full") &&
+            <+pipeline.variables.RUN_MODE> != "deploy_only"
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+            key: go-release-<+hashFiles("**/go.sum")>
+            paths:
+              - /harness/.go
+          buildIntelligence:
+            enabled: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - stepGroup:
+                  name: Detect and Version
+                  identifier: detect_and_version
+                  steps:
+                    - step:
+                        name: Detect Go Version
+                        identifier: detect_go_version
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          command: |
+                            cd services/<+repeat.item>
+                            GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
+                            echo "Detected Go version for <+repeat.item>: $GO_VERSION"
+                            echo "GO_VERSION=$GO_VERSION" >> $HARNESS_OUTPUT_FILE
+                          outputVariables:
+                            - name: GO_VERSION
+                    - step:
+                        name: Semantic Version
+                        identifier: semantic_version
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          command: |
+                            apk add --no-cache curl jq > /dev/null 2>&1
+
+                            BUMP="patch"
+                            PREFIX=$(echo "$BRANCH" | cut -d'/' -f1 | tr '[:upper:]' '[:lower:]')
+                            case "$PREFIX" in
+                              major|breaking) BUMP="major" ;;
+                              feature|feat) BUMP="minor" ;;
+                              fix|hotfix|patch) BUMP="patch" ;;
+                            esac
+
+                            TAGS=$(curl -s "https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=100" \
+                              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                              -H "Accept: application/vnd.github.v3+json")
+
+                            LATEST=$(echo "$TAGS" | jq -r --arg svc "$SERVICE" \
+                              '[.[] | select(.name | startswith($svc + "-v"))] | sort_by(.name | ltrimstr($svc + "-v") | split(".") | map(tonumber)) | reverse | .[0].name // ""')
+
+                            if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+                              MAJOR=0; MINOR=0; PATCH=0
+                            else
+                              VER="${LATEST#${SERVICE}-v}"
+                              MAJOR=$(echo "$VER" | cut -d. -f1)
+                              MINOR=$(echo "$VER" | cut -d. -f2)
+                              PATCH=$(echo "$VER" | cut -d. -f3)
+                            fi
+
+                            case "$BUMP" in
+                              major) NEW_VERSION="v$((MAJOR + 1)).0.0" ;;
+                              minor) NEW_VERSION="v${MAJOR}.$((MINOR + 1)).0" ;;
+                              *) NEW_VERSION="v${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+                            esac
+
+                            TAG_NAME="${SERVICE}-${NEW_VERSION}"
+                            IMAGE_TAG="${NEW_VERSION#v}"
+
+                            echo "Service: $SERVICE"
+                            echo "Branch:  $BRANCH -> Bump: $BUMP"
+                            echo "Current: ${LATEST:-none} -> New: $NEW_VERSION"
+                            echo "Tag:     $TAG_NAME"
+
+                            {
+                              echo "VERSION=$NEW_VERSION"
+                              echo "IMAGE_TAG=$IMAGE_TAG"
+                              echo "TAG_NAME=$TAG_NAME"
+                            } >> $HARNESS_OUTPUT_FILE
+                          envVariables:
+                            SERVICE: <+repeat.item>
+                            BRANCH: <+codebase.branch>
+                            GITHUB_REPO: crizstian/cinema-microservice-in-GO
+                            GITHUB_TOKEN: <+secrets.getValue("CristianGithub")>
+                          outputVariables:
+                            - name: VERSION
+                            - name: IMAGE_TAG
+                            - name: TAG_NAME
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 4
+              - stepGroup:
+                  name: Build and Scan
+                  identifier: build_and_scan
+                  steps:
+                    - step:
+                        name: Build Binary
+                        identifier: build_binary
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: golang:<+execution.steps.detect_and_version_<+repeat.item>.steps.detect_go_version.output.outputVariables.GO_VERSION>-alpine
+                          shell: Sh
+                          command: |
+                            SERVICE_DIR="services/<+repeat.item>"
+                            BINARY_PATH="${SERVICE_DIR}/<+repeat.item>"
+
+                            echo "=== Building binary for <+repeat.item> ${VERSION} ==="
+                            cd ${SERVICE_DIR}
+
+                            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+                              go build \
+                              -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                              -o <+repeat.item> \
+                              ./cmd/<+repeat.item>
+
+                            cd /harness
+                            if [ -f "${BINARY_PATH}" ]; then
+                              ls -lh ${BINARY_PATH}
+                              echo "Binary ready at: ${BINARY_PATH}"
+                            else
+                              echo "Binary not found at: ${BINARY_PATH}"
+                              exit 1
+                            fi
+                          envVariables:
+                            GOWORK: "off"
+                            VERSION: <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.VERSION>
+                    - step:
+                        name: Build Docker Image
+                        identifier: build_docker_image
+                        type: BuildAndPushDockerRegistry
+                        spec:
+                          connectorRef: DockerCristian
+                          repo: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
+                          tags:
+                            - <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                          dockerfile: <+pipeline.variables.DOCKERFILE_PATH>
+                          context: .
+                          buildArgs:
+                            SERVICE_NAME: <+repeat.item>
+                            SERVICE_PORT: "8000"
+                            VERSION: <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                          target: runtime
+                          caching: true
+                          envVariables:
+                            PLUGIN_NO_PUSH: "true"
+                            PLUGIN_BUILDX_LOAD: "true"
+                            PLUGIN_TAR_PATH: /harness/images/<+repeat.item>-service.tar
+                    - parallel:
+                        - step:
+                            type: AquaTrivy
+                            name: Trivy Scan
+                            identifier: trivy_scan
+                            spec:
+                              mode: orchestration
+                              config: default
+                              target:
+                                type: container
+                                workspace: /harness/images/<+repeat.item>-service.tar
+                                name: <+repeat.item>-service
+                                variant: <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                              advanced:
+                                log:
+                                  level: info
+                                fail_on_severity: none
+                              privileged: true
+                              image:
+                                type: local_archive
+                                tag: <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                                name: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
+                              sbom:
+                                format: spdx-json
+                            enforce:
+                              policySets:
+                                - security_container
+                        - step:
+                            type: HarnessSCA
+                            name: Harness Container
+                            identifier: harness_container
+                            spec:
+                              mode: orchestration
+                              config: default
+                              target:
+                                type: container
+                                workspace: /harness/images/<+repeat.item>-service.tar
+                                detection: auto
+                              advanced:
+                                log:
+                                  level: info
+                              privileged: true
+                              image:
+                                type: local_archive
+                                tag: <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                                name: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 2
+              - step:
+                  type: Run
+                  name: Evaluate Container Gate
+                  identifier: evaluate_container_gate
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine:3.19
+                    shell: Sh
+                    command: |
+                      #!/bin/sh
+                      set -e
+
+                      sanitize() {
+                        val="$1"
+                        [ -z "$val" ] || [ "$val" = "null" ] || [ "$val" = "<+null>" ] && echo "0" || echo "$val"
+                      }
+
+                      MAX_CRITICAL=$GATE_CRITICAL
+                      MAX_HIGH=$GATE_HIGH
+
+                      TRIVY_C=$(sanitize "$TRIVY_CRITICAL"); TRIVY_H=$(sanitize "$TRIVY_HIGH")
+                      HARNESS_C=$(sanitize "$HARNESS_CRITICAL"); HARNESS_H=$(sanitize "$HARNESS_HIGH")
+                      NEW_CRIT=$(sanitize "$TRIVY_NEW_CRITICAL")
+
+                      TOTAL_CRITICAL=$((TRIVY_C + HARNESS_C))
+                      TOTAL_HIGH=$((TRIVY_H + HARNESS_H))
+
+                      GATE_PASSED=true
+                      VIOLATIONS=""
+                      [ "$TOTAL_CRITICAL" -gt "$MAX_CRITICAL" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}CRITICAL:${TOTAL_CRITICAL}(max:${MAX_CRITICAL}) "
+                      [ "$TOTAL_HIGH" -gt "$MAX_HIGH" ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}HIGH:${TOTAL_HIGH}(max:${MAX_HIGH}) "
+                      [ "$NEW_CRIT" -gt 0 ] && GATE_PASSED=false && VIOLATIONS="${VIOLATIONS}NEW_CRITICAL:${NEW_CRIT}"
+
+                      echo ""
+                      echo "CONTAINER SECURITY GATE - EVALUATION"
+                      echo "====================================="
+                      printf "Critical:     %-3s (max: %-3s)\n" "$TOTAL_CRITICAL" "$MAX_CRITICAL"
+                      printf "High:         %-3s (max: %-3s)\n" "$TOTAL_HIGH" "$MAX_HIGH"
+                      if [ "$GATE_PASSED" = "true" ]; then
+                        echo "GATE PASSED - Image approved for release"
+                      else
+                        echo "GATE FAILED - Violations: $VIOLATIONS"
+                      fi
+
+                      {
+                        echo "CONTAINER_GATE_PASSED=$GATE_PASSED"
+                      } >> $HARNESS_OUTPUT_FILE
+
+                      [ "$GATE_PASSED" = "false" ] && exit 1 || exit 0
+                    envVariables:
+                      GATE_CRITICAL: <+pipeline.variables.CONTAINER_GATE_CRITICAL>
+                      GATE_HIGH: <+pipeline.variables.CONTAINER_GATE_HIGH>
+                      TRIVY_CRITICAL: <+execution.steps.build_and_scan.steps.trivy_scan.output.outputVariables.CRITICAL>
+                      TRIVY_HIGH: <+execution.steps.build_and_scan.steps.trivy_scan.output.outputVariables.HIGH>
+                      TRIVY_NEW_CRITICAL: <+execution.steps.build_and_scan.steps.trivy_scan.output.outputVariables.NEW_CRITICAL>
+                      HARNESS_CRITICAL: <+execution.steps.build_and_scan.steps.harness_container.output.outputVariables.CRITICAL>
+                      HARNESS_HIGH: <+execution.steps.build_and_scan.steps.harness_container.output.outputVariables.HIGH>
+                    outputVariables:
+                      - name: CONTAINER_GATE_PASSED
+                  enforce:
+                    policySets:
+                      - security_gate_container
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: ManualIntervention
+                          spec:
+                            timeout: 4h
+                            onTimeout:
+                              action:
+                                type: Abort
+              - stepGroup:
+                  name: Release
+                  identifier: release
+                  when:
+                    stageStatus: Success
+                    condition: <+execution.steps.evaluate_container_gate.output.outputVariables.CONTAINER_GATE_PASSED>
+                      == "true"
+                  steps:
+                    - step:
+                        type: BuildAndPushDockerRegistry
+                        name: Push Docker Image
+                        identifier: push_docker_image
+                        spec:
+                          connectorRef: DockerCristian
+                          repo: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service
+                          tags:
+                            - <+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.IMAGE_TAG>
+                            - latest
+                          caching: true
+                          envVariables:
+                            PLUGIN_PUSH_ONLY: "true"
+                            PLUGIN_SOURCE_TAR_PATH: /harness/images/<+repeat.item>-service.tar
+                    - step:
+                        name: Create Git Tag
+                        identifier: create_git_tag
+                        type: Run
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: alpine:3.19
+                          shell: Sh
+                          command: |
+                            apk add --no-cache curl jq > /dev/null 2>&1
+
+                            TAG_NAME="<+execution.steps.detect_and_version_<+repeat.item>.steps.semantic_version.output.outputVariables.TAG_NAME>"
+
+                            echo "=== Creating Git Tag: $TAG_NAME ==="
+
+                            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+                              "https://api.github.com/repos/${GITHUB_REPO}/git/refs" \
+                              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                              -H "Accept: application/vnd.github.v3+json" \
+                              -d "{\"ref\":\"refs/tags/${TAG_NAME}\",\"sha\":\"${COMMIT_SHA}\"}")
+
+                            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+
+                            if [ "$HTTP_CODE" = "201" ]; then
+                              echo "Tag created: $TAG_NAME"
+                            elif [ "$HTTP_CODE" = "422" ]; then
+                              echo "Tag already exists: $TAG_NAME"
+                            else
+                              echo "Failed to create tag: $HTTP_CODE"
+                              exit 1
+                            fi
+                          envVariables:
+                            GITHUB_REPO: crizstian/cinema-microservice-in-GO
+                            GITHUB_TOKEN: <+secrets.getValue("CristianGithub")>
+                            COMMIT_SHA: <+codebase.commitSha>
+                  strategy:
+                    repeat:
+                      items: <+pipeline.variables.SERVICES.split(",")>
+                      nodeName: <+repeat.item>
+                      maxConcurrency: 2
+        policySetRef:
+          - security_gate_container
+    # ============================================================
+    # GITOPS DEV - ARGO ROLLOUTS CANARY DEPLOYMENT
+    # ============================================================
+    - stage:
+        name: GitOps Dev
+        identifier: gitops_dev
+        description: Deploy to Dev with Argo Rollouts canary promotion
+        type: Deployment
+        when:
+          pipelineStatus: Success
+          condition: (<+pipeline.variables.RUN_MODE> == "pr_merge" ||
+            <+pipeline.variables.RUN_MODE> == "full" ||
+            <+pipeline.variables.RUN_MODE> == "deploy_only") &&
+            <+pipeline.variables.SERVICES> != "" &&
+            <+pipeline.variables.SERVICES> != "null"
+        variables:
+          - name: RESOLVED_TAG
+            type: String
+            description: Resolved artifact tag for deployment
+            required: true
+            value: <+input>
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          service:
+            serviceRef: <+repeat.item>servicegitops
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: serviceimage
+                      sources:
+                        - identifier: serviceimage
+                          type: DockerRegistry
+                          spec:
+                            tag: <+stage.variables.RESOLVED_TAG>
+          execution:
+            steps:
+              # Step 1: Update GitOps Release Repo
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Release Repo
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec:
+                    variables:
+                      - name: image_tag
+                        type: String
+                        value: <+stage.variables.RESOLVED_TAG>
+                      - name: service_name
+                        type: String
+                        value: <+repeat.item>
+                      - name: replicas
+                        type: String
+                        value: "1"
+                      - name: environment
+                        type: String
+                        value: dev
+                    allowEmptyCommit: true
+              # Step 2: Create Jira Ticket for Tracking
+              - parallel:
+                  - step:
+                      type: HarnessApproval
+                      name: PR Review
+                      identifier: PR_Review
+                      spec:
+                        approvalMessage: |
+                          Review GitOps PR for <+repeat.item>
+                          Environment: Dev
+                          Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+stage.variables.RESOLVED_TAG>
+                        includePipelineExecutionHistory: true
+                        isAutoRejectEnabled: false
+                        approvers:
+                          userGroups:
+                            - account.SalesEngineers
+                          minimumCount: 1
+                          disallowPipelineExecutor: false
+                      timeout: 1d
+                  - step:
+                      type: JiraCreate
+                      name: Create Jira Ticket
+                      identifier: jira_create_ticket
+                      timeout: 10m
+                      spec:
+                        connectorRef: account.Harness_JIRA
+                        projectKey: <+pipeline.variables.JIRA_PROJECT_KEY>
+                        issueType: Story
+                        fields:
+                          - name: Summary
+                            value: "GitOps Deploy: <+repeat.item> to Dev - <+stage.variables.RESOLVED_TAG>"
+                          - name: Description
+                            value: |
+                              Start Argo Rollouts canary promotion of <+repeat.item> to Dev
+
+                              Pipeline: <+pipeline.name>
+                              Service: <+repeat.item>
+                              Artifact: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+stage.variables.RESOLVED_TAG>
+                              Environment: Dev
+
+                              Execution URL: https://app.harness.io/ng/account/<+account.identifier>/module/cd/orgs/<+org.identifier>/projects/<+project.identifier>/pipelines/<+pipeline.identifier>/executions/<+pipeline.executionId>/pipeline
+
+                              Execution ID: <+pipeline.executionId>
+                              Sequence ID: <+pipeline.sequenceId>
+              # Step 3: Merge PR
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  spec:
+                    deleteSourceBranch: true
+                    mergeStrategy: merge
+                  timeout: 10m
+              # Step 4: Fetch Linked ArgoCD Apps
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec: {}
+              # Step 5: Initial ArgoCD Sync (Start Rollout)
+              - step:
+                  type: GitOpsSync
+                  name: Begin Argo Rollout
+                  identifier: begin_argo_rollout
+                  timeout: 10m
+                  spec:
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: false
+                    applicationRegex: <+repeat.item>-dev
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: true
+                      pruneResourcesAtLast: true
+                      applyOutOfSyncOnly: true
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      serverSideApply: true
+                    waitTillHealthy: false
+                    failOnTimeout: false
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              # Step 6: Wait for ArgoCD Agent to sync
+              - step:
+                  type: ShellScript
+                  name: Wait for ArgoCD Sync
+                  identifier: wait_for_argocd
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "Waiting for ArgoCD agent to sync (90s)..."
+                          sleep 90
+                    environmentVariables: []
+                    outputVariables: []
+              # Step 7: Promote Canary to configured weight
+              - parallel:
+                  - step:
+                      type: ShellScript
+                      name: Argo Rollouts Promote Canary
+                      identifier: promote_canary
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              #!/bin/bash
+                              set -euo pipefail
+
+                              SERVICE="<+repeat.item>"
+                              NAMESPACE="cinema-dev"
+                              CANARY_WEIGHT="<+pipeline.variables.CANARY_WEIGHT>"
+
+                              echo "=========================================="
+                              echo "Promoting ${SERVICE} canary to ${CANARY_WEIGHT}%"
+                              echo "=========================================="
+
+                              # Check rollout status
+                              kubectl argo rollouts status ${SERVICE} -n ${NAMESPACE} --timeout 60s || true
+
+                              # Promote to next step (canary weight)
+                              kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE}
+
+                              echo "Canary promotion initiated for ${SERVICE}"
+                              echo "Current traffic: ${CANARY_WEIGHT}% to canary"
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
+                      type: JiraUpdate
+                      name: Jira Update - Canary Promoted
+                      identifier: jira_update_canary
+                      timeout: 10m
+                      spec:
+                        connectorRef: account.Harness_JIRA
+                        issueKey: <+pipeline.stages.gitops_dev.spec.execution.steps.jira_create_ticket.issue.key>
+                        fields:
+                          - name: Comment
+                            value: |
+                              Argo Rollouts: Canary promoted to <+pipeline.variables.CANARY_WEIGHT>%
+
+                              Service: <+repeat.item>
+                              Environment: Dev
+                              Artifact: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+stage.variables.RESOLVED_TAG>
+              # Step 8: Approval before full promotion
+              - step:
+                  type: HarnessApproval
+                  name: Canary Promotion Approval
+                  identifier: canary_approval
+                  timeout: 4h
+                  spec:
+                    approvalMessage: |
+                      Canary at <+pipeline.variables.CANARY_WEIGHT>% for <+repeat.item>
+
+                      Review metrics and approve full promotion:
+                      - Service: <+repeat.item>
+                      - Environment: Dev
+                      - Image: <+stage.variables.RESOLVED_TAG>
+                    includePipelineExecutionHistory: true
+                    isAutoRejectEnabled: false
+                    approvers:
+                      userGroups:
+                        - account.SalesEngineers
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+              # Step 9: Continuous Verification
+              - step:
+                  type: Verify
+                  name: Continuous Verification
+                  identifier: continuous_verification
+                  timeout: 2h
+                  spec:
+                    isMultiServicesOrEnvs: false
+                    type: Auto
+                    monitoredService:
+                      type: Default
+                      spec: {}
+                    spec:
+                      sensitivity: LOW
+                      duration: 5m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - Verification
+                        action:
+                          type: ManualIntervention
+                          spec:
+                            timeout: 2h
+                            onTimeout:
+                              action:
+                                type: StageRollback
+                    - onFailure:
+                        errors:
+                          - Unknown
+                        action:
+                          type: ManualIntervention
+                          spec:
+                            timeout: 2h
+                            onTimeout:
+                              action:
+                                type: Ignore
+              # Step 10: Full Promotion
+              - parallel:
+                  - step:
+                      type: ShellScript
+                      name: Argo Rollouts Promote Full
+                      identifier: promote_full
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              #!/bin/bash
+                              set -euo pipefail
+
+                              SERVICE="<+repeat.item>"
+                              NAMESPACE="cinema-dev"
+
+                              echo "=========================================="
+                              echo "Full promotion of ${SERVICE}"
+                              echo "=========================================="
+
+                              # Promote to full (100%)
+                              kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE} --full
+
+                              # Wait for rollout to complete
+                              kubectl argo rollouts status ${SERVICE} -n ${NAMESPACE} --timeout 300s
+
+                              echo "Full promotion completed for ${SERVICE}"
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
+                      type: JiraUpdate
+                      name: Jira Update - Full Promotion
+                      identifier: jira_update_full
+                      timeout: 10m
+                      spec:
+                        connectorRef: account.Harness_JIRA
+                        issueKey: <+pipeline.stages.gitops_dev.spec.execution.steps.jira_create_ticket.issue.key>
+                        fields:
+                          - name: Comment
+                            value: |
+                              Argo Rollouts: Full promotion completed (100%)
+
+                              Service: <+repeat.item>
+                              Environment: Dev
+                              Artifact: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+stage.variables.RESOLVED_TAG>
+                              Status: DEPLOYED
+              # Step 11: Health Checks
+              - parallel:
+                  - step:
+                      type: Http
+                      name: Liveness Check
+                      identifier: livenessCheck
+                      timeout: 30s
+                      spec:
+                        url: http://<+repeat.item>-service.cinema-dev.svc.cluster.local:<+serviceVariables.port>/health/live
+                        method: GET
+                        headers: []
+                        assertion: <+httpResponseCode> == 200
+                      failureStrategies:
+                        - onFailure:
+                            errors:
+                              - AllErrors
+                            action:
+                              type: Retry
+                              spec:
+                                retryCount: 3
+                                retryIntervals:
+                                  - 10s
+                                onRetryFailure:
+                                  action:
+                                    type: MarkAsFailure
+                  - step:
+                      type: Http
+                      name: Readiness Check
+                      identifier: readinessCheck
+                      timeout: 30s
+                      spec:
+                        url: http://<+repeat.item>-service.cinema-dev.svc.cluster.local:<+serviceVariables.port>/health/ready
+                        method: GET
+                        headers: []
+                        assertion: <+httpResponseCode> == 200
+                      failureStrategies:
+                        - onFailure:
+                            errors:
+                              - AllErrors
+                            action:
+                              type: Retry
+                              spec:
+                                retryCount: 3
+                                retryIntervals:
+                                  - 10s
+                                onRetryFailure:
+                                  action:
+                                    type: MarkAsFailure
+            rollbackSteps:
+              # Rollback Step 1: Abort Argo Rollout
+              - step:
+                  type: ShellScript
+                  name: Abort Argo Rollout
+                  identifier: abort_rollout
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+
+                          SERVICE="<+repeat.item>"
+                          NAMESPACE="cinema-dev"
+
+                          echo "Aborting Argo Rollout for ${SERVICE}..."
+                          kubectl argo rollouts abort ${SERVICE} -n ${NAMESPACE} || true
+
+                          echo "Rollout aborted"
+                    environmentVariables: []
+                    outputVariables: []
+              # Rollback Step 2: Revert PR
+              - step:
+                  type: RevertPR
+                  name: Revert PR
+                  identifier: RevertPR
+                  spec:
+                    commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: "Rollback: <+repeat.item> dev - <+stage.variables.RESOLVED_TAG>"
+                  timeout: 10m
+              # Rollback Step 3: Merge Rollback PR
+              - step:
+                  type: MergePR
+                  name: Merge Rollback PR
+                  identifier: MergeRollback
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              # Rollback Step 4: Fetch Apps
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Apps
+                  identifier: FetchApps
+                  spec: {}
+                  timeout: 10m
+              # Rollback Step 5: Sync Rollback
+              - step:
+                  type: GitOpsSync
+                  name: Sync Rollback
+                  identifier: SyncRollback
+                  timeout: 10m
+                  spec:
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    applicationRegex: <+repeat.item>-dev
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      serverSideApply: true
+              # Rollback Step 6: Update Jira
+              - step:
+                  type: JiraUpdate
+                  name: Jira Update - Rollback
+                  identifier: jira_update_rollback
+                  timeout: 10m
+                  spec:
+                    connectorRef: account.Harness_JIRA
+                    issueKey: <+pipeline.stages.gitops_dev.spec.execution.steps.jira_create_ticket.issue.key>
+                    fields:
+                      - name: Comment
+                        value: |
+                          ROLLBACK EXECUTED
+
+                          Service: <+repeat.item>
+                          Environment: Dev
+                          Artifact: <+stage.variables.RESOLVED_TAG>
+                          Reason: Deployment failed or was manually aborted
+          environment:
+            environmentRef: dev
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: incluster
+                agentIdentifier: selatamgke
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        strategy:
+          repeat:
+            items: <+pipeline.variables.SERVICES.split(",")>
+            nodeName: <+repeat.item>
+            maxConcurrency: 1
+        delegateSelectors:
+          - helm-delegate
+    # ============================================================
+    # PROD GATE - JIRA APPROVAL
+    # ============================================================
+    - stage:
+        name: Prod Gate
+        identifier: prod_gate
+        description: Jira-based approval gate for production deployment
+        type: Approval
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.RUN_MODE> == "pr_merge" ||
+            <+pipeline.variables.RUN_MODE> == "full"
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: JiraApproval
+                  name: Jira Approval
+                  identifier: jira_approval
+                  timeout: 1d
+                  spec:
+                    connectorRef: account.Harness_JIRA
+                    issueKey: <+pipeline.stages.gitops_dev.spec.execution.steps.jira_create_ticket.issue.key>
+                    approvalCriteria:
+                      type: KeyValues
+                      spec:
+                        matchAnyCondition: true
+                        conditions:
+                          - key: Status
+                            operator: equals
+                            value: Approved
+                    rejectionCriteria:
+                      type: KeyValues
+                      spec:
+                        matchAnyCondition: true
+                        conditions:
+                          - key: Status
+                            operator: equals
+                            value: Rejected
+                    retryInterval: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: ManualIntervention
+                          spec:
+                            timeout: 4h
+                            onTimeout:
+                              action:
+                                type: MarkAsFailure
+        tags: {}
+    # ============================================================
+    # GITOPS PROD - PARALLEL DEPLOYMENT TO PROD1 & PROD2
+    # ============================================================
+    - parallel:
+        - stage:
+            name: GitOps Prod1
+            identifier: gitops_prod1
+            description: Deploy to Prod1 with Argo Rollouts
+            type: Deployment
+            when:
+              pipelineStatus: Success
+            spec:
+              deploymentType: Kubernetes
+              gitOpsEnabled: true
+              service:
+                useFromStage:
+                  stage: gitops_dev
+              execution:
+                steps:
+                  - step:
+                      type: GitOpsUpdateReleaseRepo
+                      name: Update Release Repo
+                      identifier: updateReleaseRepo
+                      timeout: 10m
+                      spec:
+                        variables:
+                          - name: image_tag
+                            type: String
+                            value: <+pipeline.stages.gitops_dev.variables.RESOLVED_TAG>
+                          - name: service_name
+                            type: String
+                            value: <+repeat.item>
+                          - name: replicas
+                            type: String
+                            value: "2"
+                          - name: environment
+                            type: String
+                            value: prod1
+                        allowEmptyCommit: true
+                  - step:
+                      type: HarnessApproval
+                      name: PR Review
+                      identifier: PR_Review
+                      spec:
+                        approvalMessage: |
+                          Review GitOps PR for <+repeat.item>
+                          Environment: Prod1
+                          Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.stages.gitops_dev.variables.RESOLVED_TAG>
+                        includePipelineExecutionHistory: true
+                        isAutoRejectEnabled: false
+                        approvers:
+                          userGroups:
+                            - account.SalesEngineers
+                          minimumCount: 1
+                          disallowPipelineExecutor: false
+                      timeout: 1d
+                  - step:
+                      type: MergePR
+                      name: Merge PR
+                      identifier: mergePR
+                      spec:
+                        deleteSourceBranch: true
+                        mergeStrategy: merge
+                      timeout: 10m
+                  - step:
+                      type: GitOpsFetchLinkedApps
+                      name: Fetch Linked Apps
+                      identifier: fetchLinkedApps
+                      timeout: 10m
+                      spec: {}
+                  - step:
+                      type: GitOpsSync
+                      name: Begin Argo Rollout
+                      identifier: begin_argo_rollout
+                      timeout: 10m
+                      spec:
+                        prune: false
+                        dryRun: false
+                        applyOnly: false
+                        forceApply: false
+                        applicationRegex: <+repeat.item>-prod1
+                        syncOptions:
+                          skipSchemaValidation: false
+                          autoCreateNamespace: true
+                          pruneResourcesAtLast: true
+                          applyOutOfSyncOnly: true
+                          replaceResources: false
+                          prunePropagationPolicy: foreground
+                          serverSideApply: true
+                        waitTillHealthy: false
+                        failOnTimeout: false
+                  - step:
+                      type: ShellScript
+                      name: Wait for ArgoCD Sync
+                      identifier: wait_for_argocd
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              echo "Waiting for ArgoCD agent to sync (90s)..."
+                              sleep 90
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
+                      type: ShellScript
+                      name: Argo Rollouts Promote Canary
+                      identifier: promote_canary
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              #!/bin/bash
+                              set -euo pipefail
+
+                              SERVICE="<+repeat.item>"
+                              NAMESPACE="cinema-prod1"
+
+                              echo "Promoting ${SERVICE} canary in Prod1..."
+                              kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE}
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
+                      type: HarnessApproval
+                      name: Canary Promotion Approval
+                      identifier: canary_approval
+                      timeout: 4h
+                      spec:
+                        approvalMessage: |
+                          Canary at <+pipeline.variables.CANARY_WEIGHT>% for <+repeat.item> in Prod1
+                          Approve full promotion?
+                        includePipelineExecutionHistory: true
+                        isAutoRejectEnabled: false
+                        approvers:
+                          userGroups:
+                            - account.SalesEngineers
+                          minimumCount: 1
+                          disallowPipelineExecutor: false
+                  - step:
+                      type: Verify
+                      name: Continuous Verification
+                      identifier: continuous_verification
+                      timeout: 2h
+                      spec:
+                        isMultiServicesOrEnvs: false
+                        type: Auto
+                        monitoredService:
+                          type: Default
+                          spec: {}
+                        spec:
+                          sensitivity: MEDIUM
+                          duration: 10m
+                      failureStrategies:
+                        - onFailure:
+                            errors:
+                              - Verification
+                            action:
+                              type: StageRollback
+                  - step:
+                      type: ShellScript
+                      name: Argo Rollouts Promote Full
+                      identifier: promote_full
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              #!/bin/bash
+                              set -euo pipefail
+
+                              SERVICE="<+repeat.item>"
+                              NAMESPACE="cinema-prod1"
+
+                              kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE} --full
+                              kubectl argo rollouts status ${SERVICE} -n ${NAMESPACE} --timeout 300s
+
+                              echo "Full promotion completed for ${SERVICE} in Prod1"
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
+                      type: JiraUpdate
+                      name: Jira Update - Prod1 Complete
+                      identifier: jira_update_prod1
+                      timeout: 10m
+                      spec:
+                        connectorRef: account.Harness_JIRA
+                        issueKey: <+pipeline.stages.gitops_dev.spec.execution.steps.jira_create_ticket.issue.key>
+                        fields:
+                          - name: Comment
+                            value: |
+                              PROD1 DEPLOYMENT COMPLETE
+
+                              Service: <+repeat.item>
+                              Environment: Prod1
+                              Status: DEPLOYED
+                rollbackSteps:
+                  - step:
+                      type: ShellScript
+                      name: Abort Argo Rollout
+                      identifier: abort_rollout
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              kubectl argo rollouts abort <+repeat.item> -n cinema-prod1 || true
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
+                      type: RevertPR
+                      name: Revert PR
+                      identifier: RevertPR
+                      spec:
+                        commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                        prTitle: "Rollback: <+repeat.item> prod1"
+                      timeout: 10m
+                  - step:
+                      type: MergePR
+                      name: Merge Rollback PR
+                      identifier: MergeRollback
+                      spec:
+                        deleteSourceBranch: true
+                      timeout: 10m
+                  - step:
+                      type: GitOpsFetchLinkedApps
+                      name: Fetch Apps
+                      identifier: FetchApps
+                      spec: {}
+                      timeout: 10m
+                  - step:
+                      type: GitOpsSync
+                      name: Sync Rollback
+                      identifier: SyncRollback
+                      timeout: 10m
+                      spec:
+                        prune: false
+                        dryRun: false
+                        applyOnly: false
+                        forceApply: true
+                        applicationRegex: <+repeat.item>-prod1
+                        syncOptions:
+                          skipSchemaValidation: false
+                          autoCreateNamespace: false
+                          pruneResourcesAtLast: false
+                          applyOutOfSyncOnly: false
+                          replaceResources: false
+                          prunePropagationPolicy: foreground
+                          serverSideApply: true
+              environment:
+                environmentRef: prod1
+                deployToAll: false
+                gitOpsClusters:
+                  - identifier: prod1cluster
+                    agentIdentifier: selatamgke
+            tags: {}
+            failureStrategies:
+              - onFailure:
+                  errors:
+                    - AllErrors
+                  action:
+                    type: StageRollback
+            strategy:
+              repeat:
+                items: <+pipeline.variables.SERVICES.split(",")>
+                nodeName: <+repeat.item>
+                maxConcurrency: 1
+            delegateSelectors:
+              - helm-delegate
+        - stage:
+            name: GitOps Prod2
+            identifier: gitops_prod2
+            description: Deploy to Prod2 with Argo Rollouts
+            type: Deployment
+            when:
+              pipelineStatus: Success
+            spec:
+              deploymentType: Kubernetes
+              gitOpsEnabled: true
+              service:
+                useFromStage:
+                  stage: gitops_dev
+              execution:
+                steps:
+                  - step:
+                      type: GitOpsUpdateReleaseRepo
+                      name: Update Release Repo
+                      identifier: updateReleaseRepo
+                      timeout: 10m
+                      spec:
+                        variables:
+                          - name: image_tag
+                            type: String
+                            value: <+pipeline.stages.gitops_dev.variables.RESOLVED_TAG>
+                          - name: service_name
+                            type: String
+                            value: <+repeat.item>
+                          - name: replicas
+                            type: String
+                            value: "2"
+                          - name: environment
+                            type: String
+                            value: prod2
+                        allowEmptyCommit: true
+                  - step:
+                      type: HarnessApproval
+                      name: PR Review
+                      identifier: PR_Review
+                      spec:
+                        approvalMessage: |
+                          Review GitOps PR for <+repeat.item>
+                          Environment: Prod2
+                          Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.stages.gitops_dev.variables.RESOLVED_TAG>
+                        includePipelineExecutionHistory: true
+                        isAutoRejectEnabled: false
+                        approvers:
+                          userGroups:
+                            - account.SalesEngineers
+                          minimumCount: 1
+                          disallowPipelineExecutor: false
+                      timeout: 1d
+                  - step:
+                      type: MergePR
+                      name: Merge PR
+                      identifier: mergePR
+                      spec:
+                        deleteSourceBranch: true
+                        mergeStrategy: merge
+                      timeout: 10m
+                  - step:
+                      type: GitOpsFetchLinkedApps
+                      name: Fetch Linked Apps
+                      identifier: fetchLinkedApps
+                      timeout: 10m
+                      spec: {}
+                  - step:
+                      type: GitOpsSync
+                      name: Begin Argo Rollout
+                      identifier: begin_argo_rollout
+                      timeout: 10m
+                      spec:
+                        prune: false
+                        dryRun: false
+                        applyOnly: false
+                        forceApply: false
+                        applicationRegex: <+repeat.item>-prod2
+                        syncOptions:
+                          skipSchemaValidation: false
+                          autoCreateNamespace: true
+                          pruneResourcesAtLast: true
+                          applyOutOfSyncOnly: true
+                          replaceResources: false
+                          prunePropagationPolicy: foreground
+                          serverSideApply: true
+                        waitTillHealthy: false
+                        failOnTimeout: false
+                  - step:
+                      type: ShellScript
+                      name: Wait for ArgoCD Sync
+                      identifier: wait_for_argocd
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              echo "Waiting for ArgoCD agent to sync (90s)..."
+                              sleep 90
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
+                      type: ShellScript
+                      name: Argo Rollouts Promote Canary
+                      identifier: promote_canary
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              #!/bin/bash
+                              set -euo pipefail
+
+                              SERVICE="<+repeat.item>"
+                              NAMESPACE="cinema-prod2"
+
+                              echo "Promoting ${SERVICE} canary in Prod2..."
+                              kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE}
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
+                      type: HarnessApproval
+                      name: Canary Promotion Approval
+                      identifier: canary_approval
+                      timeout: 4h
+                      spec:
+                        approvalMessage: |
+                          Canary at <+pipeline.variables.CANARY_WEIGHT>% for <+repeat.item> in Prod2
+                          Approve full promotion?
+                        includePipelineExecutionHistory: true
+                        isAutoRejectEnabled: false
+                        approvers:
+                          userGroups:
+                            - account.SalesEngineers
+                          minimumCount: 1
+                          disallowPipelineExecutor: false
+                  - step:
+                      type: Verify
+                      name: Continuous Verification
+                      identifier: continuous_verification
+                      timeout: 2h
+                      spec:
+                        isMultiServicesOrEnvs: false
+                        type: Auto
+                        monitoredService:
+                          type: Default
+                          spec: {}
+                        spec:
+                          sensitivity: MEDIUM
+                          duration: 10m
+                      failureStrategies:
+                        - onFailure:
+                            errors:
+                              - Verification
+                            action:
+                              type: StageRollback
+                  - step:
+                      type: ShellScript
+                      name: Argo Rollouts Promote Full
+                      identifier: promote_full
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              #!/bin/bash
+                              set -euo pipefail
+
+                              SERVICE="<+repeat.item>"
+                              NAMESPACE="cinema-prod2"
+
+                              kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE} --full
+                              kubectl argo rollouts status ${SERVICE} -n ${NAMESPACE} --timeout 300s
+
+                              echo "Full promotion completed for ${SERVICE} in Prod2"
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
+                      type: JiraUpdate
+                      name: Jira Update - Prod2 Complete
+                      identifier: jira_update_prod2
+                      timeout: 10m
+                      spec:
+                        connectorRef: account.Harness_JIRA
+                        issueKey: <+pipeline.stages.gitops_dev.spec.execution.steps.jira_create_ticket.issue.key>
+                        fields:
+                          - name: Comment
+                            value: |
+                              PROD2 DEPLOYMENT COMPLETE
+
+                              Service: <+repeat.item>
+                              Environment: Prod2
+                              Status: DEPLOYED
+                rollbackSteps:
+                  - step:
+                      type: ShellScript
+                      name: Abort Argo Rollout
+                      identifier: abort_rollout
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              kubectl argo rollouts abort <+repeat.item> -n cinema-prod2 || true
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
+                      type: RevertPR
+                      name: Revert PR
+                      identifier: RevertPR
+                      spec:
+                        commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                        prTitle: "Rollback: <+repeat.item> prod2"
+                      timeout: 10m
+                  - step:
+                      type: MergePR
+                      name: Merge Rollback PR
+                      identifier: MergeRollback
+                      spec:
+                        deleteSourceBranch: true
+                      timeout: 10m
+                  - step:
+                      type: GitOpsFetchLinkedApps
+                      name: Fetch Apps
+                      identifier: FetchApps
+                      spec: {}
+                      timeout: 10m
+                  - step:
+                      type: GitOpsSync
+                      name: Sync Rollback
+                      identifier: SyncRollback
+                      timeout: 10m
+                      spec:
+                        prune: false
+                        dryRun: false
+                        applyOnly: false
+                        forceApply: true
+                        applicationRegex: <+repeat.item>-prod2
+                        syncOptions:
+                          skipSchemaValidation: false
+                          autoCreateNamespace: false
+                          pruneResourcesAtLast: false
+                          applyOutOfSyncOnly: false
+                          replaceResources: false
+                          prunePropagationPolicy: foreground
+                          serverSideApply: true
+              environment:
+                environmentRef: prod2
+                deployToAll: false
+                gitOpsClusters:
+                  - identifier: prod2cluster
+                    agentIdentifier: selatamgke
+            tags: {}
+            failureStrategies:
+              - onFailure:
+                  errors:
+                    - AllErrors
+                  action:
+                    type: StageRollback
+            strategy:
+              repeat:
+                items: <+pipeline.variables.SERVICES.split(",")>
+                nodeName: <+repeat.item>
+                maxConcurrency: 1
+            delegateSelectors:
+              - helm-delegate
+    # ============================================================
+    # PROD3 GATE - FINAL APPROVAL
+    # ============================================================
+    - stage:
+        name: Prod3 Gate
+        identifier: prod3_gate
+        description: Final Jira approval gate for Prod3
+        type: Approval
+        when:
+          pipelineStatus: Success
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: JiraApproval
+                  name: Jira Approval
+                  identifier: jira_approval_prod3
+                  timeout: 1d
+                  spec:
+                    connectorRef: account.Harness_JIRA
+                    issueKey: <+pipeline.stages.gitops_dev.spec.execution.steps.jira_create_ticket.issue.key>
+                    approvalCriteria:
+                      type: KeyValues
+                      spec:
+                        matchAnyCondition: true
+                        conditions:
+                          - key: Status
+                            operator: equals
+                            value: Approved
+                    rejectionCriteria:
+                      type: KeyValues
+                      spec:
+                        matchAnyCondition: true
+                        conditions:
+                          - key: Status
+                            operator: equals
+                            value: Rejected
+                    retryInterval: 1m
+        tags: {}
+    # ============================================================
+    # GITOPS PROD3 - FINAL PRODUCTION DEPLOYMENT
+    # ============================================================
+    - stage:
+        name: GitOps Prod3
+        identifier: gitops_prod3
+        description: Deploy to Prod3 (final region)
+        type: Deployment
+        when:
+          pipelineStatus: Success
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          service:
+            useFromStage:
+              stage: gitops_dev
+          execution:
+            steps:
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Release Repo
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec:
+                    variables:
+                      - name: image_tag
+                        type: String
+                        value: <+pipeline.stages.gitops_dev.variables.RESOLVED_TAG>
+                      - name: service_name
+                        type: String
+                        value: <+repeat.item>
+                      - name: replicas
+                        type: String
+                        value: "3"
+                      - name: environment
+                        type: String
+                        value: prod3
+                    allowEmptyCommit: true
+              - step:
+                  type: HarnessApproval
+                  name: PR Review
+                  identifier: PR_Review
+                  spec:
+                    approvalMessage: |
+                      Review GitOps PR for <+repeat.item>
+                      Environment: Prod3 (Final)
+                      Image: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.stages.gitops_dev.variables.RESOLVED_TAG>
+                    includePipelineExecutionHistory: true
+                    isAutoRejectEnabled: false
+                    approvers:
+                      userGroups:
+                        - account.SalesEngineers
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                  timeout: 1d
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  spec:
+                    deleteSourceBranch: true
+                    mergeStrategy: merge
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  type: GitOpsSync
+                  name: Begin Argo Rollout
+                  identifier: begin_argo_rollout
+                  timeout: 10m
+                  spec:
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: false
+                    applicationRegex: <+repeat.item>-prod3
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: true
+                      pruneResourcesAtLast: true
+                      applyOutOfSyncOnly: true
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      serverSideApply: true
+                    waitTillHealthy: false
+                    failOnTimeout: false
+              - step:
+                  type: ShellScript
+                  name: Wait for ArgoCD Sync
+                  identifier: wait_for_argocd
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "Waiting for ArgoCD agent to sync (90s)..."
+                          sleep 90
+                    environmentVariables: []
+                    outputVariables: []
+              - step:
+                  type: ShellScript
+                  name: Argo Rollouts Promote Canary
+                  identifier: promote_canary
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+
+                          SERVICE="<+repeat.item>"
+                          NAMESPACE="cinema-prod3"
+
+                          echo "Promoting ${SERVICE} canary in Prod3..."
+                          kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE}
+                    environmentVariables: []
+                    outputVariables: []
+              - step:
+                  type: HarnessApproval
+                  name: Canary Promotion Approval
+                  identifier: canary_approval
+                  timeout: 4h
+                  spec:
+                    approvalMessage: |
+                      Canary at <+pipeline.variables.CANARY_WEIGHT>% for <+repeat.item> in Prod3
+                      This is the FINAL production region.
+                      Approve full promotion?
+                    includePipelineExecutionHistory: true
+                    isAutoRejectEnabled: false
+                    approvers:
+                      userGroups:
+                        - account.SalesEngineers
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+              - step:
+                  type: Verify
+                  name: Continuous Verification
+                  identifier: continuous_verification
+                  timeout: 2h
+                  spec:
+                    isMultiServicesOrEnvs: false
+                    type: Auto
+                    monitoredService:
+                      type: Default
+                      spec: {}
+                    spec:
+                      sensitivity: HIGH
+                      duration: 15m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - Verification
+                        action:
+                          type: StageRollback
+              - step:
+                  type: ShellScript
+                  name: Argo Rollouts Promote Full
+                  identifier: promote_full
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+
+                          SERVICE="<+repeat.item>"
+                          NAMESPACE="cinema-prod3"
+
+                          kubectl argo rollouts promote ${SERVICE} -n ${NAMESPACE} --full
+                          kubectl argo rollouts status ${SERVICE} -n ${NAMESPACE} --timeout 300s
+
+                          echo "Full promotion completed for ${SERVICE} in Prod3"
+                    environmentVariables: []
+                    outputVariables: []
+              - step:
+                  type: JiraUpdate
+                  name: Jira Update - Deployment Complete
+                  identifier: jira_update_complete
+                  timeout: 10m
+                  spec:
+                    connectorRef: account.Harness_JIRA
+                    issueKey: <+pipeline.stages.gitops_dev.spec.execution.steps.jira_create_ticket.issue.key>
+                    transitionTo:
+                      transitionName: Done
+                      status: Done
+                    fields:
+                      - name: Comment
+                        value: |
+                          ALL DEPLOYMENTS COMPLETE
+
+                          Service: <+repeat.item>
+                          Environments: Dev, Prod1, Prod2, Prod3
+                          Artifact: <+pipeline.variables.DOCKER_REGISTRY>/<+repeat.item>-service:<+pipeline.stages.gitops_dev.variables.RESOLVED_TAG>
+                          Status: FULLY DEPLOYED
+            rollbackSteps:
+              - step:
+                  type: ShellScript
+                  name: Abort Argo Rollout
+                  identifier: abort_rollout
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          kubectl argo rollouts abort <+repeat.item> -n cinema-prod3 || true
+                    environmentVariables: []
+                    outputVariables: []
+              - step:
+                  type: RevertPR
+                  name: Revert PR
+                  identifier: RevertPR
+                  spec:
+                    commitId: <+execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+                    prTitle: "Rollback: <+repeat.item> prod3"
+                  timeout: 10m
+              - step:
+                  type: MergePR
+                  name: Merge Rollback PR
+                  identifier: MergeRollback
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Apps
+                  identifier: FetchApps
+                  spec: {}
+                  timeout: 10m
+              - step:
+                  type: GitOpsSync
+                  name: Sync Rollback
+                  identifier: SyncRollback
+                  timeout: 10m
+                  spec:
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: true
+                    applicationRegex: <+repeat.item>-prod3
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      serverSideApply: true
+              - step:
+                  type: JiraUpdate
+                  name: Jira Update - Rollback
+                  identifier: jira_update_rollback
+                  timeout: 10m
+                  spec:
+                    connectorRef: account.Harness_JIRA
+                    issueKey: <+pipeline.stages.gitops_dev.spec.execution.steps.jira_create_ticket.issue.key>
+                    fields:
+                      - name: Comment
+                        value: |
+                          PROD3 ROLLBACK EXECUTED
+
+                          Service: <+repeat.item>
+                          Environment: Prod3
+                          Reason: Deployment failed or verification failed
+          environment:
+            environmentRef: prod3
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: prod3cluster
+                agentIdentifier: selatamgke
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        strategy:
+          repeat:
+            items: <+pipeline.variables.SERVICES.split(",")>
+            nodeName: <+repeat.item>
+            maxConcurrency: 1
+        delegateSelectors:
+          - helm-delegate
+  delegateSelectors:
+    - helm-delegate
+  allowStageExecutions: true

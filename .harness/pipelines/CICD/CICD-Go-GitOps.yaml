@@ -73,9 +73,6 @@ pipeline:
       description: Max high container vulnerabilities
       value: 3
   stages:
-    # ============================================================================
-    # CI STAGES - Security and Test (PR Open)
-    # ============================================================================
     - parallel:
         - stage:
             name: Security Code
@@ -584,10 +581,6 @@ pipeline:
                           items: <+pipeline.variables.SERVICES.split(",")>
                           nodeName: <+repeat.item>
                           maxConcurrency: 3
-
-    # ============================================================================
-    # CI STAGE - Build and Release (PR Merge)
-    # ============================================================================
     - stage:
         name: Build and Release
         identifier: build_and_release
@@ -951,10 +944,6 @@ pipeline:
                       maxConcurrency: 2
         policySetRef:
           - security_gate_container
-
-    # ============================================================================
-    # GITOPS STAGES - Deploy to Dev
-    # ============================================================================
     - stage:
         name: GitOps Dev
         identifier: gitops_dev
@@ -1010,6 +999,7 @@ pipeline:
                       - name: environment
                         type: String
                         value: dev
+                    allowEmptyCommit: true
               - step:
                   type: HarnessApproval
                   name: PR Review
@@ -1033,6 +1023,8 @@ pipeline:
                   identifier: mergePR
                   spec:
                     deleteSourceBranch: true
+                    mergeStrategy: merge
+                    variables: []
                   timeout: 10m
               - step:
                   type: GitOpsFetchLinkedApps
@@ -1049,7 +1041,7 @@ pipeline:
                     dryRun: false
                     applyOnly: false
                     forceApply: true
-                    applicationRegex: <+repeat.item>-dev
+                    applicationRegex: <+repeat.item>servicegitops-dev
                     showResourceProgress: true
                     syncOptions:
                       skipSchemaValidation: false
@@ -1066,10 +1058,12 @@ pipeline:
                   identifier: livenessCheck
                   timeout: 30s
                   spec:
-                    url: http://<+repeat.item>-service.cinema-dev.svc.cluster.local:8000/health/live
+                    url: http://<+repeat.item>-service.cinema-dev.svc.cluster.local:<+serviceVariables.port>/health/live
                     method: GET
                     headers: []
                     assertion: <+httpResponseCode> == 200
+                    inputVariables: []
+                    outputVariables: []
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -1089,10 +1083,12 @@ pipeline:
                   identifier: readinessCheck
                   timeout: 30s
                   spec:
-                    url: http://<+repeat.item>-service.cinema-dev.svc.cluster.local:8000/health/ready
+                    url: http://<+repeat.item>-service.cinema-dev.svc.cluster.local:<+serviceVariables.port>/health/ready
                     method: GET
                     headers: []
                     assertion: <+httpResponseCode> == 200
+                    inputVariables: []
+                    outputVariables: []
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -1113,7 +1109,6 @@ pipeline:
                   timeout: 5m
                   spec:
                     shell: Bash
-                    onDelegate: true
                     source:
                       type: Inline
                       spec:
@@ -1123,7 +1118,7 @@ pipeline:
 
                           SERVICE="<+repeat.item>"
                           NAMESPACE="cinema-dev"
-                          SERVICE_URL="http://${SERVICE}-service.${NAMESPACE}.svc.cluster.local:8000"
+                          SERVICE_URL="http://${SERVICE}-service.${NAMESPACE}.svc.cluster.local:<+serviceVariables.port>"
 
                           echo "╔══════════════════════════════════════════════════════════════╗"
                           echo "║  Smoke Test: ${SERVICE}-service                              "
@@ -1138,6 +1133,9 @@ pipeline:
                           fi
 
                           echo "✅ Smoke test completed for ${SERVICE}"
+                    executionTarget: {}
+                    environmentVariables: []
+                    outputVariables: []
             rollbackSteps:
               - step:
                   type: RevertPR
@@ -1169,7 +1167,7 @@ pipeline:
                     dryRun: false
                     applyOnly: false
                     forceApply: true
-                    applicationRegex: <+repeat.item>-dev
+                    applicationRegex: <+repeat.item>servicegitops-dev
                     syncOptions:
                       skipSchemaValidation: false
                       autoCreateNamespace: false
@@ -1184,7 +1182,7 @@ pipeline:
             deployToAll: false
             gitOpsClusters:
               - identifier: incluster
-                agentIdentifier: gitops
+                agentIdentifier: selatamgke
         tags: {}
         failureStrategies:
           - onFailure:
@@ -1197,5 +1195,6 @@ pipeline:
             items: <+pipeline.variables.SERVICES.split(",")>
             nodeName: <+repeat.item>
             maxConcurrency: 1
-
+        delegateSelectors:
+          - helm-delegate
   allowStageExecutions: true
