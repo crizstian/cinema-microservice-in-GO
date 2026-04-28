@@ -9,7 +9,7 @@ resources:
 commonLabels:
   app.kubernetes.io/environment: prod
   harness.io/envRef: prod
-  harness.io/serviceRef: booking-service
+  harness.io/serviceRef: bookingservicegitops
 
 images:
   - name: crizstian/booking-service

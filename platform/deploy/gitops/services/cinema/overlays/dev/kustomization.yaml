@@ -9,7 +9,7 @@ resources:
 commonLabels:
   app.kubernetes.io/environment: dev
   harness.io/envRef: dev
-  harness.io/serviceRef: cinema-service
+  harness.io/serviceRef: cinemaservicegitops
 
 images:
   - name: crizstian/cinema-service

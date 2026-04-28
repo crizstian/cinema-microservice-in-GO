@@ -9,7 +9,7 @@ resources:
 commonLabels:
   app.kubernetes.io/environment: staging
   harness.io/envRef: staging
-  harness.io/serviceRef: notification-service
+  harness.io/serviceRef: notificationservicegitops
 
 images:
   - name: crizstian/notification-service

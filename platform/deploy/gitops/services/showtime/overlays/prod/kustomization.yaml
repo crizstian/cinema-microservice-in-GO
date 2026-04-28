@@ -9,7 +9,7 @@ resources:
 commonLabels:
   app.kubernetes.io/environment: prod
   harness.io/envRef: prod
-  harness.io/serviceRef: showtime-service
+  harness.io/serviceRef: showtimeservicegitops
 
 images:
   - name: crizstian/showtime-service

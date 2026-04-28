@@ -9,7 +9,7 @@ resources:
 commonLabels:
   app.kubernetes.io/environment: dev
   harness.io/envRef: dev
-  harness.io/serviceRef: payment-service
+  harness.io/serviceRef: paymentservicegitops
 
 images:
   - name: crizstian/payment-service
