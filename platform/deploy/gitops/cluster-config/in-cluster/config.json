@@ -1,9 +1,9 @@
 {
-  "harness_service": "bookingservicegitops",
-  "environment": "dev",
-  "port": "8001",
-  "service_name": "booking",
-  "replicas": "1",
-  "namespace": "cinema-dev",
-  "image_tag": "0.0.7"
+  "harness_service" : "bookingservicegitops",
+  "environment" : "dev",
+  "port" : "8001",
+  "service_name" : "booking",
+  "replicas" : "1",
+  "namespace" : "cinema-dev",
+  "image_tag" : "0.0.7"
 }
