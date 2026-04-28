@@ -1,9 +1,9 @@
 {
-  "harness_service" : "paymentservicegitops",
+  "harness_service" : "seatservicegitops",
   "environment" : "dev",
-  "port" : "8007",
-  "service_name" : "payment",
+  "port" : "8005",
+  "service_name" : "seat",
   "replicas" : "1",
   "namespace" : "cinema-dev",
-  "image_tag" : "0.0.11"
+  "image_tag" : "0.0.4"
 }
