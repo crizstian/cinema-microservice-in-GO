@@ -1,4 +1,4 @@
-// Banking demo MCP
+// Demo MCP Mayo
 package main
 
 // Version: 1.0.0 - Multi-service GitOps deployment test
