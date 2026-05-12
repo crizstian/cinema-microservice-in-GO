@@ -1,4 +1,4 @@
-// Demo MCP Mayo
+// Demo Peru
 package main
 
 // Version: 1.0.0 - Multi-service GitOps deployment test
